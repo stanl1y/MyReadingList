@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# session / tooling scratch (not part of the reading list)
+.remember/
+.playwright-mcp/
+*.tmp
+Thumbs.db

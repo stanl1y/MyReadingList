@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Robots Need More Than VLAs — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Robots Need More Than VLAs & World Models","authors":"Karcini, Mehrban, Nguyen, Schwager, Ajoundani, Cadena, Peters, Hutter, Bou-Ammar","year":"2026","venue":"arXiv · Position Paper","tags":["Robotics","Position Paper","VLA","World Models","Embodied Learning","Grounding"],"tldr":"立場文章:通才機器人不只是 policy-scaling 問題;真正缺的是把海量非結構化行為資料「接地(ground)」成機器人可用監督的四種 interface——資料引擎、跨具身 retargeting、物理世界模型、獎勵接地。","tldr_en":"A position paper: generalist robotics is not just a policy-scaling problem; the missing layer is a set of interfaces that ground the world abundant unstructured behaviour into robot-usable supervision—a data engine, cross-embodiment retargeting, physics world models, and reward grounding."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .num{font-family:ui-monospace,Menlo,monospace; font-weight:600; color:var(--navy)}
+
+  .pillars{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:8px 0}
+  @media(max-width:680px){.pillars{grid-template-columns:1fr}}
+  .pill{background:#fbf7ee; border:1px solid var(--line); border-radius:11px; padding:15px 16px; border-top:3px solid var(--c-method)}
+  .pill .n{font-family:ui-monospace,Menlo,monospace; font-size:11px; color:var(--gold); font-weight:700}
+  .pill b{display:block; margin:3px 0 6px; font-size:14.5px}
+  .pill small{color:var(--muted); font-size:12.5px; line-height:1.55; display:block}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:130px; color:var(--c-method)}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 FRAMEWORK</button>
+    <button data-p="3">04 SURVEY</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">這是一篇<b>立場文章(position paper)</b>。它主張:通才機器人<b>不只是「policy scaling」問題</b>(蒐集更多示範、訓練更大的 VLA)。真正缺的是把世界上海量、雜亂的<mark class="m-problem" data-t="PROBLEM/GAP">非結構化行為資料「接地(ground)」成機器人可用的監督</mark>。作者提出<mark class="m-method" data-t="METHOD/IDEA">四種缺失的 interface</mark>:資料引擎、跨具身 retargeting、物理世界模型、獎勵接地。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">A <b>position paper</b>. It argues that generalist robotics is <b>not just a "policy-scaling" problem</b> (collect more demos, train bigger VLAs). The real gap is <mark class="m-problem" data-t="PROBLEM/GAP">grounding the world abundant, messy unstructured behavioural data into robot-usable supervision</mark>. The authors propose <mark class="m-method" data-t="METHOD/IDEA">four missing interfaces</mark>: a data engine, cross-embodiment retargeting, physics world models, and reward grounding.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 機器人迎來 foundation-model 時刻,<mark class="m-problem" data-t="PROBLEM/GAP">卻沒有自己的「網際網路」</mark>:文字/影像天生數位化且帶人類監督,但物理互動資料<b>缺機器人動作標籤、力訊號、任務語意、獎勵結構</b>,大多無法直接用。</li>
+          <li data-lang="en"><b>Problem</b> — Robotics has its foundation-model moment but <mark class="m-problem" data-t="PROBLEM/GAP">no "internet" of its own</mark>: text/images are natively digitized with human supervision, yet physical-interaction data <b>lacks robot action labels, force signals, task semantics, reward structure</b>—mostly unusable directly.</li>
+          <li data-lang="zh"><b>主張</b> — 未來 pipeline 必須從「robot-data-centric」轉為 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">「grounding-centric」</mark>:從廣義物理經驗出發,經過「接地機制」產出機器人可用的動作、接觸、物體狀態、任務階段、目標、獎勵。<b>VLA 只是這個堆疊裡的一層。</b></li>
+          <li data-lang="en"><b>Position</b> — The future pipeline must shift from "robot-data-centric" to <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"grounding-centric"</mark>: start from broad physical experience, pass it through grounding mechanisms that yield robot-usable actions, contacts, object states, task phases, goals, rewards. <b>A VLA is just one layer in that stack.</b></li>
+          <li data-lang="zh"><b>提議</b> — 補上<mark class="m-method" data-t="METHOD/IDEA">四根支柱</mark>:① 具身自動標註的物理資料引擎 ② 任務保留的跨具身 retargeting ③ 預測「後果」的物理世界模型 ④ 透過部署迴圈接地的任務獎勵。是<b>研究議程</b>,非實驗論文。</li>
+          <li data-lang="en"><b>Proposal</b> — Add <mark class="m-method" data-t="METHOD/IDEA">four pillars</mark>: ① a physical data engine for embodied autolabelling ② task-preserving cross-embodiment retargeting ③ physics world models that predict consequences ④ task reward grounding via deployment loops. It's a <b>research agenda</b>, not an empirical paper.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">語言與視覺的進步靠「海量、天生數位化、密集帶人類監督」的資料。機器人不一樣:世界有大量行為資料,但<mark class="m-problem" data-t="PROBLEM/GAP">機器人資料集不像文字語料</mark>——每條軌跡都得能物理執行、每個動作綁定特定身體、每次失敗都可能損壞硬體。於是「可用的機器人監督」相對於「世界上已存在的物理行為」少得可憐。</p>
+        <p data-lang="en">Progress in language and vision rode on data that is abundant, natively digitized, and densely human-supervised. Robotics is different: the world holds vast behavioural data, but <mark class="m-problem" data-t="PROBLEM/GAP">a robot dataset is not a text corpus</mark>—every trajectory must be physically executable, every action is tied to a body, every failure can damage hardware. So "usable robot supervision" is tiny relative to the physical behaviour already in the world.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇刻意不照「資料來源」或「演算法家族」分類,而是<b>照「機器人學習 pipeline」本身</b>來組織。它把問題從「該訓哪種模型」重構成「<b>需要哪些機制,才能讓世界的物理經驗變成機器人學得會的東西</b>」——這是 position paper 最有價值的貢獻:換一個提問的方式。</p>
+          <p data-lang="en" style="margin-top:6px">It deliberately organizes not by "data source" or "algorithm family" but <b>by the robot-learning pipeline itself</b>. It reframes the question from "which model to train" to "<b>which mechanisms are needed to make the world's physical experience learnable by robots</b>"—the most valuable thing a position paper can do: change the question.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-assume)">瓶頸是「接地」,不是「資料量」。</b> 世界不缺物理行為,缺的是把它轉成機器人座標系下的變數(動作、接觸、物體狀態、任務階段、獎勵)的機制。重構問題本身就是貢獻。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">The bottleneck is "grounding," not "data volume."</b> The world isn't short of physical behaviour; it lacks mechanisms to convert it into robot-frame variables (actions, contacts, object states, task phases, rewards). Reframing the problem is itself the contribution.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">VLA 是「一層」,不是「全部」。</b> 把 VLA 放回一個更大的 physical-intelligence 堆疊裡:它是 policy interface,但仰賴上游(資料/具身/動力學)與下游(獎勵/部署回饋)的接地。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">A VLA is "one layer," not "everything."</b> It places VLAs back into a larger physical-intelligence stack: a policy interface that depends on upstream (data/embodiment/dynamics) and downstream (reward/deployment feedback) grounding.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">連失敗都是監督。</b> 失敗的 rollout 不是壞軌跡,而是「哪個接觸沒抓到、哪個子目標沒達成」的證據;只要正確標註,失敗(例如掉了物體)甚至能變成未來有用的技能。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Even failure is supervision.</b> A failed rollout isn't a bad trajectory but evidence of "which contact was missed, which subgoal failed"; properly labelled, a failure (e.g. dropping an object) can even become a useful future skill.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">穿戴式感測器 = 物理世界的「標註儀器」。</b> 動捕/感測衣提供影像缺乏的結構訊號(身體姿態、手部軌跡、接觸、力),把一次人類示範變成「多個標籤」的來源,而不只是一段待模仿的影片。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Wearable sensing = a "labelling instrument" for the physical world.</b> Mocap/sensor suits give structured signals video lacks (body pose, hand trajectories, contacts, force), turning one human demo into a source of many labels—not just a video to imitate.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">堆疊是「閉環」,不是「前饋」。</b> 部署不只是評估;每次 rollout、失敗、人類修正都應接地成監督,回頭更新 policy、reward、world model、retargeting——讓能力「複利」累積。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">The stack is "closed-loop," not "feed-forward."</b> Deployment isn't just evaluation; every rollout, failure, and human correction should be grounded into supervision that updates the policy, reward, world model, and retargeting—so competence compounds.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Robots Need More Than VLAs &amp; World Models</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Karcini, Mehrban, Nguyen, Schwager, Ajoundani, Cadena, Peters, Hutter, Bou-Ammar</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Motoniq.ai · Stanford · IIT · ETH Zürich · TU Darmstadt · UCL</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2026 · arXiv:2606.06556 · Position Paper</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Robot Foundation Models</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">在「把 VLA / world model 越做越大」的主流敘事中,提供一個<b>反框架</b>:把注意力從「policy 架構」移到「<b>把世界變成監督</b>的接地機制」。對思考機器人研究方向很有參考價值。</span>
+        <span data-lang="en">Against the mainstream "scale the VLA / world model" narrative, it offers a <b>counter-framing</b>: move attention from "policy architecture" to the <b>grounding mechanisms that turn the world into supervision</b>. Useful for thinking about research direction in robotics.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Grounding</span><span class="chip">Embodied Autolabelling</span>
+          <span class="chip">Retargeting</span><span class="chip">Physics World Model</span>
+          <span class="chip">Reward Grounding</span><span class="chip">VLA</span>
+        </div>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">先記住</span><span data-lang="en">Remember</span></div>
+        <span data-lang="zh">這是<b>立場文章</b>——提供框架與議程,<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有新實驗或新模型</mark>。判斷它的標準是「框架是否有用」,不是「跑分高不高」。</span>
+        <span data-lang="en">This is a <b>position paper</b>—it offers a framework and agenda, with <mark class="m-limit" data-t="LIMITATION/FUTURE">no new experiments or models</mark>. Judge it by "is the framing useful," not by benchmark numbers.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">兩種 pipeline:現況 vs 主張</span><span data-lang="en">Two pipelines: status quo vs the position</span></h3>
+        <table>
+          <tr><th></th><th><span data-lang="zh">今天:robot-data-centric</span><span data-lang="en">Today: robot-data-centric</span></th><th><span data-lang="zh">主張:grounding-centric</span><span data-lang="en">Proposed: grounding-centric</span></th></tr>
+          <tr><td><b><span data-lang="zh">起點</span><span data-lang="en">Start</span></b></td><td><span data-lang="zh">蒐集機器人示範</span><span data-lang="en">collect robot demos</span></td><td><span data-lang="zh">廣義物理經驗(人類動作、影片、模擬、觸覺、語言)</span><span data-lang="en">broad physical experience (human motion, video, sim, tactile, language)</span></td></tr>
+          <tr><td><b><span data-lang="zh">中段</span><span data-lang="en">Middle</span></b></td><td><span data-lang="zh">貼任務/語言標籤 → 訓 policy</span><span data-lang="en">attach task/language labels → train policy</span></td><td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">接地機制</mark>產出動作、接觸、物體狀態、任務階段、目標、獎勵</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">grounding mechanisms</mark> produce actions, contacts, object states, phases, goals, rewards</span></td></tr>
+          <tr><td><b><span data-lang="zh">瓶頸</span><span data-lang="en">Bottleneck</span></b></td><td><span class="bad"><span data-lang="zh">硬體上評估 → 重複(貴、難擴展)</span><span data-lang="en">evaluate on hardware → repeat (costly, hard to scale)</span></span></td><td><span class="ok"><span data-lang="zh">把世界變成監督來源</span><span data-lang="en">the world becomes a supervision source</span></span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:12px">核心矛盾一句話:<mark class="m-problem" data-t="PROBLEM/GAP">「最有效的監督,目前仍幾乎都得先被『接地』成機器人原生量(動作/觀測/任務/成敗)才有用」</mark>。問題不是「再多收一點機器人資料」,而是「如何讓更廣的物理經驗變得可用」。</p>
+        <p data-lang="en" style="margin-top:12px">The tension in one line: <mark class="m-problem" data-t="PROBLEM/GAP">"the most effective supervision still largely becomes useful only after being grounded into robot-native quantities (actions/observations/tasks/success)."</mark> The question isn't "collect a bit more robot data," but "how to make broader physical experience usable."</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 每條研究線暴露的監督瓶頸</span><span data-lang="en">Gap table — the supervision bottleneck each line exposes</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">研究線</span><span data-lang="en">Line of work</span></th><th><span data-lang="zh">它證明了什麼</span><span data-lang="en">What it shows</span></th><th><span data-lang="zh">暴露的缺口</span><span data-lang="en">Gap exposed</span></th></tr>
+          <tr><td><b><span data-lang="zh">機器人原生資料集 / VLA</span><span data-lang="en">Robot-native datasets / VLA</span></b></td><td><span data-lang="zh">動作與任務標籤齊備時,policy 能擴展得很遠</span><span data-lang="en">policy scales far when actions &amp; task labels are already available</span></td><td><span data-lang="zh">依賴<mark class="m-problem" data-t="PROBLEM/GAP">已接地的軌跡</mark>;蒐集貴、綁定具身</span><span data-lang="en">depends on <mark class="m-problem" data-t="PROBLEM/GAP">already-grounded trajectories</mark>; costly, embodiment-bound</span></td></tr>
+          <tr><td><b><span data-lang="zh">影片學習</span><span data-lang="en">Learning from video</span></b></td><td><span data-lang="zh">世界有大量行為證據</span><span data-lang="en">the world holds abundant behavioural evidence</span></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">接地很弱</mark>:沒有動作、力、可靠的成敗</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">weak grounding</mark>: no actions, forces, reliable success</span></td></tr>
+          <tr><td><b><span data-lang="zh">模擬 / 世界模型</span><span data-lang="en">Simulation / world models</span></b></td><td><span data-lang="zh">經驗可以被「生成」</span><span data-lang="en">experience can be generated</span></td><td><span data-lang="zh">只有<mark class="m-assume" data-t="ASSUMPTION/CLAIM">保住物理後果</mark>時才有用</span><span data-lang="en">useful only when <mark class="m-assume" data-t="ASSUMPTION/CLAIM">physical consequences are preserved</mark></span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">三條線都指向同一個結論:<mark class="m-method" data-t="METHOD/IDEA">缺的不是又一個 policy 架構,而是把物理經驗轉成機器人可用監督的「那一層」</mark>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">All three point to the same conclusion: <mark class="m-method" data-t="METHOD/IDEA">the missing piece isn't another policy architecture, but the layer that turns physical experience into robot-usable supervision</mark>.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">關鍵類比</span><span data-lang="en">Key analogy</span></span>
+        <span data-lang="zh">NLP 有「網際網路」當免費語料;機器人沒有。這篇等於問:<b>機器人的「資料飛輪」要怎麼自己造出來?</b>答案是用接地機制,把已存在的物理行為「煉」成監督。</span>
+        <span data-lang="en">NLP had "the internet" as a free corpus; robots don't. The paper effectively asks: <b>how do we manufacture a data flywheel for robots?</b> The answer: use grounding mechanisms to refine already-existing physical behaviour into supervision.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把它讀成「<b>VLA 沒用</b>」。作者明說 VLA 重要,只是把它定位成堆疊中的<mark class="m-assume" data-t="ASSUMPTION/CLAIM">一層 policy interface</mark>,效果取決於上下游的接地。</span>
+        <span data-lang="en">Don't read it as "<b>VLAs are useless</b>." The authors explicitly say VLAs matter—they just position them as <mark class="m-assume" data-t="ASSUMPTION/CLAIM">one policy-interface layer</mark> whose effectiveness depends on up/downstream grounding.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">可操作性</span><span data-lang="en">actionable?</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">利益關係</span><span data-lang="en">conflict?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 FRAMEWORK (METHOD) ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">The Proposed Framework</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">四個缺失的 interface(閉環堆疊)</span><span data-lang="en">Four missing interfaces (a closed-loop stack)</span></h3>
+        <figure class="fig"><img src="figs/Karcini2026/fig1_stack.png" alt="Figure 1">
+          <figcaption data-lang="zh"><b>Fig.1</b> 從「物理經驗」到「物理智能」的堆疊:① 經驗來源 → ② 接地機制(資料引擎、retargeting、反事實/世界模型、獎勵接地)→ ③ 機器人可用監督(<b>為動作而非像素而生</b>)→ ④ 學習與控制 → ⑤ 部署與複利學習,並有 self-learning loop 回饋。</figcaption>
+          <figcaption data-lang="en"><b>Fig.1</b> The stack from "physical experience" to "physical intelligence": ① experience sources → ② grounding mechanisms (data engine, retargeting, counterfactual/world models, reward grounding) → ③ robot-usable supervision (<b>built for actions, not pixels</b>) → ④ learning &amp; control → ⑤ deployment &amp; compounding learning, with a self-learning loop feeding back.</figcaption></figure>
+        <div class="pillars">
+          <div class="pill"><span class="n">PILLAR 1 · DATA</span><b><span data-lang="zh">物理資料引擎 + 具身自動標註</span><span data-lang="en">Physical data engine + embodied autolabelling</span></b><small><span data-lang="zh">把雜亂經驗當「部分標註的互動資料」,自動還原任務階段、接觸、物體狀態、潛在動作、成敗。</span><span data-lang="en">Treat messy experience as "partially labelled interaction data," auto-recovering task phases, contacts, object states, latent actions, success/failure.</span></small></div>
+          <div class="pill"><span class="n">PILLAR 2 · EMBODIMENT</span><b><span data-lang="zh">任務保留的跨具身 retargeting</span><span data-lang="en">Task-preserving retargeting</span></b><small><span data-lang="zh">不是複製人類動作,而是保留「對世界的任務相關效果」,跨手/夾爪/人形等不同身體轉譯。</span><span data-lang="en">Not copying human motion but preserving its "task-relevant effect on the world," translating across hands/grippers/humanoids.</span></small></div>
+          <div class="pill"><span class="n">PILLAR 3 · WORLD MODEL</span><b><span data-lang="zh">物理接地的世界模型</span><span data-lang="en">Physics-grounded world models</span></b><small><span data-lang="zh">預測「後果」而非像素:幾何、接觸、力、穩定性、約束、材料反應。為控制而生的反事實。</span><span data-lang="en">Predict consequences, not pixels: geometry, contact, force, stability, constraints, material response. Counterfactuals built for control.</span></small></div>
+          <div class="pill"><span class="n">PILLAR 4 · REWARD</span><b><span data-lang="zh">任務獎勵接地 + 自我改進部署迴圈</span><span data-lang="en">Reward grounding + self-improving loop</span></b><small><span data-lang="zh">獎勵是「在目標下對物理進度的詮釋」;每次部署/失敗/人類修正都回灌成監督,讓系統複利成長。</span><span data-lang="en">Reward is "an interpretation of physical progress under a goal"; every deployment/failure/correction feeds back as supervision so the system compounds.</span></small></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">把它寫成數學:從經驗到監督</span><span data-lang="en">As math: from experience to supervision</span></h3>
+        <p data-lang="zh">一段原始經驗是<b>異質、非同步</b>的多模態串流(影片、動捕、觸覺/力、機器人日誌、語言):</p>
+        <p data-lang="en">A raw episode is a <b>heterogeneous, asynchronous</b> multimodal stream (video, mocap, tactile/force, robot logs, language):</p>
+        <div class="eq">$$x=\big\{(v_i,\tau^{v}_i),\,(m_j,\tau^{m}_j),\,(h_k,\tau^{h}_k),\,(r_l,\tau^{r}_l),\,L\big\}$$</div>
+        <p data-lang="zh">因為串流不同步,第一個「隱藏變數」是<b>對齊</b> \(A\),把各模態時間戳對到一條潛在事件時間軸 \(\{1,\dots,Z\}\)。每個事件 \(\zeta\) 要還原的結構是:</p>
+        <p data-lang="en">Because streams are asynchronous, the first hidden variable is an <b>alignment</b> \(A\) mapping each modality's timestamps to a latent event timeline \(\{1,\dots,Z\}\). The structure to recover per event \(\zeta\):</p>
+        <div class="eq">$$z_\zeta=[\,s_\zeta,\;c_\zeta,\;\phi_\zeta,\;u_\zeta,\;r_\zeta\,],\qquad z=[\,z_{1:Z},\,g,\,y\,]$$</div>
+        <p data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">資料引擎就是一個推論模型 \(q_\theta(z,A\mid x)\)</mark>:同時解時間對齊、事件切分、物體狀態、接觸推斷、階段辨識、潛在動作發現、獎勵接地、成敗預測——不只是感知。</p>
+        <p data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">The data engine is an inference model \(q_\theta(z,A\mid x)\)</mark>: jointly solving temporal alignment, event segmentation, object-state estimation, contact inference, phase recognition, latent-action discovery, reward grounding, and outcome prediction—not mere perception.</p>
+        <div class="divzh"><span class="lab mono"><span data-lang="zh">另外三根支柱的形式</span><span data-lang="en">The other three pillars, formally</span></span>
+          <p data-lang="zh" style="margin-top:8px"><b>Retargeting</b>:對具身 \(e\) 求動作 \(a^{(e)}_\zeta=f_\psi(u_\zeta,s_\zeta,e)\),使其<b>保留任務相關效果</b> \(\Delta_g(s_\zeta,a^{(e)}_\zeta)\approx\Delta_g(s_\zeta,u_\zeta)\)(這就是為何「對姿態」不夠)。</p>
+          <p data-lang="en" style="margin-top:8px"><b>Retargeting</b>: for embodiment \(e\), find \(a^{(e)}_\zeta=f_\psi(u_\zeta,s_\zeta,e)\) that <b>preserves the task-relevant effect</b> \(\Delta_g(s_\zeta,a^{(e)}_\zeta)\approx\Delta_g(s_\zeta,u_\zeta)\) (which is why pose-matching is insufficient).</p>
+          <p data-lang="zh" style="margin-top:4px"><b>世界模型</b>:預測物理後果 \(s_{\zeta+1}\sim p_\omega(\cdot\mid s_\zeta,u_\zeta,g)\),且應<mark class="m-assume" data-t="ASSUMPTION/CLAIM">任務條件化</mark>(只在任務相關的面向上預測得準)。</p>
+          <p data-lang="en" style="margin-top:4px"><b>World model</b>: predict physical consequences \(s_{\zeta+1}\sim p_\omega(\cdot\mid s_\zeta,u_\zeta,g)\), and it should be <mark class="m-assume" data-t="ASSUMPTION/CLAIM">task-conditioned</mark> (accurate on what matters for the task).</p>
+          <p data-lang="zh" style="margin-top:4px"><b>獎勵</b>:\(r_\eta(s_\zeta,g,\phi_\zeta)\)——同一個狀態在不同目標下意義不同(杯子放桌上,對「放下」是成功、對「拿起」是失敗)。</p>
+          <p data-lang="en" style="margin-top:4px"><b>Reward</b>: \(r_\eta(s_\zeta,g,\phi_\zeta)\)—the same state means different things under different goals (a cup on the table is success for "put down," failure for "pick up").</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">閉環:為何是「複利」</span><span data-lang="en">The closed loop: why it "compounds"</span></h3>
+        <div class="eq">$$\text{deploy}\to\text{outcome}\to\text{infer progress/success/failure}\to\text{explain}\to\text{add grounded supervision}\to\text{update }(\pi,r_\eta,p_\omega,f_\psi)\to\text{redeploy}$$</div>
+        <p data-lang="zh">關鍵是<mark class="m-method" data-t="METHOD/IDEA">元件級的 credit assignment</mark>:失敗時要知道<b>該更新哪一塊</b>——動作差→更新 policy;後果預測錯→更新 world model;效果沒保留→更新 retargeting;成敗誤判→更新 reward model。否則只知道「失敗了」卻不知「該改什麼」。</p>
+        <p data-lang="en">The key is <mark class="m-method" data-t="METHOD/IDEA">component-level credit assignment</mark>: on failure, know <b>which part to update</b>—bad action → policy; wrong consequence prediction → world model; effect not preserved → retargeting; misjudged success → reward model. Otherwise the system knows it failed but not what to change.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(x\)</td><td><span data-lang="zh">一段原始異質經驗(影片+動捕+觸覺+日誌+語言)。</span><span data-lang="en">A raw heterogeneous episode (video + mocap + tactile + logs + language).</span></td></tr>
+          <tr><td>\(A\)</td><td><span data-lang="zh">對齊:把各模態時間戳對到同一條潛在事件時間軸。</span><span data-lang="en">Alignment: maps each modality's timestamps onto one latent event timeline.</span></td></tr>
+          <tr><td>\(z_\zeta\)</td><td><span data-lang="zh">事件 \(\zeta\) 的結構:物體狀態 \(s\)、接觸 \(c\)、任務階段 \(\phi\)、潛在動作 \(u\)、獎勵 \(r\)。</span><span data-lang="en">Structure of event \(\zeta\): object state \(s\), contact \(c\), task phase \(\phi\), latent action \(u\), reward \(r\).</span></td></tr>
+          <tr><td>\(g,\;y\)</td><td><span data-lang="zh">整段的目標 \(g\) 與成敗標籤 \(y\)(成功/失敗/部分/不安全)。</span><span data-lang="en">Episode goal \(g\) and outcome label \(y\) (success/failure/partial/unsafe).</span></td></tr>
+          <tr><td>\(q_\theta,f_\psi,p_\omega,r_\eta\)</td><td><span data-lang="zh">四根支柱:資料引擎、retargeting、世界模型、獎勵模型。</span><span data-lang="en">The four pillars: data engine, retargeting, world model, reward model.</span></td></tr>
+          <tr><td>\(\Delta_g\)</td><td><span data-lang="zh">目標 \(g\) 下的「任務相關效果」(抽屜位移、物體姿態、對齊、接觸狀態…)。</span><span data-lang="en">The "task-relevant effect" under goal \(g\) (drawer displacement, object pose, alignment, contact state…).</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh"><b>把「世界」當成一個半標註的資料集</b>:資料引擎還原隱藏標籤 → retargeting 轉成某身體能做的動作 → 世界模型預測會發生什麼 → 獎勵詮釋成敗 → 部署再餵回來。</span>
+        <span data-lang="en"><b>Treat "the world" as a semi-labelled dataset</b>: the data engine recovers hidden labels → retargeting maps them to a body's actions → the world model predicts what will happen → reward interprets success → deployment feeds it back.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">最漂亮的一招</span><span data-lang="en">The neatest move</span></span>
+        <span data-lang="zh">retargeting 的目標不是「對齊關節」,而是<mark class="m-method" data-t="METHOD/IDEA">保留 \(\Delta_g\)</mark>(對世界的效果)。這把「跨具身遷移」從「模仿動作」升級成「保留任務效果」,並排出一個由弱到強的層級:姿態 → 接觸 → 物體狀態 → 意圖/技能。</span>
+        <span data-lang="en">Retargeting's target isn't "match joints" but <mark class="m-method" data-t="METHOD/IDEA">preserve \(\Delta_g\)</mark> (the effect on the world). This upgrades cross-embodiment transfer from "imitate motion" to "preserve task effect," with a hierarchy: pose → contact → object-state → intent/skill.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">這些 \(q_\theta,f_\psi,p_\omega,r_\eta\) 是<mark class="m-limit" data-t="LIMITATION/FUTURE">提議的形式化,不是已實作的系統</mark>。論文給的是「該長什麼樣」,不是「我們做出來了」。</span>
+        <span data-lang="en">These \(q_\theta,f_\psi,p_\omega,r_\eta\) are <mark class="m-limit" data-t="LIMITATION/FUTURE">proposed formalisms, not implemented systems</mark>. The paper says "what it should look like," not "we built it."</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 SURVEY (RESULTS) ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Survey &amp; Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="note pitfall" style="margin-bottom:20px">
+        <div class="ttl">⚠ <span data-lang="zh">沒有實驗</span><span data-lang="en">No experiments</span></div>
+        <span data-lang="zh">立場文章不跑實驗。這頁的「證據」是<b>對既有工作的整理</b>:作者用它們來支撐論點,並標出每條線「補了哪一格、還缺什麼」。</span>
+        <span data-lang="en">A position paper runs no experiments. The "evidence" here is a <b>survey of existing work</b>, marshalled to support the argument and to show which cell each line fills and what it still lacks.</span>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">機器人原生監督:規模的證據</span><span data-lang="en">Robot-native supervision: evidence of scale</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">資料集 / 系統</span><span data-lang="en">Dataset / system</span></th><th><span data-lang="zh">規模(原文數字)</span><span data-lang="en">Scale (as reported)</span></th></tr>
+          <tr><td>RoboNet</td><td><span class="num">15M</span> <span data-lang="zh">影格 · 7 個平台</span><span data-lang="en">frames · 7 platforms</span></td></tr>
+          <tr><td>BridgeData V2</td><td><span data-lang="zh">約 <span class="num">60k</span> 操作軌跡 · 24 環境</span><span data-lang="en">~<span class="num">60k</span> manip. trajectories · 24 envs</span></td></tr>
+          <tr><td>DROID</td><td><span data-lang="zh">約 <span class="num">76k</span> 軌跡 · <span class="num">350</span> 小時</span><span data-lang="en">~<span class="num">76k</span> trajectories · <span class="num">350</span> hrs</span></td></tr>
+          <tr><td>RH20T</td><td><span data-lang="zh"><span class="num">110k+</span> 接觸豐富序列(視覺/力/音訊/動作)</span><span data-lang="en"><span class="num">110k+</span> contact-rich seqs (vision/force/audio/action)</span></td></tr>
+          <tr><td>Open X-Embodiment / RT-X</td><td><span data-lang="zh"><span class="num">1M+</span> 軌跡 · <span class="num">22</span> 種具身</span><span data-lang="en"><span class="num">1M+</span> trajectories · <span class="num">22</span> embodiments</span></td></tr>
+          <tr><td>OpenVLA</td><td><span data-lang="zh"><span class="num">7B</span> 參數 · 約 <span class="num">970k</span> 真機示範</span><span data-lang="en"><span class="num">7B</span> params · ~<span class="num">970k</span> real-robot demos</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><mark class="m-result" data-t="RESULT/EVIDENCE">證明了「資料多樣性 → 泛化」</mark>(RT-1/RT-2/Octo/π0…);但也<mark class="m-problem" data-t="PROBLEM/GAP">坐實了瓶頸</mark>:最有效的監督仍以「已接地的機器人軌跡」形式到來。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><mark class="m-result" data-t="RESULT/EVIDENCE">Shows "data diversity → generalisation"</mark> (RT-1/RT-2/Octo/π0…); but also <mark class="m-problem" data-t="PROBLEM/GAP">confirms the bottleneck</mark>: the most effective supervision still arrives as already-grounded robot trajectories.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">把既有工作對到四根支柱</span><span data-lang="en">Mapping existing work onto the four pillars</span></h3>
+        <table>
+          <tr><th>Pillar</th><th><span data-lang="zh">既有方向(部分觸及)</span><span data-lang="en">Existing directions (partial)</span></th><th><span data-lang="zh">還缺什麼</span><span data-lang="en">Still missing</span></th></tr>
+          <tr><td><b>1 Data</b></td><td><span data-lang="zh">影片學習、潛在動作、自動標註</span><span data-lang="en">video learning, latent actions, autolabelling</span></td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">物理接地的</mark>聯合對齊/接觸/獎勵推斷</span><span data-lang="en">a <mark class="m-limit" data-t="LIMITATION/FUTURE">physically grounded</mark> joint alignment/contact/reward inference</span></td></tr>
+          <tr><td><b>2 Embodiment</b></td><td><span data-lang="zh">人→機器人 retargeting、跨具身資料集</span><span data-lang="en">human→robot retargeting, cross-embodiment data</span></td><td><span data-lang="zh">保留 \(\Delta_g\) 的<mark class="m-limit" data-t="LIMITATION/FUTURE">任務效果層級</mark>遷移</span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">task-effect-level</mark> transfer preserving \(\Delta_g\)</span></td></tr>
+          <tr><td><b>3 World Model</b></td><td><span data-lang="zh">影片生成、3D(點雲/NeRF/Gaussian splat)、力學模型</span><span data-lang="en">video gen, 3D (point cloud/NeRF/splat), mechanics models</span></td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">混合式</mark>:3D+物體中心+物理約束+殘差動力學</span><span data-lang="en">a <mark class="m-limit" data-t="LIMITATION/FUTURE">hybrid</mark>: 3D + object-centric + physics constraints + residual dynamics</span></td></tr>
+          <tr><td><b>4 Reward</b></td><td><span data-lang="zh">偏好建模、影片/語言成敗辨識</span><span data-lang="en">preference modelling, video/language success detection</span></td><td><span data-lang="zh">綁定接觸/物體狀態/階段的<mark class="m-limit" data-t="LIMITATION/FUTURE">任務條件化獎勵</mark> + 元件級 credit</span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">task-conditioned reward</mark> tied to contacts/states/phases + component credit</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">一句話總結:<b>每根支柱都有人做了「一部分」,但沒有人把它們<mark class="m-assume" data-t="ASSUMPTION/CLAIM">串成閉環、且全程物理接地</mark>。</b>這正是作者主張的研究議程。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">In one line: <b>each pillar has partial work, but no one has <mark class="m-assume" data-t="ASSUMPTION/CLAIM">wired them into a closed loop that stays physically grounded throughout</mark>.</b> That gap is the proposed agenda.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">這頁在證明什麼</span><span data-lang="en">What this section proves</span></span>
+        <span data-lang="zh">不是「我們的方法贏了」,而是「<b>這個缺口真的存在、且尚未被填</b>」。對 position paper 而言,survey 的完整與分類的說服力,就是它的「實驗」。</span>
+        <span data-lang="en">Not "our method wins," but "<b>this gap really exists and isn't filled yet</b>." For a position paper, the survey's completeness and the taxonomy's persuasiveness <i>are</i> its "experiments."</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被證明的</span><span data-lang="en">Not proven</span></div>
+        <span data-lang="zh">「補上這四根支柱就會帶來通才機器人」是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">未經驗證的主張</mark>。survey 證明缺口存在,<b>不證明這個解法可行或足夠</b>。</span>
+        <span data-lang="en">"Filling these four pillars yields generalist robots" is an <mark class="m-assume" data-t="ASSUMPTION/CLAIM">unvalidated claim</mark>. The survey shows the gap exists; it does <b>not</b> show this solution is feasible or sufficient.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>框架 vs 可操作性</b>:四個 interface 講得很清楚,但<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有任何一個被實作或量化</mark>。它告訴你「該蓋什麼」,沒告訴你「怎麼蓋、會不會成」。對工程團隊的可操作性有限。</li>
+          <li data-lang="en"><b>Framework vs actionability</b>: the four interfaces are crisply stated, but <mark class="m-limit" data-t="LIMITATION/FUTURE">none is implemented or quantified</mark>. It tells you "what to build," not "how, or whether it works." Limited actionability for an engineering team.</li>
+          <li data-lang="zh"><b>是新框架,還是重新貼標籤?</b> 「資料引擎 / retargeting / 世界模型 / 獎勵」大致對應已知的<mark class="m-assume" data-t="ASSUMPTION/CLAIM">感知標註、模仿遷移、model-based RL、reward learning</mark>。真正的新意是「強調全程物理接地 + 閉環」,但這是否足以稱為新範式,可議。</li>
+          <li data-lang="en"><b>New framework, or relabeling?</b> "Data engine / retargeting / world model / reward" roughly map to known sub-fields—<mark class="m-assume" data-t="ASSUMPTION/CLAIM">perception labelling, imitation transfer, model-based RL, reward learning</mark>. The genuine novelty is "insist on end-to-end physical grounding + a closed loop," but whether that warrants a new paradigm is debatable.</li>
+          <li data-lang="zh"><b>潛在利益關係</b>:多數作者隸屬 <b>Motoniq.ai</b>,而全篇對<mark class="m-assume" data-t="ASSUMPTION/CLAIM">穿戴式感測衣作為「物理世界標註儀器」</mark>著墨甚多。這個技術重點<b>恰好</b>會對應到某類商業產品方向。<span class="add">[導讀補充] 這是讀立場文章時值得留意的角度,非指控。</span></li>
+          <li data-lang="en"><b>Potential conflict of interest</b>: most authors are affiliated with <b>Motoniq.ai</b>, and the paper dwells heavily on <mark class="m-assume" data-t="ASSUMPTION/CLAIM">wearable sensing suits as a "labelling instrument for the physical world."</mark> That emphasis <b>conveniently</b> aligns with a class of commercial product directions. <span class="add">[guide note] A lens worth keeping when reading position papers, not an accusation.</span></li>
+          <li data-lang="zh"><b>接地本身會不會也是瓶頸?</b> 把「policy 學習很難」換成「接地很難」——但聯合解對齊/接觸/階段/獎勵推斷,可能<mark class="m-limit" data-t="LIMITATION/FUTURE">比訓練 policy 更難、更易出錯</mark>。論文沒談這個遞迴困難。</li>
+          <li data-lang="en"><b>Is grounding itself the bottleneck?</b> It swaps "policy learning is hard" for "grounding is hard"—but jointly inferring alignment/contact/phase/reward may be <mark class="m-limit" data-t="LIMITATION/FUTURE">harder and more error-prone than training a policy</mark>. The paper doesn't address this recursive difficulty.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>最小可行證據</b>:能不能在<b>一個</b>任務上,端到端示範「人類影片 → 接地 → 跨具身 → 部署改進」,證明閉環真能複利?</li>
+          <li data-lang="en"><b>Minimal viable evidence</b>: could you demonstrate end-to-end on <b>one</b> task—"human video → grounding → cross-embodiment → deployment improvement"—to show the loop actually compounds?</li>
+          <li data-lang="zh"><b>誤差會不會放大?</b> 自動標註的錯誤標籤餵進 retargeting/world model/reward,是會被閉環修正,還是<b>累積放大</b>?</li>
+          <li data-lang="en"><b>Does error amplify?</b> Wrong autolabels fed into retargeting/world-model/reward—does the loop correct them, or <b>compound</b> them?</li>
+          <li data-lang="zh"><b>利益關係</b>:若不假設「人人都穿感測衣」,這套框架還站得住嗎?哪些部分依賴特定硬體?</li>
+          <li data-lang="en"><b>Conflict of interest</b>: without assuming "everyone wears a sensor suit," does the framework still hold? Which parts depend on specific hardware?</li>
+          <li data-lang="zh"><b>可證偽性</b>:這個立場有沒有可能被「未來證據」推翻?還是它寬到怎樣都對(因為四根支柱涵蓋了幾乎所有 robot learning)?</li>
+          <li data-lang="en"><b>Falsifiability</b>: could future evidence refute this position? Or is it broad enough to always be "right" (since the four pillars cover almost all of robot learning)?</li>
+          <li data-lang="zh"><b>與 end-to-end 的對賭</b>:若一個夠大的 VLA + 夠多資料就能隱式學會這些接地,模組化堆疊會不會反而是彎路?</li>
+          <li data-lang="en"><b>The bet against end-to-end</b>: if a big-enough VLA + enough data implicitly learns this grounding, could the modular stack be a detour?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把它當成「<b>新方法/新系統</b>」來期待跑分。它是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">研究議程與分類框架</mark>;價值在「換個提問方式、把散落的子問題收進一張圖」,而非交付一個可跑的系統。</span>
+        <span data-lang="en">Expecting benchmark numbers from it as a "<b>new method/system</b>." It is a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">research agenda and taxonomy</mark>; its value is "reframing the question and gathering scattered sub-problems into one picture," not delivering a runnable system.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">公允地說</span><span data-lang="en">In fairness</span></span>
+        <span data-lang="zh">作者群分量很重(Schwager、Hutter、Peters、Cadena…),框架清楚、survey 紮實,且自陳是 position paper。把它當「方向感」而非「解法」來讀,是合理且有收穫的。</span>
+        <span data-lang="en">The author list is heavyweight (Schwager, Hutter, Peters, Cadena…), the framework is clear, the survey solid, and it self-identifies as a position paper. Read as "a sense of direction" rather than "a solution," it's reasonable and rewarding.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「grounding-centric」是個好用的鏡片</b>:做機器人/具身 AI 時,先問「我的監督是從哪裡接地來的?能不能從更廣的來源接地?」往往比「再換個 policy 架構」更有槓桿。</li>
+          <li data-lang="en"><b>"Grounding-centric" is a useful lens</b>: in robotics / embodied AI, asking "where does my supervision get grounded from, and can I ground it from broader sources?" often has more leverage than "swap the policy architecture again."</li>
+          <li data-lang="zh"><b>「保留任務效果 \(\Delta_g\) 而非姿態」</b>的觀點可遷移到任何「跨域遷移」問題:遷的應是<b>對世界的效果</b>,不是表面軌跡。</li>
+          <li data-lang="en"><b>"Preserve the task effect \(\Delta_g\), not the pose"</b> transfers to any cross-domain transfer problem: transfer the <b>effect on the world</b>, not the surface trajectory.</li>
+          <li data-lang="zh"><b>閉環 + 元件級 credit assignment</b>:任何「自我改進系統」都值得想清楚「失敗時該更新哪一塊」,而不是把整個系統當黑盒重訓。</li>
+          <li data-lang="en"><b>Closed loop + component-level credit assignment</b>: any "self-improving system" should think hard about "which part to update on failure," rather than retraining the whole black box.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「機器人缺的是接地,不只是資料量」</span><span data-lang="en">"robotics lacks grounding, not just data"</span></td><td><span data-lang="zh">作為 grounding-centric 框架的代表性立場。</span><span data-lang="en">As a flagship statement of the grounding-centric framing.</span></td></tr>
+          <tr><td><span data-lang="zh">「VLA 是堆疊的一層」</span><span data-lang="en">"a VLA is one layer in a stack"</span></td><td><span data-lang="zh">引其 physical-intelligence stack 的定位。</span><span data-lang="en">Cite its physical-intelligence-stack positioning.</span></td></tr>
+          <tr><td><span data-lang="zh">機器人學習的研究議程綜述</span><span data-lang="en">an agenda survey for robot learning</span></td><td><span data-lang="zh">引其對資料集/VLA/世界模型/獎勵的整理。</span><span data-lang="en">Cite its survey of datasets/VLAs/world models/reward.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">通才機器人的瓶頸,可能不在「policy 不夠大」,而在「世界的物理經驗還沒被接地成機器人學得會的監督」。這篇把那個缺失的「接地層」拆成四根支柱、連成閉環——一張有用的<b>路線圖</b>,而非一個跑得動的系統。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">The bottleneck for generalist robots may not be "policies aren't big enough" but "the world's physical experience isn't yet grounded into supervision robots can learn from." This paper splits that missing "grounding layer" into four pillars wired into a loop—a useful <b>roadmap</b>, not a runnable system.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">RT-2 / OpenVLA / π0</span>
+          <span class="chip">Open X-Embodiment</span>
+          <span class="chip">DROID · RH20T</span>
+          <span class="chip">Diffusion Policy</span>
+          <span class="chip">World Models</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成(position paper 版:METHOD→框架、RESULTS→survey)。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill (position-paper variant: METHOD→framework, RESULTS→survey). Items marked <span class="add">[guide note]</span> are the guide author's inferences; the rest is from the paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Karcini et al. 2026 (Position Paper) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

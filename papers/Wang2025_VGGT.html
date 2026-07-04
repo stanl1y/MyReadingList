@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>VGGT — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"VGGT: Visual Geometry Grounded Transformer","authors":"Jianyuan Wang, Minghao Chen, Nikita Karaev, Andrea Vedaldi, Christian Rupprecht, David Novotný","year":"2025","venue":"CVPR","tags":["3D Reconstruction","Feed-forward","Transformer","SfM / MVS","Point Tracking"],"tldr":"單一前饋 transformer,吃 1~數百張影像,<1 秒一次輸出相機參數、深度圖、point map、3D 點軌跡,且常勝過需昂貴幾何優化後處理的方法。","tldr_en":"A single feed-forward transformer that turns 1 to hundreds of images into cameras, depth maps, point maps and 3D tracks in under a second—often beating methods that need costly geometric post-processing."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:88px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">VGGT 是一個<b>單一前饋(feed-forward)transformer</b>:輸入 1 到數百張同場景影像,在<b>不到一秒</b>內一次輸出全部關鍵 3D 屬性——<b>相機參數、深度圖、point map、3D 點軌跡</b>。它<mark class="m-result" data-t="RESULT/EVIDENCE">幾乎不需任何幾何後處理</mark>,卻常勝過需要昂貴迭代優化(Bundle Adjustment、global alignment)的方法。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">VGGT is a <b>single feed-forward transformer</b>: given 1 to hundreds of images of a scene, it predicts all key 3D attributes at once in <b>under a second</b>—<b>camera parameters, depth maps, point maps, and 3D point tracks</b>. It needs <mark class="m-result" data-t="RESULT/EVIDENCE">almost no geometric post-processing</mark>, yet routinely beats methods that rely on costly iterative optimization (Bundle Adjustment, global alignment).</p>
+      </div>
+
+      <figure class="fig"><img src="figs/VGGT2025/fig1_teaser.png" alt="Figure 1 teaser">
+        <figcaption data-lang="zh"><b>Fig.1</b> VGGT 吃數百張影像,一次前饋預測相機、point map、深度圖、點軌跡(此例 < 1 秒)。左:輸入影像;中:重建的 3D 點雲與相機;右:深度圖。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> VGGT takes hundreds of images and predicts cameras, point maps, depth maps and tracks in one feed-forward pass (here < 1s). Left: input images; middle: reconstructed 3D point cloud and cameras; right: depth maps.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 3D 重建長年依賴<mark class="m-problem" data-t="PROBLEM/GAP">迭代幾何優化(SfM 的 Bundle Adjustment)</mark>,流程多階段、慢且複雜;近期 DUSt3R/MASt3R 一次只能吃<b>兩張</b>圖,多圖還要兩兩融合後處理。</li>
+          <li data-lang="en"><b>Problem</b> — 3D reconstruction has long leaned on <mark class="m-problem" data-t="PROBLEM/GAP">iterative geometric optimization (SfM's Bundle Adjustment)</mark>: multi-stage, slow, complex. Recent DUSt3R/MASt3R handle only <b>two</b> images at a time and need pairwise fusion as post-processing.</li>
+          <li data-lang="zh"><b>方法</b> — 用一個<mark class="m-method" data-t="METHOD/IDEA">最少 3D 歸納偏置的大 transformer</mark>(1.2B 參數、交替 frame-wise / global attention),在<b>海量 3D 標註資料</b>上訓練,直接回歸所有 3D 量。</li>
+          <li data-lang="en"><b>Method</b> — A <mark class="m-method" data-t="METHOD/IDEA">large transformer with minimal 3D inductive bias</mark> (1.2B params, alternating frame-wise / global attention), trained on <b>a trove of 3D-annotated data</b>, directly regressing all 3D quantities.</li>
+          <li data-lang="zh"><b>結果</b> — 相機位姿、多視角深度、point map、兩視角匹配<mark class="m-result" data-t="RESULT/EVIDENCE">全面 SOTA</mark>,且僅 ~0.2 秒(對手要 7~10 秒);把它當特徵 backbone 還能強化動態追蹤與 novel view synthesis。</li>
+          <li data-lang="en"><b>Results</b> — <mark class="m-result" data-t="RESULT/EVIDENCE">State-of-the-art across the board</mark> on camera pose, multi-view depth, point maps and two-view matching, in just ~0.2s (rivals take 7–10s). As a feature backbone it also boosts dynamic tracking and novel view synthesis.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">傳統 <mark class="m-method" data-t="METHOD/IDEA">Structure-from-Motion(SfM)</mark> 與 <mark class="m-method" data-t="METHOD/IDEA">Multi-View Stereo(MVS)</mark> 把 3D 重建拆成「特徵匹配 → 三角化 → bundle adjustment」多階段流程(代表作 COLMAP)。深度學習逐步滲透各階段,最新如 VGGSfM 用可微分 BA 端到端,但<mark class="m-problem" data-t="PROBLEM/GAP">幾何優化仍是主角,複雜且昂貴</mark>。</p>
+        <p data-lang="en">Classic <mark class="m-method" data-t="METHOD/IDEA">Structure-from-Motion (SfM)</mark> and <mark class="m-method" data-t="METHOD/IDEA">Multi-View Stereo (MVS)</mark> split 3D reconstruction into a multi-stage pipeline—matching → triangulation → bundle adjustment (epitomized by COLMAP). Deep learning has gradually entered each stage; the latest, VGGSfM, does end-to-end differentiable BA, but <mark class="m-problem" data-t="PROBLEM/GAP">geometric optimization is still the protagonist—complex and costly</mark>.</p>
+        <p data-lang="zh">DUSt3R / MASt3R 開創「直接從影像對回歸對齊點雲」的方向,但<mark class="m-problem" data-t="PROBLEM/GAP">受限於一次兩張、靠後處理融合</mark>。VGGT 把這條路推到底:一次吃數百張、零幾何後處理。</p>
+        <p data-lang="en">DUSt3R / MASt3R pioneered "directly regressing aligned point clouds from an image pair," but are <mark class="m-problem" data-t="PROBLEM/GAP">limited to two views at a time and rely on fusion post-processing</mark>. VGGT pushes this all the way: hundreds of images at once, zero geometric post-processing.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的精神跟 NLP / 視覺大模型(GPT、CLIP、DINO)一脈相承:<b>不要手工設計領域專用結構,改用通用大模型 + 海量資料,讓模型自己學會幾何。</b>賭注是「規模化的通用 transformer」能取代數十年累積的幾何優化管線——而實驗顯示,在很大程度上,它做到了。</p>
+          <p data-lang="en" style="margin-top:6px">The spirit mirrors NLP / vision foundation models (GPT, CLIP, DINO): <b>don't hand-design domain-specific structure; use a general large model + massive data and let it learn geometry.</b> The bet is that a scaled-up generic transformer can replace decades of accumulated geometric-optimization pipelines—and experiments show that, to a large extent, it does.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不只是「又一個 SOTA」,而是底下這幾個觀念轉變:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not "yet another SOTA" but these shifts in mindset:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">3D 重建可以「直接回歸」。</b> 過去被視為必要的迭代幾何優化(BA、global alignment),被一個夠大的 transformer + 海量資料<mark class="m-result" data-t="RESULT/EVIDENCE">在前饋一次就取代</mark>——而且更快更準。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">3D reconstruction can be "directly regressed."</b> The iterative geometric optimization once deemed essential (BA, global alignment) is <mark class="m-result" data-t="RESULT/EVIDENCE">replaced by one feed-forward pass</mark> of a big-enough transformer + massive data—faster and more accurate.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">最少歸納偏置 + 規模化取勝。</b> 不設計專用 3D 幾何結構,走 GPT/CLIP/DINO 的通用大模型路線(唯一的結構性偏置只有 Alternating-Attention),靠資料把幾何「學」出來。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Minimal inductive bias + scale wins.</b> No bespoke 3D-geometry architecture; the GPT/CLIP/DINO recipe (the only structural bias is Alternating-Attention), letting data teach the geometry.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">Alternating-Attention 是關鍵。</b> 交替「frame-wise」(管單張影像內部一致性)與「global」(管跨張資訊融合)self-attention;<mark class="m-result" data-t="RESULT/EVIDENCE">明顯優於只用 global、或用 cross-attention</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Alternating-Attention is the key.</b> Alternating "frame-wise" (intra-image consistency) and "global" (cross-image fusion) self-attention <mark class="m-result" data-t="RESULT/EVIDENCE">clearly beats global-only or cross-attention</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">過完備(over-complete)預測反而有益。</b> 同時預測相機、深度、point map——即使三者可由封閉式互推,<b>聯合監督仍提升整體精度</b>。但推論時,用「深度+相機反投影」比直接用 point map head <b>更準</b>(把複雜任務拆成簡單子問題)。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Over-complete prediction actually helps.</b> Predicting cameras, depth, and point maps together—even though they're related in closed form—<b>improves overall accuracy via joint supervision</b>. Yet at inference, "depth + camera back-projection" is <b>more accurate</b> than the dedicated point-map head (decomposing a hard task into easy sub-problems).</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">學到的是通用 3D backbone。</b> 預訓練特徵微調後可大幅強化下游任務(動態點追蹤、novel view synthesis),呼應「foundation model」的範式。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">It learns a general 3D backbone.</b> Fine-tuning the pretrained features sharply boosts downstream tasks (dynamic point tracking, novel view synthesis), echoing the "foundation model" paradigm.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">VGGT: Visual Geometry Grounded Transformer</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Wang, Chen, Karaev, Vedaldi, Rupprecht, Novotný</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>VGG, University of Oxford · Meta AI</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2025 · CVPR(arXiv:2503.11651)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.CV · 3D Reconstruction</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>github.com/facebookresearch/vggt</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「3D 重建 = 幾何優化問題」重新定義成「<b>大模型直接回歸問題</b>」。一個 backbone、一次前饋、解決相機+深度+點雲+追蹤四件事,並成為可微調的 3D 基礎模型。<span class="add">[導讀補充] 本文獲 CVPR 2025 Best Paper。</span></span>
+        <span data-lang="en">Reframes "3D reconstruction = a geometry-optimization problem" as "<b>a direct-regression problem for a large model</b>." One backbone, one forward pass, solving cameras + depth + point cloud + tracking, and serving as a fine-tunable 3D foundation model. <span class="add">[guide note] This paper won the CVPR 2025 Best Paper Award.</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Feed-forward 3D</span><span class="chip">Alternating-Attention</span>
+          <span class="chip">DINO tokens</span><span class="chip">DPT head</span>
+          <span class="chip">Point map</span><span class="chip">CoTracker</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">傳統 SfM / MVS</span><span data-lang="en">Classic SfM / MVS</span></b><br>(COLMAP)</td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">多階段管線</mark>(匹配→三角化→BA),慢、複雜、在困難場景(無重疊、重複紋理)易失敗。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Multi-stage pipeline</mark> (match→triangulate→BA): slow, complex, fragile on hard scenes (no overlap, repeated texture).</span></td></tr>
+          <tr><td><b>DUSt3R / MASt3R</b></td><td><span data-lang="zh">一次只能處理<mark class="m-problem" data-t="PROBLEM/GAP">兩張影像</mark>;多圖需兩兩重建再融合,且 global alignment 後處理慢(~7–10 秒)。</span><span data-lang="en">Handle only <mark class="m-problem" data-t="PROBLEM/GAP">two images</mark> at a time; many views need pairwise reconstruction + fusion, and global-alignment post-processing is slow (~7–10s).</span></td></tr>
+          <tr><td><b><span data-lang="zh">單任務大模型</span><span data-lang="en">Single-task large models</span></b><br>(DepthAnything, MoGe, LRM)</td><td><span data-lang="zh">各自只解<mark class="m-problem" data-t="PROBLEM/GAP">單一 3D 任務</mark>(單目深度 / 新視角),沒有共享 backbone 一次全做。</span><span data-lang="en">Each solves a <mark class="m-problem" data-t="PROBLEM/GAP">single 3D task</mark> (mono depth / novel view); no shared backbone doing everything at once.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「3D 任務能否終於由神經網路直接解決,幾乎完全省去幾何後處理?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"Can 3D tasks finally be solved directly by a neural network, eschewing geometry post-processing almost entirely?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,VGGT 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how VGGT fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">VGGT 如何補上</span><span data-lang="en">How VGGT fills it</span></th></tr>
+          <tr>
+            <td><b>VGGSfM</b><br><small><span data-lang="zh">可微分 SfM</span><span data-lang="en">differentiable SfM</span></small></td>
+            <td><span data-lang="zh">仍需<mark class="m-problem" data-t="PROBLEM/GAP">迭代 BA</mark>,>10 秒。</span><span data-lang="en">Still needs <mark class="m-problem" data-t="PROBLEM/GAP">iterative BA</mark>, >10s.</span></td>
+            <td><span data-lang="zh">前饋一次 ~0.2 秒;<mark class="m-method" data-t="METHOD/IDEA">BA 變成可選的錦上添花</mark>而非必需。</span><span data-lang="en">One feed-forward pass ~0.2s; <mark class="m-method" data-t="METHOD/IDEA">BA becomes optional polish</mark>, not a requirement.</span></td>
+          </tr>
+          <tr>
+            <td><b>DUSt3R / MASt3R</b></td>
+            <td><span data-lang="zh">兩張圖上限 + 後處理融合。</span><span data-lang="en">Two-image cap + fusion post-processing.</span></td>
+            <td><span data-lang="zh">一次吃 <mark class="m-method" data-t="METHOD/IDEA">數百張</mark>,native 多視角推理。</span><span data-lang="en">Ingests <mark class="m-method" data-t="METHOD/IDEA">hundreds</mark> at once, native multi-view reasoning.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">單任務 3D 模型</span><span data-lang="en">Single-task 3D models</span></b></td>
+            <td><span data-lang="zh">一個模型一個任務。</span><span data-lang="en">One model per task.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">共享 backbone</mark> 一次輸出相機/深度/點雲/追蹤。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Shared backbone</mark> outputs cameras/depth/points/tracks together.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這裡的「痛點」幾乎都是<b>速度與通用性</b>,而非精度——前人精度已不差。VGGT 的賭注是:把多階段、需優化的管線換成單次前饋,<b>不僅更快,連精度也一起贏</b>。這比「只快不準」或「只準不快」的折衷更有說服力。</p>
+          <p data-lang="en" style="margin-top:6px">Note the pain points are mostly <b>speed and generality</b>, not accuracy—prior work was already accurate. VGGT's bet: replace the multi-stage, optimization-heavy pipeline with a single forward pass that <b>is not only faster but also more accurate</b>. That's more convincing than a "fast-but-inaccurate" or "accurate-but-slow" trade-off.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把「不需後處理」讀成「<b>幾何優化從此沒用</b>」。VGGT 的前饋輸出已很好,但<mark class="m-assume" data-t="ASSUMPTION/CLAIM">再接 BA 仍能進一步提升</mark>(相機 AUC 85.3→93.5)。它的角色是「規劃/優化的<b>絕佳初始化</b>」,不是把幾何徹底丟掉。</span>
+        <span data-lang="en">Don't read "no post-processing" as "<b>geometric optimization is now useless</b>." VGGT's feed-forward output is already strong, but <mark class="m-assume" data-t="ASSUMPTION/CLAIM">adding BA improves it further</mark> (camera AUC 85.3→93.5). Its role is an <b>excellent initialization</b> for optimization, not throwing geometry away.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">速度從「數秒~數十秒」降到「<b>0.2 秒</b>」,並把四個傳統上各自為政的 3D 任務統一進一個模型——對 AR/VR、機器人、3D 內容生產的即時應用是質變。</span>
+        <span data-lang="en">Cutting runtime from "seconds to tens of seconds" down to <b>0.2s</b>, and unifying four traditionally separate 3D tasks into one model—a step change for real-time AR/VR, robotics, and 3D content creation.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">算力門檻</span><span data-lang="en">compute</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">數百張精度</span><span data-lang="en">many-view acc.</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">問題定義:一個 transformer,四種輸出</span><span data-lang="en">Problem setup: one transformer, four outputs</span></h3>
+        <p data-lang="zh">輸入 \(N\) 張 RGB 影像 \((I_i)_{i=1}^N\),VGGT 的 transformer \(f\) 一次映射到每張的 3D 標註:</p>
+        <p data-lang="en">Given \(N\) RGB images \((I_i)_{i=1}^N\), VGGT's transformer \(f\) maps them in one shot to per-image 3D annotations:</p>
+        <div class="eq">$$f\big((I_i)_{i=1}^N\big)=(g_i,\,D_i,\,P_i,\,T_i)_{i=1}^N$$</div>
+        <p data-lang="zh">四種輸出:<mark class="m-method" data-t="METHOD/IDEA">相機參數 \(g_i\in\mathbb{R}^9\)</mark>(用 \(g=[q,t,f]\):旋轉四元數 \(q\in\mathbb{R}^4\)、平移 \(t\in\mathbb{R}^3\)、視角 \(f\in\mathbb{R}^2\))、<mark class="m-method" data-t="METHOD/IDEA">深度圖 \(D_i\)</mark>、<mark class="m-method" data-t="METHOD/IDEA">point map \(P_i\)</mark>、以及供追蹤用的<mark class="m-method" data-t="METHOD/IDEA">特徵圖 \(T_i\)</mark>。</p>
+        <p data-lang="en">Four outputs: <mark class="m-method" data-t="METHOD/IDEA">camera parameters \(g_i\in\mathbb{R}^9\)</mark> (as \(g=[q,t,f]\): rotation quaternion \(q\in\mathbb{R}^4\), translation \(t\in\mathbb{R}^3\), field-of-view \(f\in\mathbb{R}^2\)), <mark class="m-method" data-t="METHOD/IDEA">depth map \(D_i\)</mark>, <mark class="m-method" data-t="METHOD/IDEA">point map \(P_i\)</mark>, and <mark class="m-method" data-t="METHOD/IDEA">feature grid \(T_i\)</mark> for tracking.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">關鍵約定:所有 3D 量都表達在<b>第一台相機</b> \(g_1\) 的座標系(world frame),point map 因此是 <b>viewpoint-invariant</b> 的(同 DUSt3R)。網路對「除第一張外」的影像順序是 <mark class="m-method" data-t="METHOD/IDEA">permutation equivariant</mark>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Key convention: all 3D quantities live in the coordinate frame of the <b>first camera</b> \(g_1\) (the world frame), so the point maps are <b>viewpoint-invariant</b> (as in DUSt3R). The network is <mark class="m-method" data-t="METHOD/IDEA">permutation equivariant</mark> over all but the first image.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">架構:DINO tokens + Alternating-Attention</span><span data-lang="en">Architecture: DINO tokens + Alternating-Attention</span></h3>
+        <figure class="fig"><img src="figs/VGGT2025/fig2_architecture.png" alt="Figure 2 architecture">
+          <figcaption data-lang="zh"><b>Fig.2</b> 架構總覽。影像經 DINO patchify 成 tokens,附上 camera token;交替 <b>frame-wise</b> 與 <b>global</b> self-attention(共 \(L=24\) 層);最後 camera head 出相機內外參,DPT head 出所有 dense 輸出。<b>全程只有 self-attention,沒有 cross-attention。</b></figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> Architecture overview. Images are patchified into tokens by DINO, with camera tokens appended; the model alternates <b>frame-wise</b> and <b>global</b> self-attention (\(L=24\) layers). A camera head predicts intrinsics/extrinsics; a DPT head produces all dense outputs. <b>Only self-attention throughout—no cross-attention.</b></figcaption></figure>
+        <p data-lang="zh">每張影像用 <mark class="m-method" data-t="METHOD/IDEA">DINO</mark> 切成 patch tokens。核心設計是 <mark class="m-method" data-t="METHOD/IDEA">Alternating-Attention(AA)</mark>:</p>
+        <p data-lang="en">Each image is patchified into tokens by <mark class="m-method" data-t="METHOD/IDEA">DINO</mark>. The core design is <mark class="m-method" data-t="METHOD/IDEA">Alternating-Attention (AA)</mark>:</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>frame-wise self-attention</b>:只在<b>單張影像內部</b>的 tokens 之間注意——穩定單張的表徵。</li>
+          <li data-lang="en"><b>frame-wise self-attention</b>: attends only among tokens <b>within a single image</b>—stabilizes per-image representations.</li>
+          <li data-lang="zh"><b>global self-attention</b>:跨<b>所有影像</b>的 tokens 一起注意——融合多視角資訊。</li>
+          <li data-lang="en"><b>global self-attention</b>: attends jointly across tokens of <b>all images</b>—fuses multi-view information.</li>
+        </ul>
+        <p data-lang="zh" style="margin-top:8px;font-size:14px;color:var(--muted)">兩者交替,在「跨影像整合」與「單影像正規化」之間取得平衡。預設 \(L=24\) 層交替,全模型約 <b>1.2B 參數</b>。</p>
+        <p data-lang="en" style="margin-top:8px;font-size:14px;color:var(--muted)">Alternating them balances "cross-image integration" against "per-image normalization." Default \(L=24\) alternating layers; the full model is ~<b>1.2B parameters</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">四個預測頭</span><span data-lang="en">The four prediction heads</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">頭</span><span data-lang="en">Head</span></th><th><span data-lang="zh">怎麼做</span><span data-lang="en">How it works</span></th></tr>
+          <tr><td><b>Camera head</b></td><td><span data-lang="zh">對 camera token 接 4 層 self-attention + 線性層,輸出 \(g_i\)(內外參)。第一張用<b>特殊可學 token</b> 標記,使其輸出為單位姿態(\(q_1=[0,0,0,1],t_1=0\))。</span><span data-lang="en">4 self-attention layers + a linear layer on the camera token output \(g_i\) (intrinsics/extrinsics). The first frame uses a <b>special learnable token</b> so its pose is the identity (\(q_1=[0,0,0,1],t_1=0\)).</span></td></tr>
+          <tr><td><b>DPT head</b><br><small><span data-lang="zh">dense 輸出</span><span data-lang="en">dense outputs</span></small></td><td><span data-lang="zh">把 image tokens 經 DPT 轉成 dense feature map,再以 \(3\times3\) 卷積輸出深度 \(D_i\)、point map \(P_i\)、追蹤特徵 \(T_i\);並輸出 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">aleatoric 不確定度 \(\Sigma^D_i,\Sigma^P_i\)</mark>(進 loss、訓練後≈信心度)。</span><span data-lang="en">A DPT layer turns image tokens into dense feature maps, then a \(3\times3\) conv outputs depth \(D_i\), point map \(P_i\), and tracking features \(T_i\); it also predicts <mark class="m-assume" data-t="ASSUMPTION/CLAIM">aleatoric uncertainties \(\Sigma^D_i,\Sigma^P_i\)</mark> (used in the loss; after training ≈ confidence).</span></td></tr>
+          <tr><td><b>Tracking</b></td><td><span data-lang="zh">用 CoTracker2 架構:對 query 點在 \(T_q\) 取特徵,與其他幀 \(T_i\) 做相關,經 self-attention 輸出對應 2D 點。<b>不假設影像有時序</b>。</span><span data-lang="en">A CoTracker2 module: sample the query point's feature from \(T_q\), correlate with other frames' \(T_i\), and run self-attention to output corresponding 2D points. <b>Assumes no temporal ordering.</b></span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:10px;font-size:14px;color:var(--muted)">另用 4 個 <b>register tokens</b> 輔助(輸出時丟棄)。\(f\) 與追蹤模組 \(T\) <b>端到端聯合訓練</b>。</p>
+        <p data-lang="en" style="margin-top:10px;font-size:14px;color:var(--muted)">Four auxiliary <b>register tokens</b> are used (discarded at output). \(f\) and the tracking module \(T\) are <b>trained jointly, end-to-end</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">訓練:多任務損失</span><span data-lang="en">Training: a multi-task loss</span></h3>
+        <p data-lang="zh">端到端最小化:</p>
+        <p data-lang="en">Minimized end-to-end:</p>
+        <div class="eq">$$\mathcal{L}=\mathcal{L}_{\text{camera}}+\mathcal{L}_{\text{depth}}+\mathcal{L}_{\text{pmap}}+\lambda\,\mathcal{L}_{\text{track}}$$</div>
+        <p data-lang="zh">相機損失用 Huber:\(\mathcal{L}_{\text{camera}}=\sum_i\|\hat g_i-g_i\|_\epsilon\);深度與 point map 損失是<mark class="m-method" data-t="METHOD/IDEA">不確定度加權</mark>並加上梯度項,例如</p>
+        <p data-lang="en">Camera loss is Huber: \(\mathcal{L}_{\text{camera}}=\sum_i\|\hat g_i-g_i\|_\epsilon\); depth and point-map losses are <mark class="m-method" data-t="METHOD/IDEA">uncertainty-weighted</mark> with an added gradient term, e.g.</p>
+        <div class="eq">$$\mathcal{L}_{\text{depth}}=\sum_i\big\|\Sigma^D_i\odot(\hat D_i-D_i)\big\|+\big\|\Sigma^D_i\odot(\nabla\hat D_i-\nabla D_i)\big\|-\alpha\log\Sigma^D_i$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">追蹤損失下調權重 \(\lambda=0.05\);相機/深度/point map 三者量級相近故不加權。訓練:AdamW、160K iters、最長邊 518px、隨機抽 2–24 幀,<mark class="m-result" data-t="RESULT/EVIDENCE">64× A100 跑 9 天</mark>。座標先正規化(以第一相機座標 + 點到原點平均距離縮放),且<b>強迫模型學會這個正規化</b>而非事後套用。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The tracking loss is down-weighted (\(\lambda=0.05\)); camera/depth/point-map losses share a similar scale so aren't reweighted. Training: AdamW, 160K iters, longest side 518px, randomly sampling 2–24 frames, <mark class="m-result" data-t="RESULT/EVIDENCE">64× A100 for 9 days</mark>. Coordinates are normalized first (first-camera frame + scaled by mean point-to-origin distance), and the model is <b>forced to learn this normalization</b> rather than apply it post-hoc.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(g_i=[q,t,f]\)</td><td><span data-lang="zh">第 \(i\) 張的相機參數:四元數旋轉、平移、視角(共 9 維)。</span><span data-lang="en">Camera params of image \(i\): quaternion rotation, translation, field-of-view (9-D).</span></td></tr>
+          <tr><td>\(D_i\)</td><td><span data-lang="zh">深度圖:每個像素到第 \(i\) 台相機的深度。</span><span data-lang="en">Depth map: per-pixel depth as seen from camera \(i\).</span></td></tr>
+          <tr><td>\(P_i\)</td><td><span data-lang="zh">point map:每個像素對應的 3D 點,<b>定義在第一相機座標系</b>(viewpoint-invariant)。</span><span data-lang="en">Point map: each pixel's 3D point, <b>defined in the first-camera frame</b> (viewpoint-invariant).</span></td></tr>
+          <tr><td>\(T_i\)</td><td><span data-lang="zh">dense 追蹤特徵圖,餵給 tracking 模組產生 2D 對應。</span><span data-lang="en">Dense tracking-feature grid fed to the tracking module to produce 2D correspondences.</span></td></tr>
+          <tr><td>\(\Sigma^D,\Sigma^P\)</td><td><span data-lang="zh">深度 / point map 的不確定度圖,進 loss 加權,訓練後反映信心。</span><span data-lang="en">Uncertainty maps for depth / point map, weighting the loss; after training they reflect confidence.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">把多張影像的 patch 全丟進一個大 transformer,<b>交替「各看各的」與「一起看」</b>,讓注意力自己學會多視角幾何——再用幾個輕量 head 讀出相機、深度、點雲、追蹤。</span>
+        <span data-lang="en">Throw all images' patches into one big transformer, <b>alternating "look within" and "look across,"</b> letting attention learn multi-view geometry—then read out cameras, depth, points, and tracks with a few light heads.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何 over-complete 還更好?</span><span data-lang="en">Why over-complete helps</span></span>
+        <span data-lang="zh">相機+深度其實能推出 point map,但<mark class="m-result" data-t="RESULT/EVIDENCE">同時監督三者會互相強化</mark>。而推論時,「深度圖 + 相機反投影」得到的點雲,比直接用 point map head <b>更準</b>——複雜任務拆成簡單子問題的好處。</span>
+        <span data-lang="en">Cameras + depth can yield the point map, yet <mark class="m-result" data-t="RESULT/EVIDENCE">supervising all three together reinforces each</mark>. At inference, back-projecting depth with cameras gives a <b>more accurate</b> point cloud than the dedicated point-map head—the payoff of splitting a hard task into easy sub-problems.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">第一張影像是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">特殊的世界座標參考</mark>,用獨立的可學 token 標記。整個 3D 輸出都掛在它身上——這是架構的隱含假設。</span>
+        <span data-lang="en">The first image is a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">special world-coordinate reference</mark>, marked by its own learnable tokens. The entire 3D output hangs on it—an implicit architectural assumption.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">相機位姿估計(Tab.1,AUC@30 ↑,10 張圖)</span><span data-lang="en">Camera pose estimation (Tab.1, AUC@30 ↑, 10 images)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">Re10K(未訓練)</span><span data-lang="en">Re10K (unseen)</span></th><th>CO3Dv2</th><th><span data-lang="zh">時間</span><span data-lang="en">Time</span></th></tr>
+          <tr><td>DUSt3R</td><td>67.7</td><td>76.7</td><td>~7s</td></tr>
+          <tr><td>MASt3R</td><td>76.4</td><td>81.8</td><td>~9s</td></tr>
+          <tr><td>VGGSfM v2</td><td>78.9</td><td>83.4</td><td>~10s</td></tr>
+          <tr><td>Fast3R<span data-lang="zh">(concurrent)</span><span data-lang="en"> (concurrent)</span></td><td>72.7</td><td>82.5</td><td>~0.2s</td></tr>
+          <tr><td class="win">Ours (Feed-Forward)</td><td class="win">85.3</td><td class="win">88.2</td><td class="win">~0.2s</td></tr>
+          <tr><td><b>Ours (+ BA)</b></td><td class="ok">93.5</td><td class="ok">91.8</td><td>~1.8s</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">前饋模式即<mark class="m-result" data-t="RESULT/EVIDENCE">全面勝過需數秒~數十秒後處理的對手</mark>,速度卻和最快的 Fast3R 相當。在沒人訓練過的 Re10K 上優勢更大 → <b>泛化強</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">In feed-forward mode it already <mark class="m-result" data-t="RESULT/EVIDENCE">beats rivals that need seconds-to-tens-of-seconds of post-processing</mark>, at a speed matching the fastest (Fast3R). The lead is even larger on the never-trained-on Re10K → <b>strong generalization</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">其他任務一覽</span><span data-lang="en">Other tasks at a glance</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">任務 / 資料集</span><span data-lang="en">Task / dataset</span></th><th>VGGT</th><th><span data-lang="zh">對照</span><span data-lang="en">Baselines</span></th></tr>
+          <tr><td>Point map / ETH3D (Overall↓)</td><td class="win">0.677<br><small><span data-lang="zh">(深度+相機)</span><span data-lang="en">(depth+cam)</span></small></td><td>MASt3R 0.826 · DUSt3R 1.005<br><small><span data-lang="zh">(且慢 ~35×)</span><span data-lang="en">(and ~35× slower)</span></small></td></tr>
+          <tr><td><span data-lang="zh">多視角深度 / DTU (Overall↓)</span><span data-lang="en">Multi-view depth / DTU (Overall↓)</span></td><td class="win">0.382</td><td><span data-lang="zh">DUSt3R 1.741(同為未知相機)<br><small>逼近「已知 GT 相機」的方法</small></span><span data-lang="en">DUSt3R 1.741 (also camera-free)<br><small>nears methods that know GT cameras</small></span></td></tr>
+          <tr><td><span data-lang="zh">兩視角匹配 / ScanNet (AUC@20↑)</span><span data-lang="en">Two-view matching / ScanNet (AUC@20↑)</span></td><td class="win">73.4</td><td><span data-lang="zh">Roma 70.9(專用方法)</span><span data-lang="en">Roma 70.9 (specialized)</span></td></tr>
+          <tr><td><span data-lang="zh">動態追蹤 / TAP-Vid (Tab.8)</span><span data-lang="en">Dynamic tracking / TAP-Vid (Tab.8)</span></td><td class="win"><span data-lang="zh">CoTracker+Ours 勝</span><span data-lang="en">CoTracker+Ours wins</span></td><td><span data-lang="zh">勝過 CoTracker、BootsTAPIR 等</span><span data-lang="en">beats CoTracker, BootsTAPIR, etc.</span></td></tr>
+          <tr><td><span data-lang="zh">新視角合成 / GSO (PSNR↑)</span><span data-lang="en">Novel-view synth / GSO (PSNR↑)</span></td><td>30.41<br><small><span data-lang="zh">(不需輸入相機,20% 資料)</span><span data-lang="en">(no input cam, 20% data)</span></small></td><td><span data-lang="zh">LVSM 31.71(需相機)</span><span data-lang="en">LVSM 31.71 (needs cameras)</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">四項主任務 SOTA;當特徵 backbone 微調,動態追蹤與 NVS 等<mark class="m-result" data-t="RESULT/EVIDENCE">下游任務也被顯著拉高</mark>——印證「3D 基礎模型」的價值。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">SOTA on four core tasks; fine-tuned as a feature backbone, <mark class="m-result" data-t="RESULT/EVIDENCE">downstream tasks like dynamic tracking and NVS are markedly lifted</mark>—validating the "3D foundation model" value.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融(以 ETH3D point map Overall↓ 衡量)</span><span data-lang="en">Ablations (measured by ETH3D point-map Overall↓)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">消融項</span><span data-lang="en">Ablation</span></th><th><span data-lang="zh">結果</span><span data-lang="en">Score</span></th><th><span data-lang="zh">結論</span><span data-lang="en">Conclusion</span></th></tr>
+          <tr><td>Cross-Attention</td><td class="bad">1.061</td><td rowspan="3"><span data-lang="zh">AA 明顯最佳;<mark class="m-result" data-t="RESULT/EVIDENCE">self-attention 優於 cross-attention</mark></span><span data-lang="en">AA clearly best; <mark class="m-result" data-t="RESULT/EVIDENCE">self-attention beats cross-attention</mark></span></td></tr>
+          <tr><td>Global self-attn only</td><td>0.827</td></tr>
+          <tr><td class="win">Alternating-Attention</td><td class="win">0.709</td></tr>
+          <tr><td><span data-lang="zh">去掉 camera loss</span><span data-lang="en">drop camera loss</span></td><td class="bad">0.834</td><td><span data-lang="zh">相機監督<b>幫助最大</b></span><span data-lang="en">camera supervision <b>helps most</b></span></td></tr>
+          <tr><td><span data-lang="zh">去掉 depth loss</span><span data-lang="en">drop depth loss</span></td><td>0.727</td><td><span data-lang="zh">深度監督幫助較小</span><span data-lang="en">depth supervision helps less</span></td></tr>
+          <tr><td class="win"><span data-lang="zh">全部一起(camera+depth+track)</span><span data-lang="en">all together (camera+depth+track)</span></td><td class="win">0.709</td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">多任務聯合最好</mark></span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">joint multi-task is best</mark></span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">速度 / 記憶體擴展性(Tab.9,H100 + flash-attn v3)</span><span data-lang="en">Speed / memory scaling (Tab.9, H100 + flash-attn v3)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">輸入幀數</span><span data-lang="en">Input frames</span></th><th>1</th><th>10</th><th>50</th><th>100</th><th>200</th></tr>
+          <tr><td><span data-lang="zh">時間 (s)</span><span data-lang="en">Time (s)</span></td><td>0.04</td><td>0.14</td><td>1.04</td><td>3.12</td><td>8.75</td></tr>
+          <tr><td><span data-lang="zh">峰值記憶體 (GB)</span><span data-lang="en">Peak mem (GB)</span></td><td>1.9</td><td>3.6</td><td>11.4</td><td>21.2</td><td>40.6</td></tr>
+        </table>
+        <figure class="fig"><img src="figs/VGGT2025/fig3_vs_dust3r.png" alt="Figure 3 vs DUSt3R">
+          <figcaption data-lang="zh"><b>Fig.3</b> 對 DUSt3R 的質性比較(in-the-wild)。VGGT 正確重建油畫平面、無重疊雙視角、重複紋理場景;且 32 張時 DUSt3R 已 OOM(>200s),VGGT < 0.6s。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Qualitative comparison vs DUSt3R (in-the-wild). VGGT correctly reconstructs an oil-painting plane, a non-overlapping image pair, and repeated-texture scenes; at 32 images DUSt3R OOMs (>200s), VGGT < 0.6s.</figcaption></figure>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">在相機、深度、point map、匹配四項上<b>同時刷新 SOTA</b>,速度卻快 1~2 個數量級;且作為 backbone 能遷移到動態追蹤與 NVS。<b>又快又準又通用</b>是它最強的論述。</span>
+        <span data-lang="en"><b>Simultaneously sets SOTA</b> on cameras, depth, point maps and matching while being 1–2 orders of magnitude faster; and transfers as a backbone to dynamic tracking and NVS. <b>Fast, accurate, and general</b> at once is its strongest claim.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">評測幾乎都在 <b>10 張圖</b> 的設定下比精度;數百張時<mark class="m-limit" data-t="LIMITATION/FUTURE">只報了速度/記憶體,精度未完整量化</mark>。極多視角下的精度與漂移是開放問題。</span>
+        <span data-lang="en">Accuracy is almost always benchmarked at <b>10 images</b>; for hundreds, <mark class="m-limit" data-t="LIMITATION/FUTURE">only speed/memory are reported, not accuracy</mark>. Many-view accuracy and drift remain open.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">公平比較?</span><span data-lang="en">fair compare?</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">第一張參考</span><span data-lang="en">first-frame ref</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>巨大的算力與資料門檻</b>:1.2B 參數、<mark class="m-limit" data-t="LIMITATION/FUTURE">64× A100 跑 9 天</mark>、十幾個大型 3D 資料集。這在很大程度上是「規模 + 資料」的勝利,<b>學術小組難以複現或公平對比</b>。多少增益來自架構、多少來自資料規模,難以拆解。</li>
+          <li data-lang="en"><b>Huge compute and data barrier</b>: 1.2B params, <mark class="m-limit" data-t="LIMITATION/FUTURE">64× A100 for 9 days</mark>, a dozen-plus large 3D datasets. Largely a "scale + data" win, <b>hard for academic groups to reproduce or compare fairly</b>. How much gain is architecture vs data scale is hard to disentangle.</li>
+          <li data-lang="zh"><b>評測偏向少視角</b>:主結果多為 10 張圖。雖然宣稱可吃數百張,但<mark class="m-limit" data-t="LIMITATION/FUTURE">大量視角下的精度、累積漂移沒有系統性量化</mark>(只報速度/記憶體)。</li>
+          <li data-lang="en"><b>Evaluation skews few-view</b>: main results mostly use 10 images. Despite claiming hundreds, <mark class="m-limit" data-t="LIMITATION/FUTURE">accuracy and accumulated drift at many views aren't systematically quantified</mark> (only speed/memory).</li>
+          <li data-lang="zh"><b>對第一張影像的強依賴</b>:整個 3D 輸出都掛在「第一相機=世界座標」這個<mark class="m-assume" data-t="ASSUMPTION/CLAIM">假設</mark>上。若第一張品質差、視角刁鑽,對全局重建的影響缺乏分析。</li>
+          <li data-lang="en"><b>Strong dependence on the first image</b>: the whole 3D output rests on the <mark class="m-assume" data-t="ASSUMPTION/CLAIM">assumption</mark> "first camera = world frame." The effect of a poor or awkward first frame on global reconstruction is not analyzed.</li>
+          <li data-lang="zh"><b>作者坦承的限制</b>:不支援魚眼/全景;<mark class="m-limit" data-t="LIMITATION/FUTURE">極端輸入旋轉會掉分</mark>;大幅非剛性形變會失敗。亦即仍偏靜態、常規視角場景。</li>
+          <li data-lang="en"><b>Author-acknowledged limits</b>: no fisheye/panoramic; <mark class="m-limit" data-t="LIMITATION/FUTURE">accuracy drops under extreme input rotation</mark>; fails on large non-rigid deformation. I.e., still biased toward static, conventional-viewpoint scenes.</li>
+          <li data-lang="zh"><b>與 concurrent work 的比較</b>:表中多個對手標為同期工作(Fast3R、CUT3R、FLARE…),<mark class="m-assume" data-t="ASSUMPTION/CLAIM">同期比較的公平性</mark>(訓練資料、調參預算是否對齊)值得細看。</li>
+          <li data-lang="en"><b>Comparison with concurrent work</b>: several rivals are marked concurrent (Fast3R, CUT3R, FLARE…); the <mark class="m-assume" data-t="ASSUMPTION/CLAIM">fairness of concurrent comparison</mark> (aligned training data, tuning budget) deserves scrutiny.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>架構 vs 資料</b>:若把 Alternating-Attention 換成普通 global-attn,但<b>資料/算力加倍</b>,差距還在嗎?增益主要來自哪?</li>
+          <li data-lang="en"><b>Architecture vs data</b>: if AA were replaced by plain global attention but <b>data/compute doubled</b>, would the gap persist? Where does the gain mainly come from?</li>
+          <li data-lang="zh"><b>比較公平性</b>:對手(DUSt3R/MASt3R/VGGSfM)是否用了與 VGGT 同等規模的訓練資料?贏在方法還是贏在資料?</li>
+          <li data-lang="en"><b>Fairness</b>: did baselines (DUSt3R/MASt3R/VGGSfM) train on data of comparable scale to VGGT? Is the win in method or in data?</li>
+          <li data-lang="zh"><b>數百張的真相</b>:在 100~200 張的設定下,精度(非速度)相對 incremental SfM 如何?會不會出現全局不一致或漂移?</li>
+          <li data-lang="en"><b>The many-view truth</b>: at 100–200 images, how does accuracy (not speed) compare to incremental SfM? Does global inconsistency or drift appear?</li>
+          <li data-lang="zh"><b>第一張參考的脆弱性</b>:換不同的第一張影像,重建結果的變異有多大?這個設計是不是隱藏的失敗模式?</li>
+          <li data-lang="en"><b>Fragility of the first-frame reference</b>: how much does reconstruction vary when the first image changes? Is this a hidden failure mode?</li>
+          <li data-lang="zh"><b>over-complete 的代價</b>:同時學四種輸出,是否在某些單一任務上其實略遜於專門化模型?表面 SOTA 是否有 cherry-pick 的指標?</li>
+          <li data-lang="en"><b>Cost of over-complete</b>: learning four outputs at once—does it slightly trail specialized models on some single tasks? Are the headline SOTA metrics cherry-picked?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 VGGT 讀成「<b>幾何優化已死</b>」。論文自己證明:接上 BA 仍能把相機 AUC 從 85.3 推到 93.5。正確理解是——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">前饋網路提供了極好的初始化</mark>,讓後續優化(若需要)又快又穩,而非完全不需要幾何。</span>
+        <span data-lang="en">Reading VGGT as "<b>geometric optimization is dead</b>." The paper itself shows BA still pushes camera AUC from 85.3 to 93.5. The right reading: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the feed-forward net gives an excellent initialization</mark> that makes later optimization (when needed) fast and stable—not that geometry is unnecessary.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">Limitations 寫得坦白(魚眼/全景、極端旋轉、非剛性),且強調「弱點都能靠微調補上」——這對一個主打通用 backbone 的工作是合理且誠實的定位。</span>
+        <span data-lang="en">The Limitations are candid (fisheye/panoramic, extreme rotation, non-rigid), stressing that weaknesses can be fixed by fine-tuning—a reasonable, honest stance for a work pitched as a general backbone.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「前饋大模型取代迭代優化」的範式</b>可遷移到其他「傳統靠優化」的問題:只要有夠多監督資料,一個通用 transformer 往往能直接回歸出解,並當成更好的初始化。</li>
+          <li data-lang="en"><b>The "feed-forward large model replaces iterative optimization" paradigm</b> transfers to other traditionally optimization-based problems: given enough supervised data, a generic transformer can often regress the solution directly and serve as a better initialization.</li>
+          <li data-lang="zh"><b>over-complete / 多任務聯合監督</b>是值得借用的訓練技巧——即使輸出彼此可推導,聯合監督仍能互相正則、提升整體;但推論時可選最穩的子任務組合(此處:深度+相機反投影)。</li>
+          <li data-lang="en"><b>Over-complete / joint multi-task supervision</b> is a borrowable trick—even when outputs are derivable from one another, joint supervision regularizes and lifts the whole; at inference, pick the most robust sub-task combination (here: depth + camera back-projection).</li>
+          <li data-lang="zh"><b>把模型當 backbone 而非終點</b>:VGGT 特徵能微調強化下游(追蹤、NVS)。做 3D 相關研究時,值得直接拿 VGGT 預訓練特徵當起點。</li>
+          <li data-lang="en"><b>Treat the model as a backbone, not an endpoint</b>: VGGT features fine-tune to boost downstream (tracking, NVS). For 3D-related research, it's worth starting from VGGT's pretrained features.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「3D 重建可純前饋、免幾何後處理」</span><span data-lang="en">"3D reconstruction can be purely feed-forward, no geometry post-processing"</span></td><td><span data-lang="zh">作為代表性正面證據(相機/深度/點雲/追蹤一次到位)。</span><span data-lang="en">A flagship positive example (cameras/depth/points/tracks in one shot).</span></td></tr>
+          <tr><td><span data-lang="zh">「通用 transformer + 海量資料 > 專用 3D 結構」</span><span data-lang="en">"generic transformer + massive data > bespoke 3D structure"</span></td><td><span data-lang="zh">引 Alternating-Attention 消融與整體設計哲學。</span><span data-lang="en">Cite the AA ablation and overall design philosophy.</span></td></tr>
+          <tr><td><span data-lang="zh">「3D foundation backbone 可遷移」</span><span data-lang="en">"3D foundation backbones transfer"</span></td><td><span data-lang="zh">引下游 NVS / 動態追蹤的微調增益。</span><span data-lang="en">Cite the downstream NVS / dynamic-tracking fine-tuning gains.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">VGGT 把「3D 重建 = 幾何優化問題」改寫成「<b>大模型一次前饋回歸問題</b>」:單一 transformer、亞秒級、四項 3D 任務同時 SOTA,並成為可微調的 3D 基礎模型。幾何優化沒有消失,但被降格成可選的、用來錦上添花的最後一哩。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">VGGT rewrites "3D reconstruction = a geometry-optimization problem" into "<b>a single feed-forward regression problem for a large model</b>": one transformer, sub-second, SOTA on four 3D tasks at once, and a fine-tunable 3D foundation model. Geometric optimization hasn't vanished—it's demoted to an optional last mile for extra polish.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">DUSt3R / MASt3R</span>
+          <span class="chip">VGGSfM</span>
+          <span class="chip">DINO</span>
+          <span class="chip">DPT</span>
+          <span class="chip">CoTracker</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Wang et al. 2025 (VGGT) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'VGGT reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

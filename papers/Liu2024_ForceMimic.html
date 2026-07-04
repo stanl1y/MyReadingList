@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>ForceMimic — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"ForceMimic: Force-Centric Imitation Learning with Force-Motion Capture System for Contact-Rich Manipulation","authors":"Wenhai Liu, Junbo Wang, Yiming Wang, Weiming Wang, Cewu Lu","year":"2024","venue":"ICRA 2025","tags":["Force-Aware Manipulation","Imitation Learning","Force Control","Contact-Rich Manipulation","Data Collection","Diffusion Policy"],"tldr":"用一個 $50、免機器人的手持式力-位置擷取器 ForceCapture 收集自然的「力覺」示範資料,再以 HybridIL(擴散策略同時預測位姿與力,並用正交的混合力-位置控制原語去追蹤),在削櫛瓜這種接觸密集任務上比純視覺模仿學習相對提升 54.5% 成功率。","tldr_en":"A $50 robot-free handheld force-motion capture rig (ForceCapture) collects natural force-centric demos; HybridIL then predicts both pose and wrench with a diffusion policy and tracks them via an orthogonal hybrid force-position controller, raising success on contact-rich zucchini peeling by 54.5% relative over pure-vision imitation learning."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:88px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">ForceMimic 是一套<b>以「力」為核心</b>的機器人學習系統,由兩塊拼成:(1) <b>ForceCapture</b>——一個約 $50、<mark class="m-method" data-t="METHOD/IDEA">免機器人的手持式力-位置擷取器</mark>,讓人「徒手」自然操作工具就能同時錄下位姿與六軸力/力矩;(2) <b>HybridIL</b>——一個<mark class="m-method" data-t="METHOD/IDEA">同時預測位姿與力(wrench)</mark>的擴散策略,用<b>正交的混合力-位置控制原語</b>去追蹤預測。在削櫛瓜這類接觸密集任務上,成功率比純視覺模仿學習<mark class="m-result" data-t="RESULT/EVIDENCE">相對提升 54.5%</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">ForceMimic is a <b>force-centric</b> robot-learning system with two halves: (1) <b>ForceCapture</b>—a ~$50 <mark class="m-method" data-t="METHOD/IDEA">robot-free handheld force-motion rig</mark> that lets a person operate a tool bare-handed while recording pose <em>and</em> six-axis force/torque; (2) <b>HybridIL</b>—a diffusion policy that <mark class="m-method" data-t="METHOD/IDEA">predicts both pose and wrench</mark> and tracks them via an <b>orthogonal hybrid force-position control primitive</b>. On contact-rich zucchini peeling it raises success by a <mark class="m-result" data-t="RESULT/EVIDENCE">relative 54.5%</mark> over pure-vision imitation learning.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Liu2024/fig1_overview.png" alt="Figure 1 overview">
+        <figcaption data-lang="zh"><b>Fig.1</b> ForceMimic 三部曲。<b>(a) ForceCapture</b>:手持、免機器人的現場擷取器;<b>(b) 示範資料</b>:錄下自然的力覺操作,含 wrench(力+力矩)曲線;<b>(c) HybridIL</b>:用這批資料訓練混合力-位置控制策略去執行削櫛瓜。注意力/力矩符號 \(f,\tau\) 出現在 (b) 中央。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> ForceMimic in three acts. <b>(a) ForceCapture</b>: a handheld, robot-free on-site rig; <b>(b) Demo data</b>: natural force-centric demonstrations with a wrench (force+torque) curve; <b>(c) HybridIL</b>: trains a hybrid force-position policy from that data to peel a zucchini. Note the force/torque symbols \(f,\tau\) at the center of (b).</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 人類靠「力覺」修正視覺軌跡的誤差,但機器人模仿學習<mark class="m-problem" data-t="PROBLEM/GAP">幾乎只學軌跡、不學力</mark>;而且力覺示範資料極難收集——網路人類影片沒有力、力回饋遙操作又慢又不自然。</li>
+          <li data-lang="en"><b>Problem</b> — Humans use force sensing to correct vision-guided trajectory errors, yet robot imitation learning <mark class="m-problem" data-t="PROBLEM/GAP">mostly learns trajectories, not forces</mark>; and force-centric demo data is very hard to collect—Internet human videos have no force, and force-feedback teleop is slow and unnatural.</li>
+          <li data-lang="zh"><b>方法</b> — <mark class="m-method" data-t="METHOD/IDEA">ForceCapture</mark>:把六軸力感測器夾在工具與握把之間,靠棘輪自鎖 + 重力補償,徒手就錄下「純交互力」;<mark class="m-method" data-t="METHOD/IDEA">HybridIL</mark>:擴散策略同時預測位姿與力,再用<b>正交</b>的混合力-位置控制去追蹤。</li>
+          <li data-lang="en"><b>Method</b> — <mark class="m-method" data-t="METHOD/IDEA">ForceCapture</mark>: a six-axis F/T sensor between tool and handle, with ratchet self-lock + gravity compensation, records pure interaction wrench bare-handed; <mark class="m-method" data-t="METHOD/IDEA">HybridIL</mark>: a diffusion policy predicts pose and wrench, then an <b>orthogonal</b> hybrid force-position controller tracks them.</li>
+          <li data-lang="zh"><b>結果</b> — 收集效率:削一根櫛瓜 ForceCapture 約 <mark class="m-result" data-t="RESULT/EVIDENCE">4.5 分鐘 vs 遙操作 13 分鐘</mark>;削瓜任務動作成功率 <mark class="m-result" data-t="RESULT/EVIDENCE">100% vs Raw DP 80%</mark>,「連續削皮 >10cm」則 <mark class="m-result" data-t="RESULT/EVIDENCE">85% vs 55%</mark>(相對 +54.5%)。</li>
+          <li data-lang="en"><b>Results</b> — Collection: ~<mark class="m-result" data-t="RESULT/EVIDENCE">4.5 min/zucchini vs 13 min for teleop</mark>; motion success <mark class="m-result" data-t="RESULT/EVIDENCE">100% vs 80% (Raw DP)</mark>, and "continuous peel &gt;10 cm" <mark class="m-result" data-t="RESULT/EVIDENCE">85% vs 55%</mark> (a relative +54.5%).</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">機器人模仿學習(Imitation Learning)近年靠 <mark class="m-method" data-t="METHOD/IDEA">Diffusion Policy</mark>、3D 點雲策略(DP3、RISE)等大放異彩,但這些方法把「動作」等同於「<mark class="m-problem" data-t="PROBLEM/GAP">末端位姿軌跡</mark>」,在需要精細用力的接觸密集任務上力有未逮。資料端也一樣:遙操作能拿到真機資料但不自然;手持擷取器(UMI、DexCap)自然又免機器人,但<mark class="m-problem" data-t="PROBLEM/GAP">只錄位姿、不錄交互力</mark>。</p>
+        <p data-lang="en">Robot imitation learning has flourished with <mark class="m-method" data-t="METHOD/IDEA">Diffusion Policy</mark> and 3D point-cloud policies (DP3, RISE), but these equate "action" with an <mark class="m-problem" data-t="PROBLEM/GAP">end-effector pose trajectory</mark>, faltering on contact-rich tasks needing fine force control. Data collection mirrors this: teleop yields real-robot data but feels unnatural; handheld rigs (UMI, DexCap) are natural and robot-free yet <mark class="m-problem" data-t="PROBLEM/GAP">record only pose, not interaction force</mark>.</p>
+        <p data-lang="zh">既有的力覺操作研究(如 MOMA-Force 用檢索、ForceSight 用 transformer 產生力目標)多把力當「額外輸入或高階目標」,少有把力當成<mark class="m-method" data-t="METHOD/IDEA">與位姿並列、要被策略連續預測並精確追蹤的動作維度</mark>。ForceMimic 把資料擷取與策略學習兩頭一起補上,主打「力覺閉環的端到端模仿學習」。</p>
+        <p data-lang="en">Prior force work (e.g., MOMA-Force via retrieval, ForceSight generating force goals with a transformer) mostly treats force as an extra input or a high-level goal, rarely as an <mark class="m-method" data-t="METHOD/IDEA">action dimension on par with pose—continuously predicted and precisely tracked</mark>. ForceMimic tackles both ends—capture and policy—pitching an end-to-end force-in-the-loop imitation learner.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的野心比一般「換個 backbone 刷分」更基礎:它主張<b>純視覺軌跡模仿有結構性天花板</b>——因為視覺無法直接感知接觸力,模型只能「連帶學會」用力,一旦部署時的力控制器與資料收集不一致就會崩。解法是把力提升為第一級公民,從<b>資料</b>(徒手錄力)到<b>控制介面</b>(正交混合力-位控制原語)整條打通。這是一個「系統論文」,價值在完整鏈路而非單一模型。</p>
+          <p data-lang="en" style="margin-top:6px">The ambition runs deeper than "swap a backbone for higher scores": it argues that <b>pure-vision trajectory imitation has a structural ceiling</b>—vision can't sense contact force, so a model can only "incidentally" learn to apply it and collapses when the deployment force controller mismatches the collected data. The fix promotes force to a first-class citizen, wiring it through the whole chain from <b>data</b> (bare-hand force capture) to <b>control interface</b> (an orthogonal hybrid force-position primitive). This is a <b>systems paper</b>: the value is the full pipeline, not one model.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不只是「削瓜機器人」,而是底下幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not "a peeling robot" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">力可以「徒手、免機器人」被自然錄下。</b> 把六軸 F/T 感測器夾在工具與握把之間,加上棘輪自鎖(手指施力不汙染量測)與重力補償,就能在現場錄下<mark class="m-result" data-t="RESULT/EVIDENCE">乾淨的純交互力</mark>——比力回饋遙操作快約 3 倍且更自然。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Force can be captured bare-handed, robot-free, naturally.</b> A six-axis F/T sensor between tool and handle, plus a ratchet self-lock (so finger force doesn't pollute the reading) and gravity compensation, records <mark class="m-result" data-t="RESULT/EVIDENCE">clean pure-interaction force</mark> on-site—~3× faster than force-feedback teleop and more natural.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">「力」與「位置」要正交地分工。</b> 模型只管預測 wrench-位姿參數;真正保證兩者不打架的,是一個<mark class="m-method" data-t="METHOD/IDEA">正交的混合力-位置控制器</mark>——沿運動方向做位置控制,在其正交平面做力控制。這是本文最關鍵的設計。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Force and position must be split orthogonally.</b> The model just predicts wrench-pose params; what actually keeps them from fighting is an <mark class="m-method" data-t="METHOD/IDEA">orthogonal hybrid force-position controller</mark>—position control along the motion direction, force control on its orthogonal plane. This is the paper's key design.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">「加入力感測」不必然更好——反而可能更糟。</b> 反直覺結果:把機器人力當<b>輸入</b>的 Force DP 表現最差。原因是部署時的力分布(平均 ~20N、可達 40N)與資料集(~10N)<mark class="m-problem" data-t="PROBLEM/GAP">嚴重不匹配</mark>。ForceMimic 把力當<b>輸出動作</b>去主動追蹤,才把交互力壓回 ~9N。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">"Adding force sensing" isn't automatically better—it can be worse.</b> Counterintuitively, Force DP (force as <b>input</b>) does worst. Reason: at deployment the force distribution (avg ~20N, up to 40N) <mark class="m-problem" data-t="PROBLEM/GAP">badly mismatches</mark> the dataset (~10N). ForceMimic treats force as an <b>output action</b> to actively track, pulling interaction force back to ~9N.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">主動用力 = 更輕、更均勻。</b> HybridIL 全程維持 ~9N,削出厚薄一致的長條瓜皮;Raw DP 雖然「削得掉」卻常用到 40N,容易壓壞櫛瓜。<b>力覺閉環把「粗暴成功」變成「精細成功」</b>。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Active force control = lighter, more uniform.</b> HybridIL holds ~9N throughout, producing even, long peels; Raw DP does "peel" but often at 40N, risking crushing the zucchini. <b>Force-in-the-loop turns "brute-force success" into "delicate success."</b></li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">ForceMimic: Force-Centric Imitation Learning with Force-Motion Capture System</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>W. Liu*, J. Wang*, Y. Wang*, W. Wang, C. Lu†</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Shanghai Jiao Tong University</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2024 · ICRA 2025(arXiv:2410.07554)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Imitation Learning</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>forcemimic.github.io</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「模仿學習 = 學位姿軌跡」擴張成「<b>同時學位姿 + 交互力</b>」,並提供一條<b>徒手錄力</b>的低成本資料管線。對接觸密集操作(削、擦、插、裝配)這種視覺看不清「該用多少力」的任務,是關鍵的一塊拼圖。<span class="add">[導讀補充] 論文自述為 ICRA 投稿之工作。</span></span>
+        <span data-lang="en">Expands "imitation learning = learning pose trajectories" into "<b>learning pose + interaction force together</b>," with a low-cost <b>bare-hand force</b> data pipeline. For contact-rich manipulation (peeling, wiping, insertion, assembly)—where vision can't tell "how hard to press"—this is a key missing piece. <span class="add">[guide note] The paper reads as ICRA-style robotics work.</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">ForceCapture</span><span class="chip">HybridIL</span>
+          <span class="chip">Wrench (力+力矩)</span><span class="chip">Diffusion Policy</span>
+          <span class="chip">Hybrid force-position</span><span class="chip">Zucchini peeling</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">力回饋遙操作</span><span data-lang="en">Force-feedback teleop</span></b><br>(RH20T 等)</td><td><span data-lang="zh">能錄真機資料,但<mark class="m-problem" data-t="PROBLEM/GAP">操作不自然、慢</mark>(削一根瓜 &gt;13 分鐘、需訓練、易中斷),力控制不精細。</span><span data-lang="en">Records real-robot data but is <mark class="m-problem" data-t="PROBLEM/GAP">unnatural and slow</mark> (&gt;13 min/zucchini, needs training, prone to interruptions), with imprecise force control.</span></td></tr>
+          <tr><td><b><span data-lang="zh">手持擷取器</span><span data-lang="en">Handheld rigs</span></b><br>(UMI / DexCap)</td><td><span data-lang="zh">自然、免機器人,但只用 SLAM 錄<mark class="m-problem" data-t="PROBLEM/GAP">位姿,不錄交互力</mark>——策略對「用了多少力」完全無感。</span><span data-lang="en">Natural and robot-free, but use SLAM to record only <mark class="m-problem" data-t="PROBLEM/GAP">pose, not interaction force</mark>—the policy is blind to "how much force."</span></td></tr>
+          <tr><td><b><span data-lang="zh">軌跡型模仿學習</span><span data-lang="en">Trajectory-based IL</span></b><br>(Diffusion Policy, DP3)</td><td><span data-lang="zh">只輸出<mark class="m-problem" data-t="PROBLEM/GAP">末端位姿序列</mark>;由固定的低階位置控制器執行,無法主動調節接觸力。</span><span data-lang="en">Output only an <mark class="m-problem" data-t="PROBLEM/GAP">end-effector pose sequence</mark>, executed by a fixed low-level position controller—can't actively modulate contact force.</span></td></tr>
+          <tr><td><b><span data-lang="zh">既有力覺方法</span><span data-lang="en">Prior force methods</span></b><br>(MOMA-Force, ForceSight)</td><td><span data-lang="zh">把力當檢索目標或高階文字目標;<mark class="m-problem" data-t="PROBLEM/GAP">未把連續 wrench 當作要被端到端學習與追蹤的動作</mark>。</span><span data-lang="en">Treat force as a retrieval target or high-level text goal; <mark class="m-problem" data-t="PROBLEM/GAP">don't learn/track a continuous wrench as an end-to-end action</mark>.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「能否用一套自然、低成本的方式錄下人類的力覺示範,並讓模仿學習策略『主動地』預測並施加正確的力,而不只是走對軌跡?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"Can we capture human force-centric demos naturally and cheaply, and make an IL policy <em>actively</em> predict and apply the right force—not merely follow the right trajectory?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,ForceMimic 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how ForceMimic fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">ForceMimic 如何補上</span><span data-lang="en">How ForceMimic fills it</span></th></tr>
+          <tr>
+            <td><b>DexCap / UMI</b><br><small><span data-lang="zh">手持擷取</span><span data-lang="en">handheld capture</span></small></td>
+            <td><span data-lang="zh">只錄<mark class="m-problem" data-t="PROBLEM/GAP">位姿</mark>。</span><span data-lang="en">Records only <mark class="m-problem" data-t="PROBLEM/GAP">pose</mark>.</span></td>
+            <td><span data-lang="zh">在工具與握把間加<mark class="m-method" data-t="METHOD/IDEA">六軸力感測器 + 自鎖 + 重力補償</mark>,徒手錄純交互力。</span><span data-lang="en">Adds a <mark class="m-method" data-t="METHOD/IDEA">6-axis F/T sensor + self-lock + gravity comp.</mark> between tool and handle to record pure interaction force bare-handed.</span></td>
+          </tr>
+          <tr>
+            <td><b>Diffusion Policy</b></td>
+            <td><span data-lang="zh">只輸出位姿,固定位控執行。</span><span data-lang="en">Outputs pose only, fixed position control.</span></td>
+            <td><span data-lang="zh">改成<mark class="m-method" data-t="METHOD/IDEA">同時輸出 wrench + 位姿</mark>,並切換到混合力-位置控制原語。</span><span data-lang="en">Outputs <mark class="m-method" data-t="METHOD/IDEA">wrench + pose together</mark> and switches to a hybrid force-position primitive.</span></td>
+          </tr>
+          <tr>
+            <td><b>MOMA-Force / ForceSight</b></td>
+            <td><span data-lang="zh">力=檢索/高階目標。</span><span data-lang="en">Force = retrieval / high-level goal.</span></td>
+            <td><span data-lang="zh">力=<mark class="m-method" data-t="METHOD/IDEA">被連續預測、正交追蹤的低階動作</mark>。</span><span data-lang="en">Force = a <mark class="m-method" data-t="METHOD/IDEA">continuously predicted, orthogonally tracked low-level action</mark>.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這裡有兩個 gap 疊在一起:<b>資料端</b>(沒有自然的力覺資料)與<b>演算法端</b>(策略不預測力、控制器不追蹤力)。很多論文只補一頭,ForceMimic 的論述是「兩頭都得補,否則力覺資料收了也用不好」——這也正好呼應後面 Force DP 失敗的實驗:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">光把力塞進輸入,若控制端不對齊,反而有害</mark>。</p>
+          <p data-lang="en" style="margin-top:6px">Two gaps stack here: a <b>data</b> gap (no natural force data) and an <b>algorithm</b> gap (policy doesn't predict force; controller doesn't track it). Many papers patch one end; ForceMimic argues both are needed—else the force data you collect can't be used well. This foreshadows the failed Force DP: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">merely feeding force into the input, without aligning the control side, actually hurts</mark>.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把本文讀成「<b>力越多資訊越好</b>」。實驗顯示,單純把機器人力當<mark class="m-problem" data-t="PROBLEM/GAP">輸入</mark>(Force DP)反而最差(動作成功率 60%、長皮 10%)。關鍵不在「有沒有力」,而在<mark class="m-method" data-t="METHOD/IDEA">力要被當成「輸出動作」主動追蹤</mark>,且部署時的力控制器要與資料收集一致。</span>
+        <span data-lang="en">Don't read this as "<b>more force info is always better</b>." Experiments show that merely feeding robot force as an <mark class="m-problem" data-t="PROBLEM/GAP">input</mark> (Force DP) is worst (60% motion, 10% long-peel). The point isn't "force or not," but that <mark class="m-method" data-t="METHOD/IDEA">force must be an "output action" actively tracked</mark>, with the deployment controller matching the collected data.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">接觸密集任務(削皮、插拔、擦拭、裝配)佔日常操作一大塊,卻是純視覺策略的死角——視覺看不出「該壓多重」。把力納入閉環,是這類任務可靠化的必經之路。</span>
+        <span data-lang="en">Contact-rich tasks (peeling, insertion, wiping, assembly) are a big slice of everyday manipulation yet a blind spot for pure-vision policies—vision can't tell "how hard to press." Closing the loop on force is the road to reliability here.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">單一任務</span><span data-lang="en">single task</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">分布不匹配</span><span data-lang="en">force mismatch</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">整體管線:擷取 → 轉換 → 學習 → 執行</span><span data-lang="en">Full pipeline: capture → transfer → learn → execute</span></h3>
+        <figure class="fig"><img src="figs/Liu2024/fig2_pipeline.png" alt="Figure 2 pipeline">
+          <figcaption data-lang="zh"><b>Fig.2</b> 系統管線。<b>(a) 資料轉換</b>:把免機器人的原始資料轉成(偽)機器人資料——原始 wrench 做重力補償、SLAM 相機位姿轉成機器人 TCP 位姿、RGB-D 反投影成點雲並濾掉無關點。<b>(b) 策略學習</b>:擴散策略以點雲特徵 \(o_t\in\mathbb{R}^{64}\)、歷史位姿 \(s_t\in SE(3)\)、擴散時間步為條件,<b>同時</b>預測未來位姿 \(P^k_{t:t+20}\) 與力 \(F^k_{t:t+20}\)。<b>(c) 機器人執行</b>:依預測力大小,由「原語選擇器」在 IK 關節位置原語 / 混合力-位置原語間切換。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> System pipeline. <b>(a) Data transfer</b>: turn robot-free raw data into (pseudo-)robot data—gravity-compensate the raw wrench, convert SLAM-camera pose to robot TCP pose, back-project RGB-D into a filtered point cloud. <b>(b) Policy learning</b>: a diffusion policy, conditioned on point-cloud feature \(o_t\in\mathbb{R}^{64}\), history pose \(s_t\in SE(3)\), and diffusion timestep, <b>jointly</b> predicts future pose \(P^k_{t:t+20}\) and force \(F^k_{t:t+20}\). <b>(c) Robot execution</b>: a "primitive selector" switches between an IK joint-position primitive and a hybrid force-position primitive by predicted force magnitude.</figcaption></figure>
+        <p data-lang="zh">三個模組串起來(見 Fig.2):<b>ForceCapture</b> 收資料 → <b>資料轉換</b>橋接 robot-free 與真機的域差 → <b>HybridIL</b> 學策略並經混合控制器執行。</p>
+        <p data-lang="en">Three modules in series (Fig.2): <b>ForceCapture</b> collects data → <b>data transfer</b> bridges the robot-free/real-robot domain gap → <b>HybridIL</b> learns the policy and executes it through the hybrid controller.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">硬體:ForceCapture 擷取器</span><span data-lang="en">Hardware: the ForceCapture rig</span></h3>
+        <figure class="fig"><img src="figs/Liu2024/fig3_hardware.png" alt="Figure 3 hardware">
+          <figcaption data-lang="zh"><b>Fig.3</b> ForceCapture 結構(爆炸圖)。核心是把<b>③六軸 F/T 感測器</b>夾在<b>①握把</b>與<b>④工具</b>(或⑧夾爪)之間,以量測「工具-環境」交互力;<b>②SLAM 相機</b>置於感測器中心附近錄位姿。(a) 固定工具版、(b) 夾爪版(⑤角度編碼器 + ⑥齒條齒輪 + ⑦線性導軌記錄開合寬度)。<b>(c) 自鎖機構</b>:手指閉合後不能從指尖被扳開,只能靠槓桿釋放——<mark class="m-method" data-t="METHOD/IDEA">讓「握爪的手部施力」不汙染交互力量測</mark>。全機 3D 列印、約 $50、含夾爪僅 0.8kg。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> ForceCapture structure (exploded). Core idea: sandwich a <b>③6-axis F/T sensor</b> between the <b>①handle</b> and the <b>④tool</b> (or ⑧fingers) to measure tool–environment interaction force; a <b>②SLAM camera</b> near the sensor center logs pose. (a) fixed-tool and (b) gripper versions (⑤encoder + ⑥rack-and-pinion + ⑦linear guide record opening width). <b>(c) Self-lock</b>: once closed the fingers can't be pried open from the tip, only released via a lever—so <mark class="m-method" data-t="METHOD/IDEA">the hand's gripping force doesn't pollute the interaction reading</mark>. Fully 3D-printed, ~$50, only 0.8 kg with gripper.</figcaption></figure>
+        <p data-lang="zh">三大設計目標:<b>可擴展性</b>(低成本、易製造、相容不同力感測器)、<b>現場力真實性</b>(直接錄人操作的真實力,不像遙操作靠人工力回饋營造存在感)、<b>人因舒適</b>(重心在握把上方,不改變肌肉施力模式,否則錄到的力會失真)。</p>
+        <p data-lang="en">Three design goals: <b>scalability</b> (low cost, easy fabrication, sensor-agnostic), <b>on-site force realism</b> (directly record real human forces, unlike teleop that fakes presence via artificial force feedback), and <b>ergonomic comfort</b> (center of mass above the handle so muscle exertion patterns aren't altered—else recorded forces would be distorted).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">資料轉換:robot-free → (偽)機器人</span><span data-lang="en">Data transfer: robot-free → (pseudo-)robot</span></h3>
+        <ul style="margin:0 0 8px;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>重力補償</b>:力感測器量到的是「交互力 + 工具自重/慣性」。假設擷取過程<mark class="m-assume" data-t="ASSUMPTION/CLAIM">準靜態(quasi-static)</mark>,只需扣掉工具重力。做法:先準靜態移動一段、記錄多組位姿-力,構成<b>過定方程組</b>,用<mark class="m-method" data-t="METHOD/IDEA">最小二乘</mark>估工具的質心與重量,再逐點扣除。</li>
+          <li data-lang="en"><b>Gravity compensation</b>: the sensor reads "interaction force + tool weight/inertia." Assuming the capture is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">quasi-static</mark>, only tool gravity must be removed. Move the rig quasi-statically, log many pose–wrench pairs into an <b>overdetermined system</b>, and solve for the tool's center of mass and weight by <mark class="m-method" data-t="METHOD/IDEA">least squares</mark>, then subtract per pose.</li>
+          <li data-lang="zh"><b>位姿轉換</b>:T265 SLAM 相機的軌跡轉成機器人 TCP 位姿(初始把 T265 放在 L515 支架上定相對外參,同 DexCap 做法)。</li>
+          <li data-lang="en"><b>Pose transfer</b>: the T265 SLAM trajectory is mapped to robot TCP pose (initially placing T265 on the L515 mount fixes the extrinsics, as in DexCap).</li>
+          <li data-lang="zh"><b>點雲處理</b>:L515 的 RGB-D 反投影成點雲,<mark class="m-method" data-t="METHOD/IDEA">濾掉背景與末端座標系以外的點</mark>(只留末端與物體),再體素化到 10,000 點——縮小收集資料與部署時點雲的差異。</li>
+          <li data-lang="en"><b>Point-cloud processing</b>: L515 RGB-D is back-projected, then <mark class="m-method" data-t="METHOD/IDEA">points outside the background/end-effector frames are removed</mark> (keep only end-effector + object) and voxelized to 10,000 points—shrinking the collection-vs-deployment point-cloud gap.</li>
+        </ul>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">感測頻率:F/T 1000 Hz、T265 200 Hz、L515 30 Hz、編碼器 30 Hz;處理時全部對齊到 L515 的 30 Hz。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Sampling rates: F/T 1000 Hz, T265 200 Hz, L515 30 Hz, encoder 30 Hz; all aligned to L515's 30 Hz during processing.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">HybridIL:同時預測位姿與力</span><span data-lang="en">HybridIL: jointly predicting pose and force</span></h3>
+        <p data-lang="zh">HybridIL 以點雲為視覺輸入,經 <mark class="m-method" data-t="METHOD/IDEA">MLP 編碼器</mark>壓成一維視覺特徵 \(o_t\in\mathbb{R}^{64}\),再與機器人 TCP 位姿串接成多模態表徵;用<mark class="m-method" data-t="METHOD/IDEA">改良版 Diffusion Policy</mark> 去噪出未來 20 步的位姿與 wrench:</p>
+        <p data-lang="en">HybridIL takes a point cloud as visual input, encodes it via an <mark class="m-method" data-t="METHOD/IDEA">MLP</mark> into a 1-D visual feature \(o_t\in\mathbb{R}^{64}\), concatenates it with the robot TCP pose into a multimodal representation, and uses a <mark class="m-method" data-t="METHOD/IDEA">modified Diffusion Policy</mark> to denoise 20 future steps of pose and wrench:</p>
+        <div class="eq">$$\big(P_{t:t+20},\,F_{t:t+20}\big)=\text{DiffusionPolicy}\big(o_t,\,s_t;\,k\big),\quad s_t\in SE(3),\ o_t\in\mathbb{R}^{64}$$</div>
+        <p data-lang="zh">訓練用 <mark class="m-method" data-t="METHOD/IDEA">MSE loss</mark> 同時監督位姿與力兩條輸出(見 Fig.2(b))。關鍵約束:<b>力與位置控制必須正交</b>。模型本身<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不顯式建模正交性</mark>,而是交給下游一個正交的混合力-位置控制器去實現。</p>
+        <p data-lang="en">Training uses an <mark class="m-method" data-t="METHOD/IDEA">MSE loss</mark> supervising both the pose and force outputs (Fig.2(b)). The key constraint: <b>force and position control must be orthogonal</b>. The model <mark class="m-assume" data-t="ASSUMPTION/CLAIM">does not model orthogonality explicitly</mark>; instead a downstream orthogonal hybrid force-position controller enforces it.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">執行:正交混合力-位置控制原語</span><span data-lang="en">Execution: the orthogonal hybrid force-position primitive</span></h3>
+        <p data-lang="zh">這是本文的樞紐設計。由<b>原語選擇器</b>按預測力大小切換兩種控制原語:</p>
+        <p data-lang="en">This is the pivotal design. A <b>primitive selector</b> switches between two control primitives by predicted-force magnitude:</p>
+        <div class="flow">
+          <div class="step"><span class="ph mono">IF \(F<6\text{N}\)</span><b><span data-lang="zh">IK 關節位置原語</span><span data-lang="en">IK joint-position primitive</span></b><small data-lang="zh">力很小(如接觸前的移動),用一般 IK 位置控制走軌跡。</small><small data-lang="en">Force small (e.g., pre-contact motion): follow the trajectory with plain IK position control.</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">IF \(F\ge 6\text{N}\)</span><b><span data-lang="zh">混合力-位置原語</span><span data-lang="en">Hybrid force-position primitive</span></b><small data-lang="zh">連續數步超過 6N(接觸中),沿運動方向做位控、正交平面做力控。</small><small data-lang="en">Force ≥ 6N over consecutive steps (in contact): position control along the motion direction, force control on the orthogonal plane.</small></div>
+        </div>
+        <p data-lang="zh" style="margin-top:6px">正交分解的做法(見 Fig.4):由前後位姿算出運動方向 \(\hat d\)(來自 \(P_{t:t+10}\)),把預測力 \(F_{t:t+10}\) <mark class="m-method" data-t="METHOD/IDEA">投影到 \(\hat d\) 的正交平面</mark>得到 \(F^{\perp}_{t:t+10}\);控制器同時追蹤 \(\hat d\)(位置)與 \(F^{\perp}\)(力)。若初始尚未接觸,先沿力方向反向做一個「壓下去」的動作以建立穩定接觸。</p>
+        <p data-lang="en" style="margin-top:6px">Orthogonal decomposition (Fig.4): compute a motion direction \(\hat d\) from consecutive poses (\(P_{t:t+10}\)), <mark class="m-method" data-t="METHOD/IDEA">project the predicted force \(F_{t:t+10}\) onto the plane orthogonal to \(\hat d\)</mark> to get \(F^{\perp}_{t:t+10}\); the controller tracks \(\hat d\) (position) and \(F^{\perp}\) (force) at once. If not yet in contact, first press along the force direction to establish stable contact.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">6N 閾值為<mark class="m-assume" data-t="ASSUMPTION/CLAIM">經驗設定</mark>;控制經 Flexiv RDK 的關節位控與混合力-位控原語實現(機器人為 Flexiv Rizon 4)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The 6N threshold is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">empirically set</mark>; control is realized via Flexiv RDK's joint-position and hybrid force-position primitives (robot: Flexiv Rizon 4).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(f_t,\tau_t\in\mathbb{R}^6\)</td><td><span data-lang="zh">wrench = 力 \(f\)(3 維)+ 力矩 \(\tau\)(3 維),六軸 F/T 感測器量到的量。</span><span data-lang="en">Wrench = force \(f\) (3-D) + torque \(\tau\) (3-D), what the 6-axis F/T sensor reads.</span></td></tr>
+          <tr><td>\(s_t\in SE(3)\)</td><td><span data-lang="zh">機器人 TCP(工具末端)位姿,含旋轉與平移。</span><span data-lang="en">Robot TCP (tool-tip) pose: rotation and translation.</span></td></tr>
+          <tr><td>\(o_t\in\mathbb{R}^{64}\)</td><td><span data-lang="zh">點雲經 MLP 壓成的一維視覺特徵向量。</span><span data-lang="en">The 1-D visual feature from encoding the point cloud with an MLP.</span></td></tr>
+          <tr><td>\(P_{t:t+20}\)</td><td><span data-lang="zh">模型預測的未來 20 步位姿序列(執行時取前 10 步算方向)。</span><span data-lang="en">Predicted 20-step future pose sequence (first 10 used to compute direction at run time).</span></td></tr>
+          <tr><td>\(F_{t:t+20}\)</td><td><span data-lang="zh">模型預測的未來 20 步力序列(wrench-位置參數的一部分)。</span><span data-lang="en">Predicted 20-step future force sequence (part of the wrench-position params).</span></td></tr>
+          <tr><td>\(\hat d,\,F^{\perp}\)</td><td><span data-lang="zh">運動方向單位向量;把預測力投到 \(\hat d\) 正交平面得到的力控制目標。</span><span data-lang="en">Motion-direction unit vector; the force target from projecting predicted force onto the plane orthogonal to \(\hat d\).</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">模型「猜」出接下來該往哪走、該用多少力;控制器把「走」交給位置控制、把「用力」交給正交方向的力控制——<b>誰都不踩到誰的腳</b>。</span>
+        <span data-lang="en">The model "guesses" where to move and how hard to press; the controller hands "moving" to position control and "pressing" to force control on an orthogonal axis—<b>neither steps on the other's toes</b>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何要正交?</span><span data-lang="en">Why orthogonal?</span></span>
+        <span data-lang="zh">若在同一方向同時下「位置指令」與「力指令」,兩者會互相衝突(要嘛到位、要嘛達力,不可兼得)。<mark class="m-method" data-t="METHOD/IDEA">把位置與力放到彼此正交的子空間</mark>,才能同時滿足——這是混合力-位置控制的經典原理,本文把它接到擴散策略的輸出上。</span>
+        <span data-lang="en">Commanding both a "position" and a "force" target along the same axis conflicts (you get one or the other, not both). Putting position and force in <mark class="m-method" data-t="METHOD/IDEA">mutually orthogonal subspaces</mark> lets both be satisfied—the classic hybrid force-position principle, here wired onto a diffusion policy's output.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">「準靜態」與「只補工具重力」是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">關鍵假設</mark>。快速甩動或高加速度動作會引入慣性力,使重力補償失準——擷取時必須慢而穩。</span>
+        <span data-lang="en">"Quasi-static" and "compensate only tool gravity" are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">key assumptions</mark>. Fast swings or high accelerations add inertial forces that break gravity comp—capture must be slow and steady.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">資料收集效率:ForceCapture vs 遙操作</span><span data-lang="en">Collection efficiency: ForceCapture vs teleop</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">削一根櫛瓜耗時</span><span data-lang="en">Time / zucchini</span></th><th><span data-lang="zh">備註</span><span data-lang="en">Notes</span></th></tr>
+          <tr><td><span data-lang="zh">人類直接徒手</span><span data-lang="en">Human (bare hand)</span></td><td>2.9 min</td><td><span data-lang="zh">參考上限</span><span data-lang="en">reference upper bound</span></td></tr>
+          <tr><td class="win">ForceCapture (Ours)</td><td class="win">4.5 min</td><td><span data-lang="zh">幾乎不需訓練、一次就上手、無中斷</span><span data-lang="en">near-zero training, proficient in one try, no interruptions</span></td></tr>
+          <tr><td><span data-lang="zh">力回饋遙操作</span><span data-lang="en">Force-feedback teleop</span></td><td class="bad">13 min</td><td><span data-lang="zh">需額外訓練;過程 3 次因操作失誤中斷</span><span data-lang="en">needs training; 3 interruptions from operator errors</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">ForceCapture <mark class="m-result" data-t="RESULT/EVIDENCE">約為遙操作的 1/3 耗時</mark>,且非常接近人類徒手速度 → 收集自然、可規模化。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">ForceCapture is <mark class="m-result" data-t="RESULT/EVIDENCE">~1/3 the time of teleop</mark> and close to bare-hand speed → natural, scalable collection.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">操作表現:櫛瓜削皮成功率(TABLE I)</span><span data-lang="en">Manipulation: zucchini peeling success (TABLE I)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">輸入 / 輸出</span><span data-lang="en">Input / output</span></th><th><span data-lang="zh">動作正確</span><span data-lang="en">Motion correct</span></th><th><span data-lang="zh">連續削皮 &gt;10cm</span><span data-lang="en">Peel &gt;10 cm</span></th></tr>
+          <tr><td>Raw DP</td><td><span data-lang="zh">視覺+位姿 → 位姿</span><span data-lang="en">vision+pose → pose</span></td><td>80%</td><td>55%</td></tr>
+          <tr><td>Force DP</td><td><span data-lang="zh">視覺+位姿+<b>力</b> → 位姿</span><span data-lang="en">vision+pose+<b>force</b> → pose</span></td><td class="bad">60%</td><td class="bad">10%</td></tr>
+          <tr><td>Force+Hybrid DP</td><td><span data-lang="zh">視覺+位姿+<b>力</b> → 位姿+<b>力</b></span><span data-lang="en">vision+pose+<b>force</b> → pose+<b>force</b></span></td><td>80%</td><td>20%</td></tr>
+          <tr><td class="win">HybridIL (proposed)</td><td><span data-lang="zh">視覺+位姿 → 位姿+<b>力</b></span><span data-lang="en">vision+pose → pose+<b>force</b></span></td><td class="win">100%</td><td class="win">85%</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">HybridIL 動作 <mark class="m-result" data-t="RESULT/EVIDENCE">100%</mark>(20/20)、長皮 <mark class="m-result" data-t="RESULT/EVIDENCE">85%</mark>;對比 Raw DP 的 80%/55%,長皮成功率<mark class="m-result" data-t="RESULT/EVIDENCE">相對提升 (85−55)/55 ≈ 54.5%</mark>(即摘要中的數字)。Raw DP 的失敗:用力過猛壓壞瓜(甚至折斷)、或沒接觸到瓜、或輸出位姿不連續導致斷皮。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">HybridIL scores <mark class="m-result" data-t="RESULT/EVIDENCE">100%</mark> motion (20/20) and <mark class="m-result" data-t="RESULT/EVIDENCE">85%</mark> long-peel; vs Raw DP's 80%/55%, the long-peel rate improves by a <mark class="m-result" data-t="RESULT/EVIDENCE">relative (85−55)/55 ≈ 54.5%</mark> (the abstract's figure). Raw DP failures: too much force crushing/breaking the zucchini, no contact at all, or discontinuous output poses breaking the peel.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵消融/對照:力該當輸入還是輸出?</span><span data-lang="en">Key comparison: force as input or output?</span></h3>
+        <p data-lang="zh">TABLE I 其實就是一組精心設計的對照:</p>
+        <p data-lang="en">TABLE I is really a carefully designed comparison:</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.85">
+          <li data-lang="zh"><b>力當輸入(Force DP)最差</b>(60%/10%)——反直覺!加了力感測反而崩。原因見 Fig.7。</li>
+          <li data-lang="en"><b>Force as input (Force DP) is worst</b> (60%/10%)—counterintuitive! Adding force sensing collapses it. See Fig.7.</li>
+          <li data-lang="zh"><b>只加混合控制、但仍餵力(Force+Hybrid DP)</b>回到 80%/20%,比 Force DP 好但仍遠不如 HybridIL。</li>
+          <li data-lang="en"><b>Adding the hybrid controller but still feeding force (Force+Hybrid DP)</b> recovers to 80%/20%—better than Force DP but far below HybridIL.</li>
+          <li data-lang="zh"><b>HybridIL = 不餵力當輸入、但輸出力並用混合控制追蹤</b> → 最佳。說明真正有效的是<mark class="m-result" data-t="RESULT/EVIDENCE">「主動預測+正交追蹤力」</mark>,而非「被動觀測力」。</li>
+          <li data-lang="en"><b>HybridIL = don't feed force as input, but output force and track it with the hybrid controller</b> → best. The winning ingredient is <mark class="m-result" data-t="RESULT/EVIDENCE">"actively predicting + orthogonally tracking force,"</mark> not "passively observing force."</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">力曲線:為何主動控力更好(Fig.7)</span><span data-lang="en">Force curves: why active control wins (Fig.7)</span></h3>
+        <figure class="fig"><img src="figs/Liu2024/fig7_forcecurves.png" alt="Figure 7 force curves">
+          <figcaption data-lang="zh"><b>Fig.7</b> 削瓜時的交互力曲線。<b>(a) 資料收集</b>:人類示範的力約 <b>~10N</b>(三次示範疊圖)。<b>(b) Raw DP rollout</b>:雖然削得掉,但實測力(實線)平均 ~20N、局部衝到 <b>&gt;40N</b>,遠高於示範分布 → 容易壓壞瓜。<b>(c) HybridIL rollout</b>:實測力貼合<b>預測力</b>(虛線),全程維持 <b>~9N</b>,削出厚薄一致的皮。這張圖是「加力反而變差」的關鍵解釋:<mark class="m-problem" data-t="PROBLEM/GAP">部署力分布若偏離資料分布,模型就預測不準</mark>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.7</b> Interaction-force curves while peeling. <b>(a) Data collection</b>: human demos apply ~<b>10N</b> (three demos overlaid). <b>(b) Raw DP rollout</b>: it peels, but measured force (solid) averages ~20N and spikes <b>&gt;40N</b>, far above the demo distribution → risks crushing the zucchini. <b>(c) HybridIL rollout</b>: measured force hugs the <b>predicted</b> force (dashed), holding <b>~9N</b> throughout for even peels. This figure explains "why more force hurts": <mark class="m-problem" data-t="PROBLEM/GAP">if the deployment force distribution drifts from the data, the model predicts poorly</mark>.</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">核心解釋:Raw DP 部署時的力(~20–40N)與訓練資料(~10N)<mark class="m-problem" data-t="PROBLEM/GAP">分布不匹配</mark>,讓「把力當輸入」的模型無所適從;HybridIL 靠主動力控把交互力壓回 ~9N,回到資料分布內,才穩定。作者亦坦承 HybridIL 的 9N 與資料仍有<mark class="m-limit" data-t="LIMITATION/FUTURE">些微偏差</mark>,這也解釋了為何 Force+Hybrid DP 沒能更好。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">The crux: Raw DP's deployment force (~20–40N) <mark class="m-problem" data-t="PROBLEM/GAP">mismatches</mark> the training data (~10N), confusing any "force-as-input" model; HybridIL's active force control pulls interaction force back to ~9N, inside the data distribution, hence stable. The authors note HybridIL's 9N still <mark class="m-limit" data-t="LIMITATION/FUTURE">deviates slightly</mark> from the data—also why Force+Hybrid DP didn't do better.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">收集快 3 倍、削瓜動作 100%、長皮成功率相對 +54.5%,且全程用力更輕更穩(~9N vs ~20–40N)。<b>又快又穩又輕</b>是它最強的論述。</span>
+        <span data-lang="en">3× faster collection, 100% peeling motion, +54.5% relative long-peel success, with lighter, steadier force throughout (~9N vs ~20–40N). <b>Fast, stable, and gentle</b> at once is its strongest claim.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">規模很小</span><span data-lang="en">Small scale</span></div>
+        <span data-lang="zh">全部結論建立在<mark class="m-limit" data-t="LIMITATION/FUTURE">單一任務(削櫛瓜)、15 根瓜、438 段、每法 10–20 次 rollout</mark>。統計樣本很小,無誤差棒;跨物件/跨任務泛化未測。</span>
+        <span data-lang="en">All conclusions rest on a <mark class="m-limit" data-t="LIMITATION/FUTURE">single task (zucchini peeling), 15 zucchinis, 438 segments, 10–20 rollouts per method</mark>. Small samples, no error bars; cross-object/cross-task generalization untested.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">樣本量</span><span data-lang="en">sample size</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">控制器功勞</span><span data-lang="en">controller credit</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>單一任務、極小樣本</b>:全篇只有<mark class="m-limit" data-t="LIMITATION/FUTURE">一個削櫛瓜任務</mark>,測試僅 10–20 次 rollout、無多次隨機種子、無誤差棒。「54.5% 相對提升」是由 55%→85% 換算而來,基數小,統計上脆弱。跨蔬果、跨工具、跨場景是否成立,完全未知。</li>
+          <li data-lang="en"><b>Single task, tiny samples</b>: the whole paper has <mark class="m-limit" data-t="LIMITATION/FUTURE">one zucchini-peeling task</mark>, tested with only 10–20 rollouts, no multiple seeds, no error bars. The "54.5% relative gain" is 55%→85% on a small base—statistically fragile. Whether it holds across produce, tools, and scenes is entirely unknown.</li>
+          <li data-lang="zh"><b>功勞歸屬不清:模型 vs 控制器</b>:HybridIL 的勝利有多少來自「擴散策略學會預測力」,又有多少純粹來自「換上混合力-位置控制器」?<mark class="m-assume" data-t="ASSUMPTION/CLAIM">缺少「同一個力預測 + 一般位控」的對照</mark>。Force+Hybrid DP(有力輸出+混合控制)只到 20%,反而暗示控制器不是萬靈丹——但也讓「究竟哪個元件最關鍵」更難拆解。</li>
+          <li data-lang="en"><b>Unclear credit: model vs controller</b>: how much of HybridIL's win comes from "the diffusion policy learning to predict force" vs simply "swapping in a hybrid force-position controller"? <mark class="m-assume" data-t="ASSUMPTION/CLAIM">There's no "same force prediction + plain position control" ablation</mark>. Force+Hybrid DP (force output + hybrid control) reaches only 20%, hinting the controller isn't a silver bullet—but making the key component even harder to isolate.</li>
+          <li data-lang="zh"><b>反直覺結果的解釋是「事後推理」</b>:「加力反而變差」歸因於力分布不匹配,說法合理且有 Fig.7 佐證,但這是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">觀察後的解釋</mark>而非受控實驗。若把 Force DP 的訓練資料重新對齊到部署力分布,是否就不差了?論文沒做這個驗證。</li>
+          <li data-lang="en"><b>The counterintuitive result is explained post-hoc</b>: "adding force hurts" is attributed to force-distribution mismatch—plausible and backed by Fig.7, but it's a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">post-observation explanation</mark>, not a controlled test. Would re-aligning Force DP's training data to the deployment distribution fix it? The paper doesn't verify this.</li>
+          <li data-lang="zh"><b>準靜態假設限制適用範圍</b>:重力補償依賴<mark class="m-assume" data-t="ASSUMPTION/CLAIM">準靜態</mark>。高速、high-impact、或需要動態慣性力的接觸任務(敲擊、快速插拔)會失準,ForceCapture 錄到的力就不再乾淨。</li>
+          <li data-lang="en"><b>Quasi-static assumption limits scope</b>: gravity comp relies on a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">quasi-static</mark> premise. High-speed, high-impact, or dynamic-inertia contact tasks (tapping, fast insertion) break it, so ForceCapture's recorded force stops being clean.</li>
+          <li data-lang="zh"><b>手工元件偏多</b>:6N 閾值為經驗值、正交性靠外部控制器手工保證、點雲靠手工濾點、多模態只用簡單 MLP 融合。作者亦自承這些是未來要改的地方。整體更像「精心工程的系統」而非「可自動學到最佳結構」。</li>
+          <li data-lang="en"><b>Many hand-crafted parts</b>: the 6N threshold is empirical, orthogonality is enforced by an external controller by hand, points are hand-filtered, and multimodal fusion is a plain MLP. The authors admit these need improvement. Overall it reads as a "carefully engineered system," not an "automatically learned optimal structure."</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>樣本與統計</b>:10–20 次 rollout、無誤差棒的情況下,100% vs 80%、85% vs 55% 的差距有多穩?換 3 個隨機種子重訓,結論還在嗎?</li>
+          <li data-lang="en"><b>Samples and statistics</b>: with 10–20 rollouts and no error bars, how stable are 100% vs 80% and 85% vs 55%? Retraining with three seeds—do the conclusions survive?</li>
+          <li data-lang="zh"><b>泛化邊界</b>:同一模型能否直接遷移到馬鈴薯、胡蘿蔔或不同形狀的瓜?力覺技能是學到了「削」的通則,還是過擬合單一物件幾何?</li>
+          <li data-lang="en"><b>Generalization boundary</b>: can the same model transfer to potatoes, carrots, or differently shaped squash? Did it learn a general "peeling" skill or overfit one object's geometry?</li>
+          <li data-lang="zh"><b>分布不匹配的真因</b>:若把 Force DP 的訓練資料對齊到部署時的高力分布,它還會那麼差嗎?「加力有害」是本質問題還是資料工程問題?</li>
+          <li data-lang="en"><b>Root of the mismatch</b>: if Force DP were trained on data matching the deployment high-force distribution, would it still fail? Is "force hurts" fundamental, or a data-engineering artifact?</li>
+          <li data-lang="zh"><b>控制器的功勞</b>:把 HybridIL 的「力預測」關掉、只留混合控制器用固定力,或反過來只留力預測配一般位控——各自能到幾成?這才拆得清增益來源。</li>
+          <li data-lang="en"><b>The controller's share</b>: turn off HybridIL's force prediction and let the hybrid controller use a fixed force, or keep only force prediction with plain position control—how far does each get? Only this disentangles the gain.</li>
+          <li data-lang="zh"><b>擴展到雙臂/動態任務</b>:準靜態與單技能的限制下,這套 recipe 遇到需要動態力(敲、拋、快速裝配)的任務時,ForceCapture 的資料還可信嗎?</li>
+          <li data-lang="en"><b>Scaling to bimanual/dynamic tasks</b>: under quasi-static and single-skill limits, when facing dynamic-force tasks (tapping, throwing, fast assembly), is ForceCapture's data still trustworthy?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把結論讀成「<b>模仿學習加上力感測就會更好</b>」。恰恰相反:本文最鮮明的證據是「<mark class="m-problem" data-t="PROBLEM/GAP">單純把力當輸入(Force DP)最差</mark>」。正確理解是——力必須被<mark class="m-method" data-t="METHOD/IDEA">當作輸出動作主動預測,並用與資料一致的力控制器去追蹤</mark>,力才會成為助力而非阻力。</span>
+        <span data-lang="en">Reading it as "<b>imitation learning + force sensing = better</b>." The opposite: the sharpest evidence is that "<mark class="m-problem" data-t="PROBLEM/GAP">merely feeding force as input (Force DP) is worst</mark>." The right reading: force must be <mark class="m-method" data-t="METHOD/IDEA">an output action, actively predicted and tracked by a controller consistent with the data</mark>—only then does it help rather than hurt.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">硬體設計誠實好用($50、0.8kg、3D 列印、自鎖巧思),Conclusion 明列三項限制(單一 MLP 表徵、僅兩控制原語、單一技能),且反直覺結果分析深入。作為<b>系統性、可複現的探索工作</b>,定位誠懇。</span>
+        <span data-lang="en">The hardware is honest and practical ($50, 0.8 kg, 3D-printed, a clever self-lock); the Conclusion lists three limits (single-MLP representation, only two primitives, single skill), and the counterintuitive result is analyzed in depth. As a <b>systematic, reproducible exploration</b>, its framing is sincere.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「動作空間要涵蓋力」的範式</b>:做接觸密集操作時,別把 action 侷限於位姿;把 wrench 一起當輸出,再交給合適的低階控制器,往往比純軌跡更穩健。這個想法可遷移到擦拭、插拔、裝配、研磨等任務。</li>
+          <li data-lang="en"><b>The "action space must include force" paradigm</b>: for contact-rich manipulation, don't limit the action to pose; output the wrench too and hand it to a suitable low-level controller—often more robust than pure trajectory. Transfers to wiping, insertion, assembly, grinding, etc.</li>
+          <li data-lang="zh"><b>資料-控制的「分布一致性」是隱形勝負手</b>:本文最深的教訓是「部署時的力分布必須落在訓練資料分布內」。任何用感測回饋(力、觸覺、音訊)的模仿學習,都該檢查「收集」與「部署」的該模態分布是否對齊。</li>
+          <li data-lang="en"><b>Data–control "distribution consistency" is a hidden decider</b>: the deepest lesson is "deployment force must lie within the training distribution." Any imitation learner using sensory feedback (force, tactile, audio) should check that the modality's distribution matches between collection and deployment.</li>
+          <li data-lang="zh"><b>低成本擷取硬體值得自建</b>:$50、3D 列印的 ForceCapture 說明「把感測器塞進手持工具鏈」是可行且高 CP 值的資料引擎。做真機模仿學習的實驗室可借鏡這套「感測器夾在工具與握把之間 + 自鎖 + 重力補償」設計。</li>
+          <li data-lang="en"><b>Low-cost capture hardware is worth building</b>: a $50, 3D-printed ForceCapture shows "wedge a sensor into a handheld tool chain" is a feasible, high-value data engine. Labs doing real-robot IL can borrow the "sensor between tool and handle + self-lock + gravity comp" design.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「模仿學習應把交互力納入動作空間」</span><span data-lang="en">"imitation learning should include interaction force in the action space"</span></td><td><span data-lang="zh">作為正面案例(HybridIL 同時預測位姿+力並正交追蹤)。</span><span data-lang="en">A positive example (HybridIL predicts pose+force and tracks orthogonally).</span></td></tr>
+          <tr><td><span data-lang="zh">「免機器人、徒手可收集自然的力覺資料」</span><span data-lang="en">"force-centric data can be collected bare-handed, robot-free"</span></td><td><span data-lang="zh">引 ForceCapture 硬體與 vs 遙操作的效率對比(4.5 vs 13 分鐘)。</span><span data-lang="en">Cite the ForceCapture rig and its efficiency vs teleop (4.5 vs 13 min).</span></td></tr>
+          <tr><td><span data-lang="zh">「單純把力當輸入不必然更好」</span><span data-lang="en">"feeding force as input isn't automatically better"</span></td><td><span data-lang="zh">引 Force DP 反直覺失敗與 Fig.7 的力分布不匹配分析。</span><span data-lang="en">Cite the Force DP counterintuitive failure and the Fig.7 force-mismatch analysis.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">ForceMimic 用一個 $50 的手持力擷取器把「自然的力覺示範」變得可收集,再用「同時預測位姿與力、並以正交混合控制器追蹤」的 HybridIL 把力變成主動動作;在削櫛瓜上證明<b>力覺閉環讓接觸密集操作從「粗暴成功」升級為「輕巧穩定成功」</b>。反直覺的關鍵教訓是:力要當輸出去追蹤,而非只當輸入去觀察。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">ForceMimic makes "natural force-centric demos" collectible with a $50 handheld rig, then turns force into an active action via HybridIL (jointly predicting pose+force, tracked by an orthogonal hybrid controller); on zucchini peeling it shows <b>force-in-the-loop upgrades contact-rich manipulation from "brute-force success" to "gentle, stable success."</b> The counterintuitive lesson: track force as an output, don't just observe it as an input.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Diffusion Policy</span>
+          <span class="chip">DexCap / UMI</span>
+          <span class="chip">MOMA-Force</span>
+          <span class="chip">ForceSight</span>
+          <span class="chip">Hybrid force-position control</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Liu et al. 2024 (ForceMimic) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'ForceMimic reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>綜合導讀 · 力覺接觸操作</title>
+<meta name="paper-meta" content='{"kind":"synthesis","title":"Synthesis · Force-Aware Contact-Rich Manipulation","authors":"5 papers · 2 research lines","year":"2024–2026","venue":"綜合導讀 / Synthesis","tags":["Synthesis","Force-Aware Manipulation","Robot Learning"],"tldr":"把 5 篇力覺接觸操作論文串成一條線:共同敵人是「力訊號稀疏又吵」,SJTU 線賭控制與架構、CMU 線賭訓練與感測。","tldr_en":"Threads 5 force-aware contact-rich manipulation papers into one line: the shared enemy is sparse, noisy force; the SJTU line bets on control & architecture, the CMU line on training & sensing."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --sjtu:#3b6fd4; --cmu:#d98324;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50; box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.16em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28); border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0; font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 16px; cursor:pointer; letter-spacing:.06em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 340px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 11px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em; padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none; border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method); border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:10.5px; letter-spacing:.06em; border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase; vertical-align:bottom}
+  td{padding:10px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ctable{overflow-x:auto; border:1px solid var(--line); border-radius:10px}
+  .ctable table{margin:0; min-width:820px}
+  .ctable td:first-child, .ctable th:first-child{position:sticky; left:0; background:var(--card)}
+  .sj{color:var(--sjtu); font-weight:700}
+  .cm{color:var(--cmu); font-weight:700}
+  .pkey{font-weight:700; white-space:nowrap}
+  .yb{font-family:ui-monospace,Menlo,monospace; font-size:10px; color:var(--muted); display:block}
+
+  /* timeline */
+  .tl2{position:relative; margin:10px 0 4px; padding-left:8px}
+  .trow{display:grid; grid-template-columns:64px 1fr; gap:14px; padding:8px 0; border-left:2px solid var(--line); margin-left:8px; padding-left:18px; position:relative}
+  .trow:before{content:""; position:absolute; left:-7px; top:16px; width:12px; height:12px; border-radius:50%; background:var(--gold); border:2px solid var(--paper)}
+  .tyr{font-family:ui-monospace,Menlo,monospace; font-weight:700; color:var(--navy); font-size:15px}
+  .titem{font-size:13.5px}
+  .titem b.sj{color:var(--sjtu)} .titem b.cm{color:var(--cmu)}
+  .badge{font-size:10px; padding:2px 7px; border-radius:10px; margin-left:6px; font-weight:700}
+  .badge.sj{background:rgba(59,111,212,.14); color:var(--sjtu)}
+  .badge.cm{background:rgba(217,131,36,.16); color:var(--cmu)}
+
+  .two{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:820px){.two{grid-template-columns:1fr}}
+  .linecard{border-top:3px solid var(--gold); background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px}
+  .linecard.sj{border-top-color:var(--sjtu)} .linecard.cm{border-top-color:var(--cmu)}
+  .linecard h4{margin:2px 0 8px; font-size:16px}
+  .flow{display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; margin:8px 0}
+  .flow b{background:#f2efe6; border:1px solid var(--line); border-radius:8px; padding:4px 8px}
+  .flow .ar{color:var(--gold); font-weight:700}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold); border-radius:8px; padding:6px 14px; margin:10px 0; overflow-x:auto}
+  .katex{font-size:1.02em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4; padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .backlink{color:var(--gold); text-decoration:none; font-size:12px}
+  .backlink:hover{text-decoration:underline}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">SYNTHESIS · 綜合導讀</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 OVERVIEW</button>
+    <button data-p="1">02 COMPARISON</button>
+    <button data-p="2">03 LINEAGES</button>
+    <button data-p="3">04 CONVERGENCE</button>
+    <button data-p="4">05 OPEN PROBLEMS</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ============ 01 OVERVIEW ============ -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Overview &amp; The Shared Tension</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">這 5 篇是「<b>力覺 × 接觸豐富操作</b>」同一條研究線。共同敵人只有一個:<mark class="m-problem" data-t="PROBLEM/GAP">力訊號稀疏又吵</mark>——大多數時間接觸力≈0,天真地把力丟進 policy 只會更糟。兩組人馬下不同的注:<b class="sj">SJTU · Cewu Lu 線</b>賭「<mark class="m-method" data-t="METHOD/IDEA">控制與架構</mark>」,<b class="cm">CMU · Pathak 線</b>賭「<mark class="m-method" data-t="METHOD/IDEA">訓練與感測</mark>」。上位的 Karcini 立場文章則說:機器人缺的正是把力/具身/獎勵「接地」的機制。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">These 5 papers form one research line on <b>force-aware contact-rich manipulation</b>. They share a single enemy: <mark class="m-problem" data-t="PROBLEM/GAP">force is sparse and noisy</mark>—contact force is ≈0 most of the time, so naively feeding force to a policy only makes things worse. Two groups place different bets: the <b class="sj">SJTU · Cewu Lu line</b> bets on <mark class="m-method" data-t="METHOD/IDEA">control &amp; architecture</mark>, the <b class="cm">CMU · Pathak line</b> on <mark class="m-method" data-t="METHOD/IDEA">training &amp; sensing</mark>. The umbrella Karcini position paper says: what robots lack is exactly the mechanism to ground force/embodiment/reward.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">共同的敵人:力很稀疏、很吵</span><span data-lang="en">The common enemy: force is sparse &amp; noisy</span></h3>
+        <p data-lang="zh">整串的起點是同一個觀察:接觸力大多時候接近 0,只有在關鍵瞬間才有意義。因此「把力當成 policy 的另一個輸入通道」幾乎都失敗。有趣的是<mark class="m-result" data-t="RESULT/EVIDENCE">四篇各自獨立撞到同一面牆</mark>:</p>
+        <p data-lang="en">The whole line starts from one observation: contact force is near-zero most of the time and only matters at key moments. So "just add force as another policy input channel" almost always fails. Strikingly, <mark class="m-result" data-t="RESULT/EVIDENCE">four papers independently hit the same wall</mark>:</p>
+        <table>
+          <tr><th><span data-lang="zh">論文</span><span data-lang="en">Paper</span></th><th><span data-lang="zh">「天真融合會壞」的證據</span><span data-lang="en">Evidence that naive fusion breaks</span></th></tr>
+          <tr><td class="pkey">FACTR</td><td><span data-lang="zh">力直接當輸入 → policy <mark class="m-problem" data-t="PROBLEM/GAP">過度依賴視覺、忽略力</mark></span><span data-lang="en">force as raw input → policy <mark class="m-problem" data-t="PROBLEM/GAP">overfits vision, ignores force</mark></span></td></tr>
+          <tr><td class="pkey">FoAR</td><td><span data-lang="zh">非接觸期的<mark class="m-problem" data-t="PROBLEM/GAP">力噪音反而拖累</mark>表現</span><span data-lang="en">off-contact <mark class="m-problem" data-t="PROBLEM/GAP">force noise degrades</mark> performance</span></td></tr>
+          <tr><td class="pkey">ForceMimic</td><td><span data-lang="zh">把機器人力當輸入(Force DP)是<mark class="m-problem" data-t="PROBLEM/GAP">所有變體裡最差</mark>的</span><span data-lang="en">feeding robot force as input (Force DP) is the <mark class="m-problem" data-t="PROBLEM/GAP">worst</mark> of all variants</span></td></tr>
+          <tr><td class="pkey">Force Policy</td><td><span data-lang="zh">自由空間的力訊號吵 → 需要 gating / 子空間拆分</span><span data-lang="en">free-space force is noisy → needs gating / subspace splitting</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:10px;font-size:14px;color:var(--muted)">於是每一篇,本質上都是對「<b>force is sparse &amp; noisy</b>」這句話的一個不同答案。</p>
+        <p data-lang="en" style="margin-top:10px;font-size:14px;color:var(--muted)">So each paper is, in essence, a different answer to "<b>force is sparse &amp; noisy</b>."</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">演進時間軸(2024 → 2026)</span><span data-lang="en">Evolution timeline (2024 → 2026)</span></h3>
+        <div class="tl2">
+          <div class="trow"><div class="tyr">2024</div><div class="titem"><b class="sj">ForceMimic</b><span class="badge sj">SJTU</span><br><span data-lang="zh">手持力捕捉 + 混合力位控制;發現「力當輸入最差」</span><span data-lang="en">handheld force capture + hybrid force-position control; finds "force-as-input is worst"</span></div></div>
+          <div class="trow"><div class="tyr">2025</div><div class="titem"><b class="sj">FoAR</b><span class="badge sj">SJTU</span> · <b class="cm">FACTR</b><span class="badge cm">CMU</span><br><span data-lang="zh">FoAR:用接觸預測 \(\phi\) gate 掉力噪音 · FACTR:視覺模糊 curriculum 逼 policy 先學力</span><span data-lang="en">FoAR: gate force noise via contact prediction \(\phi\) · FACTR: vision-blur curriculum forces the policy to learn force first</span></div></div>
+          <div class="trow"><div class="tyr">2026</div><div class="titem"><b class="sj">Force Policy</b><span class="badge sj">SJTU</span> · <b class="cm">FACTR 2</b><span class="badge cm">CMU</span> · <b>Karcini</b><br><span data-lang="zh">Force Policy:Interaction Frame 拆力控/位控子空間 · FACTR 2:免感測器估力 · Karcini:立場文章framing整個需求</span><span data-lang="en">Force Policy: Interaction Frame splits force/position subspaces · FACTR 2: sensorless force estimation · Karcini: position paper framing the whole need</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag"><span data-lang="zh">這串包含</span><span data-lang="en">In this bunch</span></span>
+        <p style="font-size:13px;margin:6px 0 0">
+          <a class="backlink" href="Liu2024_ForceMimic.html">ForceMimic (2024)</a> · <a class="backlink" href="He2025_FoAR.html">FoAR (2025)</a> · <a class="backlink" href="Fang2026_ForcePolicy.html">Force Policy (2026)</a><br>
+          <a class="backlink" href="Liu2025_FACTR.html">FACTR (2025)</a> · <a class="backlink" href="Oh2026_FACTR2.html">FACTR 2 (2026)</a><br>
+          <span data-lang="zh">上位動機:</span><span data-lang="en">Umbrella:</span> <a class="backlink" href="Karcini2026_RobotsNeedMore.html">Robots Need More…</a>
+        </p>
+      </div>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話抓住整串</span><span data-lang="en">The line in one line</span></span>
+        <span data-lang="zh">大家都同意「力很重要但很難用」;分歧在於——<b class="sj">改控制</b>(SJTU),還是 <b class="cm">改訓練/感測</b>(CMU)?</span>
+        <span data-lang="en">Everyone agrees "force matters but is hard to use"; they diverge on—<b class="sj">fix the control</b> (SJTU) or <b class="cm">fix the training/sensing</b> (CMU)?</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">怎麼讀這篇</span><span data-lang="en">How to read this</span></div>
+        <span data-lang="zh" style="font-size:13px">02 是橫向比較表;03 拆兩條線各自的哲學;04 是它們的交會與矛盾;05 是整條線共同的坑。</span>
+        <span data-lang="en" style="font-size:13px">02 is the comparison table; 03 unpacks each line's philosophy; 04 is where they converge/clash; 05 is the shared pitfalls of the whole line.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 02 COMPARISON ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Head-to-Head Comparison</h2></div>
+  <div class="ctable">
+    <table>
+      <tr>
+        <th><span data-lang="zh">論文</span><span data-lang="en">Paper</span></th>
+        <th><span data-lang="zh">力從哪來</span><span data-lang="en">Where force comes from</span></th>
+        <th><span data-lang="zh">力如何被用</span><span data-lang="en">How force is used</span></th>
+        <th><span data-lang="zh">控制 / backbone</span><span data-lang="en">Control / backbone</span></th>
+        <th><span data-lang="zh">頭號結果</span><span data-lang="en">Headline result</span></th>
+      </tr>
+      <tr>
+        <td class="pkey sj">ForceMimic<span class="yb">2024 · SJTU</span></td>
+        <td><span data-lang="zh">~$50 手持 <b>ForceCapture</b> 六軸 F/T,免機器人蒐集人類示範</span><span data-lang="en">~$50 handheld <b>ForceCapture</b> 6-axis F/T, robot-free human demos</span></td>
+        <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">把力當輸出</mark>:policy 同時預測 pose + wrench</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">force as output</mark>: policy jointly predicts pose + wrench</span></td>
+        <td><span data-lang="zh">依 6N 門檻切換 IK 位控 / 正交<b>混合力位控制</b>;Diffusion Policy</span><span data-lang="en">6N-threshold switch between IK position / orthogonal <b>hybrid force-position</b>; Diffusion Policy</span></td>
+        <td><span data-lang="zh">削皮 100% 動作成功、85% 長條(>10cm)vs Raw DP 80%/55%</span><span data-lang="en">peeling 100% motion success, 85% long-peel (>10cm) vs Raw DP 80%/55%</span></td>
+      </tr>
+      <tr>
+        <td class="pkey sj">FoAR<span class="yb">2025 · SJTU</span></td>
+        <td><span data-lang="zh">機器人 F/T 感測器,100Hz</span><span data-lang="en">robot F/T sensor, 100Hz</span></td>
+        <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">學習接觸預測 \(\phi\)</mark> 來 gate:\(h=[h_s;\,\phi h_f+(1-\phi)h^*]\),非接觸時靜音力</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">learned contact predictor \(\phi\)</mark> gates: \(h=[h_s;\,\phi h_f+(1-\phi)h^*]\), mutes force off-contact</span></td>
+        <td><span data-lang="zh">同一 \(\phi\) 驅動<b>反應式控制</b>(位控);RISE 3D + 力 Transformer</span><span data-lang="en">same \(\phi\) drives a <b>reactive controller</b> (position control); RISE 3D + force Transformer</span></td>
+        <td><span data-lang="zh">Wiping/Peeling 0.875/0.756 vs RISE 0.500/0.377</span><span data-lang="en">Wiping/Peeling 0.875/0.756 vs RISE 0.500/0.377</span></td>
+      </tr>
+      <tr>
+        <td class="pkey sj">Force Policy<span class="yb">2026 · SJTU</span></td>
+        <td><span data-lang="zh">6-DoF F/T,力回饋遙操作示範</span><span data-lang="en">6-DoF F/T, force-feedback teleop demos</span></td>
+        <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">Interaction Frame</mark>:由環境剛度主軸拆出「受限子空間(力控)/ 可動子空間(位控)」</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Interaction Frame</mark>: split into "constraint subspace (force) / admissible subspace (position)" from stiffness principal axes</span></td>
+        <td><span data-lang="zh">全域視覺(RISE-2,5Hz)+ 局部力 policy(50Hz),混合力位控</span><span data-lang="en">global vision (RISE-2, 5Hz) + local force policy (50Hz), hybrid force-position</span></td>
+        <td><span data-lang="zh">翻 95% / 插 EV 65% / 刮 90%,大幅勝 baselines(0–62%)</span><span data-lang="en">flip 95% / EV-plug 65% / scrape 90%, far above baselines (0–62%)</span></td>
+      </tr>
+      <tr>
+        <td class="pkey cm">FACTR<span class="yb">2025 · CMU</span></td>
+        <td><span data-lang="zh"><b>關節外力矩 \(\tau_{ext}\)</b>(粗、無 F/T sensor);雙邊遙操作把力回饋給操作者</span><span data-lang="en"><b>joint external torque \(\tau_{ext}\)</b> (coarse, no F/T sensor); bilateral teleop relays force to operator</span></td>
+        <td><span data-lang="zh">力當<b>輸入</b>,但用<mark class="m-method" data-t="METHOD/IDEA">視覺模糊 curriculum</mark>(\(\sigma\) 遞減)逼 policy 先學力(NTK:重模糊→視覺核 rank-1)</span><span data-lang="en">force as <b>input</b>, but a <mark class="m-method" data-t="METHOD/IDEA">vision-blur curriculum</mark> (decaying \(\sigma\)) makes it learn force first (NTK: heavy blur → vision kernel rank-1)</span></td>
+        <td><span data-lang="zh">標準 ACT-style policy(無特殊控制器)</span><span data-lang="en">standard ACT-style policy (no special controller)</span></td>
+        <td><span data-lang="zh">未見物體泛化 21.3%→61.2%→<b>87.5%</b>(視覺 / +力 / FACTR)</span><span data-lang="en">unseen-object generalization 21.3%→61.2%→<b>87.5%</b> (vision / +force / FACTR)</span></td>
+      </tr>
+      <tr>
+        <td class="pkey cm">FACTR 2<span class="yb">2026 · CMU</span></td>
+        <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">免感測器</mark>:<b>NEXT</b> 用 LSTM 學自由空間力矩 \(\hat\tau_f\),外力 \(\tau_{ext}=\tau_m-\hat\tau_f\)(自監督,10 分鐘資料)</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">sensorless</mark>: <b>NEXT</b> LSTM learns free-space torque \(\hat\tau_f\); external \(\tau_{ext}=\tau_m-\hat\tau_f\) (self-supervised, 10 min data)</span></td>
+        <td><span data-lang="zh"><b>FIRST</b>:用 \(\lVert\hat\tau_{ext}\rVert_1\) 把示範切成 free/接觸前/接觸,BC 時<b>上採樣</b>接觸段(只改取樣分佈)</span><span data-lang="en"><b>FIRST</b>: use \(\lVert\hat\tau_{ext}\rVert_1\) to segment demos into free/pre-/contact, <b>up-sample</b> contact segments in BC (changes only the sampling)</span></td>
+        <td><span data-lang="zh">標準 BC(flow-matching / ACT)</span><span data-lang="en">standard BC (flow-matching / ACT)</span></td>
+        <td><span data-lang="zh">NEXT 接觸力矩 L1=0.547Nm(勝 Franka 原廠估計);FIRST 平均任務進度 &gt;+17%,五任務全勝</span><span data-lang="en">NEXT contact-torque L1=0.547Nm (beats Franka factory estimate); FIRST avg task progress &gt;+17%, wins all 5 tasks</span></td>
+      </tr>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin-top:10px"><span data-lang="zh">💡 表格橫向可捲動。第一欄固定。藍=SJTU 線、橘=CMU 線。</span><span data-lang="en">💡 The table scrolls horizontally; the first column is pinned. Blue = SJTU line, orange = CMU line.</span></p>
+</section>
+
+<!-- ============ 03 LINEAGES ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Two Lineages, Two Bets</h2></div>
+  <div class="two">
+    <div class="linecard sj">
+      <h4 class="serif"><span class="sj">SJTU · Cewu Lu 線</span></h4>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px"><span data-lang="zh">賭注:改「控制與架構」——把力用對地方</span><span data-lang="en">Bet: fix "control &amp; architecture"—use force in the right place</span></div>
+      <div class="flow"><b>ForceMimic</b><span class="ar">→</span><b>FoAR</b><span class="ar">→</span><b>Force Policy</b></div>
+      <p data-lang="zh" style="font-size:13.5px">共同信念:<mark class="m-method" data-t="METHOD/IDEA">不要把力硬塞進 policy,而要「結構化」力怎麼被使用</mark>。演進是一條「越來越有原則」的力位分解之路:<b>預測力+混合控制</b>(ForceMimic)→ 用學習到的接觸機率 <b>gate 掉噪音</b>(FoAR)→ 用 Interaction Frame 從物理剛度<b>拆出力控/位控子空間</b>(Force Policy)。三篇都長在 RISE / Diffusion Policy 視覺骨幹上。</p>
+      <p data-lang="en" style="font-size:13.5px">Shared belief: <mark class="m-method" data-t="METHOD/IDEA">don't cram force into the policy—"structure" how force is used</mark>. The evolution is an increasingly principled force-position decomposition: <b>predict force + hybrid control</b> (ForceMimic) → <b>gate noise</b> via a learned contact probability (FoAR) → <b>split force/position subspaces</b> from physical stiffness with an Interaction Frame (Force Policy). All three sit on the RISE / Diffusion Policy visual backbone.</p>
+    </div>
+    <div class="linecard cm">
+      <h4 class="serif"><span class="cm">CMU · Pathak 線</span></h4>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px"><span data-lang="zh">賭注:改「訓練與感測」——讓 policy 願意學力、讓力變便宜</span><span data-lang="en">Bet: fix "training &amp; sensing"—make the policy learn force, make force cheap</span></div>
+      <div class="flow"><b>FACTR</b><span class="ar">→</span><b>FACTR 2</b></div>
+      <p data-lang="zh" style="font-size:13.5px">共同信念:<mark class="m-method" data-t="METHOD/IDEA">力可以照舊當輸入,真正要解的是「policy 不肯學力」和「沒有力感測器」</mark>。FACTR 用視覺模糊 curriculum,在訓練早期把視覺弄糊、逼梯度流向力編碼器(學習動態層面的介入);FACTR 2 更進一步,讓<b>廉價手臂免感測器</b>也能自監督估出外力,把「有力訊號」的門檻壓到最低。走的是「資料 / 訓練 / 感測」而非「控制器」。</p>
+      <p data-lang="en" style="font-size:13.5px">Shared belief: <mark class="m-method" data-t="METHOD/IDEA">force can stay an input; the real problems are "the policy won't learn force" and "there's no force sensor"</mark>. FACTR uses a vision-blur curriculum to blur vision early and push gradients toward the force encoder (an intervention at the learning-dynamics level); FACTR 2 goes further, letting <b>commodity arms estimate external force sensorlessly</b>, driving the "having a force signal" barrier to near zero. It works on "data / training / sensing," not the controller.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="divzh"><span class="lab mono"><span data-lang="zh">為什麼會分成兩條路?</span><span data-lang="en">Why two paths?</span></span>
+      <p data-lang="zh" style="margin-top:8px">兩組的起點不同就注定了路線:SJTU 從<b>接觸豐富的家事任務</b>(削皮、擦、刮)出發,這些任務「力該往哪個方向施」很明確,所以自然走向<b>混合力位控制</b>的顯式結構。CMU 從<b>低成本遙操作 + 通用模仿學習</b>(GELLO/ALOHA 傳統)出發,手上是<b>粗糙的關節力矩</b>而非乾淨 F/T,所以問題被框成「怎麼讓大 policy 別忽略這個吵訊號」+「怎麼免費拿到它」。<span class="add">[導讀補充] 這是我的歸納,非論文明述。</span></p>
+      <p data-lang="en" style="margin-top:8px">Their starting points predestined the paths: SJTU starts from <b>contact-rich household tasks</b> (peeling, wiping, scraping) where "which direction force should go" is clear, so it naturally moves toward the explicit structure of <b>hybrid force-position control</b>. CMU starts from <b>low-cost teleop + generalist imitation learning</b> (the GELLO/ALOHA lineage), holding <b>coarse joint torque</b> rather than a clean F/T signal, so the problem is framed as "how to stop a big policy from ignoring this noisy signal" + "how to get it for free." <span class="add">[guide note] my inference, not stated in the papers.</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 CONVERGENCE ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Convergence &amp; Tension</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">大家都在解的隱藏子問題:「我現在有接觸嗎?」</span><span data-lang="en">The hidden sub-problem everyone solves: "am I in contact now?"</span></h3>
+        <p data-lang="zh">因為力只在接觸時有意義,<mark class="m-method" data-t="METHOD/IDEA">「偵測接觸階段」成了整串反覆出現的必要零件</mark>——只是每篇用不同方式做:</p>
+        <p data-lang="en">Because force only matters during contact, <mark class="m-method" data-t="METHOD/IDEA">"detecting the contact phase" becomes a recurring necessary component</mark>—each paper does it differently:</p>
+        <table>
+          <tr><th><span data-lang="zh">論文</span><span data-lang="en">Paper</span></th><th><span data-lang="zh">怎麼知道「在接觸」</span><span data-lang="en">How it knows "in contact"</span></th></tr>
+          <tr><td class="pkey">ForceMimic</td><td><span data-lang="zh">硬門檻(6N)切換控制原語</span><span data-lang="en">hard threshold (6N) switches control primitive</span></td></tr>
+          <tr><td class="pkey">FoAR</td><td><span data-lang="zh"><b>學習</b>未來接觸機率 \(\phi\in[0,1]\)</span><span data-lang="en"><b>learned</b> future-contact probability \(\phi\in[0,1]\)</span></td></tr>
+          <tr><td class="pkey">FACTR 2</td><td><span data-lang="zh">\(\lVert\hat\tau_{ext}\rVert_1\) + 遲滯門檻切 free/接觸前/接觸</span><span data-lang="en">\(\lVert\hat\tau_{ext}\rVert_1\) + hysteresis into free/pre-/contact</span></td></tr>
+          <tr><td class="pkey">Force Policy</td><td><span data-lang="zh">用環境剛度(Interaction Frame)隱式界定受限方向</span><span data-lang="en">uses environmental stiffness (Interaction Frame) to implicitly define constrained directions</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">從<b>硬門檻</b>→<b>學習機率</b>→<b>物理幾何</b>,可以看到「接觸偵測」本身也在被逐步做得更聰明。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">From <b>hard threshold</b> → <b>learned probability</b> → <b>physical geometry</b>, contact detection itself is being made progressively smarter.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">最有意思的正面對撞:ForceMimic vs FACTR</span><span data-lang="en">The most interesting head-on clash: ForceMimic vs FACTR</span></h3>
+        <p data-lang="zh">兩篇<mark class="m-result" data-t="RESULT/EVIDENCE">得到同一個發現</mark>——「把力當原始輸入,效果最差」——卻開出<mark class="m-assume" data-t="ASSUMPTION/CLAIM">完全相反的處方</mark>:</p>
+        <p data-lang="en">Both reach the <mark class="m-result" data-t="RESULT/EVIDENCE">same finding</mark>—"force as raw input is worst"—yet prescribe <mark class="m-assume" data-t="ASSUMPTION/CLAIM">opposite fixes</mark>:</p>
+        <table>
+          <tr><th></th><th class="sj">ForceMimic</th><th class="cm">FACTR</th></tr>
+          <tr><td><span data-lang="zh">診斷</span><span data-lang="en">Diagnosis</span></td><td colspan="2" style="text-align:center"><span data-lang="zh">力當輸入 → 沒學好</span><span data-lang="en">force as input → not learned well</span></td></tr>
+          <tr><td><span data-lang="zh">處方</span><span data-lang="en">Fix</span></td><td><span data-lang="zh">改讓力當<b>輸出</b> + 混合控制</span><span data-lang="en">make force an <b>output</b> + hybrid control</span></td><td><span data-lang="zh">力<b>仍當輸入</b>,改訓練流程逼它學</span><span data-lang="en">keep force as <b>input</b>, change training to force learning</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">這正是「控制派 vs 訓練派」哲學差異的縮影。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">This is a microcosm of the "control school vs training school" divide.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">取得力的趨勢</span><span data-lang="en">Trend in getting force</span></span>
+        <span data-lang="zh"><b>越來越便宜</b>:F/T 感測器(FoAR / Force Policy)→ 手持捕捉裝置(ForceMimic)→ 粗糙關節力矩(FACTR)→ <b>免感測器學習估計</b>(FACTR 2)。降低「擁有力訊號」的門檻,是這串的暗線。</span>
+        <span data-lang="en"><b>Ever cheaper</b>: F/T sensor (FoAR / Force Policy) → handheld capture rig (ForceMimic) → coarse joint torque (FACTR) → <b>sensorless learned estimation</b> (FACTR 2). Lowering the barrier to "having a force signal" is a hidden throughline.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">共用地基</span><span data-lang="en">Shared substrate</span></span>
+        <span data-lang="zh">SJTU 三篇都建在 <b>RISE / RISE-2</b>(3D 點雲視覺)+ <b>Diffusion Policy</b> 上;CMU 兩篇建在 <b>ACT / flow-matching</b> 遙操作模仿學習上。骨幹選擇也分兩派。</span>
+        <span data-lang="en">The three SJTU papers build on <b>RISE / RISE-2</b> (3D point-cloud vision) + <b>Diffusion Policy</b>; the two CMU papers build on <b>ACT / flow-matching</b> teleop imitation. Even backbone choices split along the two lines.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 05 OPEN PROBLEMS ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Open Problems Across the Line</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">整條線共同的坑</span><span data-lang="en">Pitfalls shared by the whole line</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>評測都很窄</b>:清一色 <mark class="m-limit" data-t="LIMITATION/FUTURE">3–5 個真機任務、每任務 10–20 次、常無誤差棒</mark>。整個子領域的統計效力都偏弱,跨物體/跨任務泛化多半未測。</li>
+          <li data-lang="en"><b>Evaluations are all narrow</b>: uniformly <mark class="m-limit" data-t="LIMITATION/FUTURE">3–5 real-robot tasks, 10–20 trials each, often no error bars</mark>. The whole subfield is statistically weak; cross-object/task generalization mostly untested.</li>
+          <li data-lang="zh"><b>沒有對上經典力控</b>:幾乎都只跟自己的 vision-only / force-concat 變體比,<mark class="m-limit" data-t="LIMITATION/FUTURE">很少正面對決 impedance / compliance / hybrid 傳統控制</mark>——「學習」相對「經典控制」到底贏在哪,不清楚。</li>
+          <li data-lang="en"><b>No head-to-head vs classical force control</b>: nearly all compare only to their own vision-only / force-concat variants, <mark class="m-limit" data-t="LIMITATION/FUTURE">rarely against impedance / compliance / hybrid classical control</mark>—so where "learning" actually beats "classical control" is unclear.</li>
+          <li data-lang="zh"><b>功勞歸屬糾纏</b>:硬體(更好的力示範)vs 方法(curriculum / gating / IF)各貢獻多少,常沒被拆乾淨(FACTR 自承)。</li>
+          <li data-lang="en"><b>Entangled credit</b>: how much comes from hardware (better force demos) vs the method (curriculum / gating / IF) is often not disentangled (FACTR admits this).</li>
+          <li data-lang="zh"><b>依賴特定條件</b>:Force Policy 依賴<mark class="m-limit" data-t="LIMITATION/FUTURE">閉源 Gemini 3 Pro</mark> 分類 + 高階硬體;NEXT 需<mark class="m-limit" data-t="LIMITATION/FUTURE">逐台手臂重訓</mark>;多篇有一堆手調門檻。</li>
+          <li data-lang="en"><b>Condition-dependent</b>: Force Policy depends on <mark class="m-limit" data-t="LIMITATION/FUTURE">closed-source Gemini 3 Pro</mark> + high-end hardware; NEXT needs <mark class="m-limit" data-t="LIMITATION/FUTURE">per-arm retraining</mark>; several rely on many hand-tuned thresholds.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 這條線的犀利問題</span><span data-lang="en">Sharp questions for a reading group</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>公平對決</b>:把 SJTU 的 Interaction-Frame 混合控制,和 CMU 的 curriculum+sensorless,放到<b>同一組任務與硬體</b>上比,誰贏?兩派能不能合體(便宜力估計 + 顯式力位分解)?</li>
+          <li data-lang="en"><b>A fair duel</b>: put SJTU's Interaction-Frame hybrid control and CMU's curriculum+sensorless on the <b>same tasks and hardware</b>—who wins? Can the two combine (cheap force estimation + explicit force-position decomposition)?</li>
+          <li data-lang="zh"><b>接觸偵測的上限</b>:硬門檻 / 學習 \(\phi\) / 剛度幾何,哪種在雜亂真實接觸下最穩?錯誤的接觸判斷會怎麼連鎖污染下游?</li>
+          <li data-lang="en"><b>Ceiling of contact detection</b>: hard threshold / learned \(\phi\) / stiffness geometry—which is most robust under messy real contact? How do wrong contact calls cascade downstream?</li>
+          <li data-lang="zh"><b>vs 經典控制</b>:對 peg-insertion 這種老問題,這些學習法真的贏過調好的 impedance 控制嗎?贏在泛化還是贏在精度?</li>
+          <li data-lang="en"><b>vs classical control</b>: on an old problem like peg insertion, do these learning methods actually beat a well-tuned impedance controller? Win on generalization or on precision?</li>
+          <li data-lang="zh"><b>免感測器的邊界</b>:NEXT 的自監督力估計,在磨損、負載變化、跨機型時會漂移多少?能不能免重訓遷移?</li>
+          <li data-lang="en"><b>Limits of sensorless</b>: how much does NEXT's self-supervised force estimate drift under wear, payload change, cross-model? Can it transfer without retraining?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">別過度外推</span><span data-lang="en">Don't over-extrapolate</span></div>
+        <span data-lang="zh">這串在<b>接觸豐富、準靜態、家事尺度</b>的任務上很有說服力;但別把它讀成「力覺操作已解決」——動態、高速、大變形、長程任務基本都沒被觸及。</span>
+        <span data-lang="en">This line is convincing on <b>contact-rich, quasi-static, household-scale</b> tasks; but don't read it as "force manipulation is solved"—dynamic, high-speed, large-deformation, long-horizon tasks are largely untouched.</span>
+      </div>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">回扣 Karcini</span><span data-lang="en">Back to Karcini</span></span>
+        <span data-lang="zh">Karcini 說機器人需要「接地」機制;這 5 篇正是把其中<b>「力」這一格</b>做深。但其他格(具身 retargeting、世界模型、獎勵接地)在這串裡幾乎沒被碰——這串只是那張大圖的一角。</span>
+        <span data-lang="en">Karcini says robots need "grounding" mechanisms; these 5 papers deepen the <b>"force" cell</b> of that map. The other cells (embodiment retargeting, world models, reward grounding) are barely touched here—this line is one corner of that larger picture.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 06 TAKEAWAY ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">怎麼用這條線</span><span data-lang="en">How to use this line</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>要做接觸豐富操作</b>:先問自己站哪派——手上有乾淨 F/T 且任務力向明確 → 學 SJTU 的顯式<b>混合力位 / Interaction Frame</b>;只有廉價手臂、想走通用模仿學習 → 學 CMU 的 <b>sensorless 力 + curriculum / 接觸上採樣</b>。</li>
+          <li data-lang="en"><b>Building contact-rich manipulation</b>: first pick a camp—clean F/T and clear task force directions → adopt SJTU's explicit <b>hybrid force-position / Interaction Frame</b>; only a cheap arm and a generalist-IL goal → adopt CMU's <b>sensorless force + curriculum / contact up-sampling</b>.</li>
+          <li data-lang="zh"><b>可直接借的零件</b>:接觸機率 gating(FoAR)、力當輸出+混合控制(ForceMimic)、免感測器力估計(NEXT)、接觸段上採樣(FIRST)——這些都是模組化、可拆下來用的技巧。</li>
+          <li data-lang="en"><b>Reusable parts</b>: contact-probability gating (FoAR), force-as-output + hybrid control (ForceMimic), sensorless force estimation (NEXT), contact-segment up-sampling (FIRST)—all modular tricks you can lift out.</li>
+          <li data-lang="zh"><b>最值得做的下一步</b>:一個把兩派合體的 baseline(便宜力估計 → Interaction-Frame 混合控制),並第一次認真對上經典 impedance 控制。</li>
+          <li data-lang="en"><b>Highest-value next step</b>: a baseline combining both camps (cheap force estimation → Interaction-Frame hybrid control), and the first serious comparison against classical impedance control.</li>
+        </ul>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">同一個問題(力稀疏又吵),兩種世界觀:<b class="sj">SJTU</b> 相信「把力用對地方」靠更好的<b>控制結構</b>,<b class="cm">CMU</b> 相信「讓 policy 學會力」靠更好的<b>訓練與感測</b>。兩條線都對了一半——真正的通用接觸操作,大概需要它們合起來。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">One problem (force is sparse &amp; noisy), two worldviews: <b class="sj">SJTU</b> believes "use force in the right place" via better <b>control structure</b>; <b class="cm">CMU</b> believes "make the policy learn force" via better <b>training &amp; sensing</b>. Each line is half right—general contact-rich manipulation will likely need both.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">單篇導讀</span><span data-lang="en">Individual guides</span></span>
+        <p style="font-size:13px;margin:6px 0 0;line-height:1.9">
+          <a class="backlink" href="Liu2024_ForceMimic.html">→ ForceMimic</a><br>
+          <a class="backlink" href="He2025_FoAR.html">→ FoAR</a><br>
+          <a class="backlink" href="Fang2026_ForcePolicy.html">→ Force Policy</a><br>
+          <a class="backlink" href="Liu2025_FACTR.html">→ FACTR</a><br>
+          <a class="backlink" href="Oh2026_FACTR2.html">→ FACTR 2</a><br>
+          <a class="backlink" href="Karcini2026_RobotsNeedMore.html">→ Robots Need More (umbrella)</a><br>
+          <a class="backlink" href="index.html">← 回論文庫首頁 / back to library</a>
+        </p>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁生成方式</span><span data-lang="en">How this was made</span></span>
+        <span data-lang="zh">由 5 篇單篇導讀的摘要綜合而成(paper-reading-guide skill)。標 <span class="add">[導讀補充]</span> 者為導讀者推論。</span>
+        <span data-lang="en">Synthesized from the 5 individual guides' digests (paper-reading-guide skill). Items marked <span class="add">[guide note]</span> are the author's inference.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">SYNTHESIS · Force-Aware Contact-Rich Manipulation · 5 papers, 2 lines · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en'); wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  btns.forEach(b=>b.onclick=()=>{const i=+b.dataset.p; btns.forEach((x,k)=>x.classList.toggle('on',k===i)); pages.forEach((p,k)=>p.classList.toggle('on',k===i)); window.scrollTo({top:0,behavior:'smooth'});});
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [{left:"$$",right:"$$",display:true},{left:"\\[",right:"\\]",display:true},{left:"\\(",right:"\\)",display:false}],
+      throwOnError:false
+    });
+  });
+</script>

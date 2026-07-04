@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Force Policy — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Force Policy: Learning Hybrid Force-Position Control Policy under Interaction Frame for Contact-Rich Manipulation","authors":"Hongjie Fang, Shirun Tang, Mingyu Mei, Haoxiang Qin, Zihao He, Jingjing Chen, Ying Feng, Chenxi Wang, Wanxi Liu, Zaixing He, Cewu Lu, Shiquan Wang","year":"2026","venue":"arXiv preprint (cs.RO)","tags":["Force-Aware Manipulation","Contact-Rich Manipulation","Hybrid Force-Position Control","Imitation Learning","Interaction Frame","Vision-Force Policy"],"tldr":"仿照人類「視覺管全局、力覺管局部」的分工,提出物理奠基的 Interaction Frame 與 global-local 雙頻 vision-force 策略,用高頻力回饋做 hybrid force-position 控制,在多個接觸密集任務上顯著超越強力基線。","tldr_en":"Inspired by the human split of labor—vision guides the global plan, force governs local contact—it introduces a physically grounded Interaction Frame and a global-local dual-frequency vision-force policy that does hybrid force-position control, beating strong baselines across contact-rich tasks."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:96px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">人類做「接觸密集(contact-rich)」操作時有清楚分工:<b>視覺管全局</b>(去哪、怎麼對齊),一旦接觸就靠<b>高頻力回饋管局部</b>(施力、順從、移動)。本文把這套組織方式搬進機器人:提出物理奠基的 <mark class="m-method" data-t="METHOD/IDEA">Interaction Frame(IF,互動座標系)</mark> 明確表達接觸結構,並設計 <mark class="m-method" data-t="METHOD/IDEA">Force Policy</mark>——一個 global vision policy(5Hz)+ local force policy(50Hz)的<b>雙頻 vision-force 策略</b>,用 hybrid force-position control 穩定接觸。真實機器人實驗<mark class="m-result" data-t="RESULT/EVIDENCE">全面勝過強力 vision-only 與 force-aware 基線</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Humans split labor in contact-rich manipulation: <b>vision handles the global plan</b> (where to go, how to align), and once contact happens, <b>high-frequency force feedback governs the local interaction</b> (apply force, yield, move). This paper ports that organization into robots: a physically grounded <mark class="m-method" data-t="METHOD/IDEA">Interaction Frame (IF)</mark> makes contact structure explicit, and <mark class="m-method" data-t="METHOD/IDEA">Force Policy</mark>—a <b>dual-frequency vision-force policy</b> pairing a global vision policy (5Hz) with a local force policy (50Hz)—stabilizes contact via hybrid force-position control. Real-robot experiments <mark class="m-result" data-t="RESULT/EVIDENCE">beat strong vision-only and force-aware baselines across the board</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Fang2026/fig1_concept.png" alt="Figure 1 concept">
+        <figcaption data-lang="zh"><b>Fig.1</b> 靈感來源:以插 EV 充電槍為例的人類「global-local」組織。<b>Global Decision</b>——視覺比力更重要、與局部動態解耦、形成全局脈絡;<b>Local Interaction</b>——用全局脈絡明確建立接觸結構;<b>Corrective Interaction</b>——用高頻力回饋修正結構。右側對應本文設計:<b>Global Vision Policy(5Hz)+ Local Force Policy(50Hz)→ Hybrid Force-Position Control</b>。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> The inspiration: the human "global-local" organization, illustrated on plugging in an EV charger. <b>Global Decision</b>—vision matters more than force, disentangled from local dynamics, forming a global context; <b>Local Interaction</b>—contact structure is explicitly formed using that context; <b>Corrective Interaction</b>—high-frequency force feedback corrects the structure. Right: the paper's design—<b>Global Vision Policy (5Hz) + Local Force Policy (50Hz) → Hybrid Force-Position Control</b>.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 學習式策略常把感知、規劃、接觸微調<mark class="m-problem" data-t="PROBLEM/GAP">全揉進一個單體(monolithic)網路</mark>,在「擴大模型提升泛化」與「維持高頻穩定接觸」之間顧此失彼;控制派則<mark class="m-problem" data-t="PROBLEM/GAP">假設已知任務結構、或只學控制器參數</mark>而非結構本身。</li>
+          <li data-lang="en"><b>Problem</b> — Learning policies often <mark class="m-problem" data-t="PROBLEM/GAP">fold perception, planning, and contact refinement into one monolithic net</mark>, trading global generalization against a stable high-frequency contact loop; control-centric methods instead <mark class="m-problem" data-t="PROBLEM/GAP">assume a known task structure or learn only controller parameters</mark>, not the structure itself.</li>
+          <li data-lang="zh"><b>結構</b> — 提出物理奠基的 <mark class="m-method" data-t="METHOD/IDEA">Interaction Frame</mark>:用環境剛度(stiffness)當幾何的代理,把互動空間分成「受約束(force 控)」與「可運動(position 控)」子空間;並給出從非理想真實示範中<b>直接還原 IF</b> 的方法。</li>
+          <li data-lang="en"><b>Structure</b> — A physically grounded <mark class="m-method" data-t="METHOD/IDEA">Interaction Frame</mark>: using environmental stiffness as a proxy for geometry, it splits the interaction space into a constrained (force-controlled) and an admissible-motion (position-controlled) subspace, plus a way to <b>recover IF directly from non-ideal real demonstrations</b>.</li>
+          <li data-lang="zh"><b>策略</b> — <mark class="m-method" data-t="METHOD/IDEA">Force Policy</mark>:global vision policy(RISE-2,5Hz)在自由空間導航;一接觸,local force policy(50Hz)估 IF、輸出 selection mask + reference wrench,做 <b>hybrid force-position control</b>;再用 DTW 對齊的<b>非同步排程器</b>把兩頻率縫在一起。</li>
+          <li data-lang="en"><b>Policy</b> — <mark class="m-method" data-t="METHOD/IDEA">Force Policy</mark>: a global vision policy (RISE-2, 5Hz) navigates free space; on contact a local force policy (50Hz) estimates IF and emits a selection mask + reference wrench for <b>hybrid force-position control</b>, stitched together by a <b>DTW-aligned asynchronous scheduler</b>.</li>
+          <li data-lang="zh"><b>結果</b> — 三個真實接觸密集任務上<mark class="m-result" data-t="RESULT/EVIDENCE">成功率全面領先</mark>(如 EV 充電「插入」階段 65% vs 基線 0–10%);力調控更貼近示範、對未見物體<mark class="m-result" data-t="RESULT/EVIDENCE">泛化更好</mark>;IF 還原失敗率僅 3.6%。</li>
+          <li data-lang="en"><b>Results</b> — On three real contact-rich tasks it <mark class="m-result" data-t="RESULT/EVIDENCE">leads across the board</mark> (e.g., EV-charger "plug in" 65% vs 0–10% for baselines); force is tracked closer to demos, with <mark class="m-result" data-t="RESULT/EVIDENCE">better generalization to unseen objects</mark>; IF recovery failure rate is just 3.6%.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">古典機器人用 <mark class="m-method" data-t="METHOD/IDEA">compliant control</mark>(impedance、admittance、hybrid force-position control)處理接觸,但多半<mark class="m-problem" data-t="PROBLEM/GAP">依賴手調參數與相對準確的環境假設</mark>,在非結構化場景不夠穩健。學習式方法(RL、imitation)改由資料學互動策略,並引入力/觸覺/音訊等模態,但仍面臨兩難。</p>
+        <p data-lang="en">Classical robotics uses <mark class="m-method" data-t="METHOD/IDEA">compliant control</mark> (impedance, admittance, hybrid force-position) for contact, but mostly <mark class="m-problem" data-t="PROBLEM/GAP">relies on hand-tuned parameters and reasonably accurate environment assumptions</mark>, limiting robustness in unstructured settings. Learning methods (RL, imitation) instead learn interaction from data with force/tactile/audio modalities, yet the dilemma remains.</p>
+        <p data-lang="zh">近期 <b>force-aware</b> 策略把力當觀測餵入(ForceVLA、TA-VLA)、或用 contact-phase 加權(FoAR)、或用 slow-fast 設計(RDP)。控制結構還原方面,經典 <mark class="m-method" data-t="METHOD/IDEA">Task Frame Formalism(TFF)</mark> 提供力-運動子空間分解,但假設已知幾何與剛性接觸。本文站在這兩條線的交會點:<b>把「該學的結構」變明確</b>,再圍繞它蓋一個 global-local 策略。</p>
+        <p data-lang="en">Recent <b>force-aware</b> policies feed force as an observation (ForceVLA, TA-VLA), weight it by contact phase (FoAR), or use slow-fast designs (RDP). On control-structure recovery, the classic <mark class="m-method" data-t="METHOD/IDEA">Task Frame Formalism (TFF)</mark> gives a force-motion subspace decomposition but assumes known geometry and rigid contact. This paper sits at their intersection: <b>make the structure-to-be-learned explicit</b>, then build a global-local policy around it.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的定位不是「又一個更大的 VLA」,而是<b>結構先行</b>:先問「接觸任務真正要控制的自由度是什麼」,把它形式化成 IF,再讓策略去<b>預測這個結構</b>(而不只是動作)。這與純粹「把力塞進觀測、端到端硬學」的路線相反——它主張<b>分工 + 明確的控制介面</b>比單體大網路更適合接觸物理。</p>
+          <p data-lang="en" style="margin-top:6px">Its stance is not "yet another bigger VLA" but <b>structure-first</b>: ask what DoFs a contact task truly needs to control, formalize that as the IF, and have the policy <b>predict this structure</b> (not just actions). This is the opposite of "stuff force into observations and learn end-to-end"—it argues that <b>division of labor + an explicit control interface</b> suits contact physics better than a monolithic net.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">帶走的不只是「成功率更高」,而是這幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What to take away is not "higher success rates" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">視覺與力,各司其職、各在其頻率。</b> 視覺負責全局(低頻 5Hz),力負責局部(高頻 50Hz);<mark class="m-assume" data-t="ASSUMPTION/CLAIM">在自由空間力訊號多半是噪聲</mark>,硬塞進全局決策反而有害——因此把兩者<b>解耦</b>而非融合成單體。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Vision and force: separate roles, separate rates.</b> Vision owns the global scale (low-freq 5Hz), force owns the local scale (high-freq 50Hz); <mark class="m-assume" data-t="ASSUMPTION/CLAIM">in free space force is mostly noise</mark>, and forcing it into global decisions hurts—so the two are <b>decoupled</b>, not fused into a monolith.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">用「物理」定義互動座標系。</b> 不靠已知幾何(TFF 的假設),而用<b>環境剛度的主軸</b>當幾何代理:剛度大的方向=約束(force 控)、剛度 \(\approx 0\) 的方向=可動(position 控)。這讓 IF 能在非結構化、未知幾何下被還原。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Define the interaction frame from physics.</b> Not from known geometry (TFF's assumption) but from the <b>principal axes of environmental stiffness</b> as a geometry proxy: high-stiffness directions = constraint (force control), near-zero stiffness = admissible motion (position control). This lets IF be recovered in unstructured, unknown-geometry settings.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">從「功率」拆出理想 twist / wrench。</b> 真實示範非理想,觀測的力與運動含寄生分量。用功率 \(P=W^\top\xi\) 拆成<b>耗散殘差</b>(摩擦,twist 主導)與<b>結構殘差</b>(剛度,wrench 主導),據此正交化還原 \(\xi^*\) 或 \(W^*\)。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Extract ideal twist/wrench from power.</b> Real demos are non-ideal; observed force/motion carry parasitic parts. Decompose power \(P=W^\top\xi\) into a <b>dissipative residual</b> (friction, twist-dominant) and a <b>structural residual</b> (stiffness, wrench-dominant), and orthogonalize to recover \(\xi^*\) or \(W^*\) accordingly.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">讓策略「預測結構」,而非只預測動作。</b> local policy 輸出 <b>IF + selection mask + reference wrench + 動作 chunk</b>,直接對接 hybrid force-position 控制器。selection mask 還一石二鳥,<mark class="m-result" data-t="RESULT/EVIDENCE">兼當 global↔local 的隱式 router</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Have the policy "predict structure," not just actions.</b> The local policy outputs <b>IF + selection mask + reference wrench + an action chunk</b>, feeding a hybrid force-position controller directly. The mask does double duty as an <mark class="m-result" data-t="RESULT/EVIDENCE">implicit global↔local router</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">模型無關的延遲補償很關鍵。</b> 雙頻非同步會產生 chunk 跳變;用 <b>DTW 波點丟棄(waypoint dropout)</b> 做延遲對齊、加上加速度連續規劃,<mark class="m-result" data-t="RESULT/EVIDENCE">減少 jerk、提升力感測保真度</mark>,且不綁定任何模型架構。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Model-agnostic latency compensation matters.</b> Dual-rate asynchrony causes chunk jumps; a <b>DTW waypoint-dropout</b> aligns for latency, and acceleration-continuous planning <mark class="m-result" data-t="RESULT/EVIDENCE">cuts jerk and improves force-sensing fidelity</mark>—without tying to any model architecture.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Force Policy: Learning Hybrid Force-Position Control Policy under Interaction Frame for Contact-Rich Manipulation</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Fang, Tang, Mei (equal) · … · Lu, Wang (corr.)</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Noematrix · Flexiv · SJTU · Zhejiang Univ. · Shanghai Innovation Institute</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2026 · arXiv:2602.22088 (cs.RO)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Contact-Rich Manipulation</span>
+          <b><span data-lang="zh">網站</span><span data-lang="en">Site</span></b><span>force-policy.github.io</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「接觸操作 = 端到端硬學」重新定義成「<b>明確的接觸結構 + 分頻分工控制</b>」。IF 提供可還原、可預測的控制介面,讓 visuomotor 的泛化與 force control 的精度<b>同時</b>拿到——對工廠裝配、家務等需要精準施力的任務是實用突破。</span>
+        <span data-lang="en">Reframes "contact manipulation = end-to-end learning" as "<b>explicit contact structure + rate-split division of labor</b>." IF gives a recoverable, predictable control interface so you get visuomotor generalization <b>and</b> force-control precision at once—a practical step for factory assembly and household tasks needing precise force.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Interaction Frame</span><span class="chip">Hybrid Force-Position</span>
+          <span class="chip">Selection Mask</span><span class="chip">RISE-2 (global)</span>
+          <span class="chip">DTW scheduler</span><span class="chip">Diffusion / MIP head</span>
+        </div>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">任務數量</span><span data-lang="en">few tasks</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">LLM 依賴</span><span data-lang="en">LLM reliance</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">古典 compliant control</span><span data-lang="en">Classic compliant control</span></b><br>(impedance / admittance / hybrid)</td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">手調參數 + 需相對準確的環境/接觸模型</mark>;非結構化場景不穩。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Hand-tuned params + needs a fairly accurate environment/contact model</mark>; brittle in unstructured settings.</span></td></tr>
+          <tr><td><b><span data-lang="zh">單體 vision-force 策略</span><span data-lang="en">Monolithic vision-force policies</span></b><br>(ForceVLA, TA-VLA)</td><td><span data-lang="zh">把力當觀測直接串接;<mark class="m-problem" data-t="PROBLEM/GAP">自由空間力是噪聲,污染全局決策</mark>,有時甚至比純視覺 backbone 更差。</span><span data-lang="en">Concatenate force as an observation; <mark class="m-problem" data-t="PROBLEM/GAP">free-space force is noise that pollutes global decisions</mark>, sometimes underperforming the vision-only backbone.</span></td></tr>
+          <tr><td><b><span data-lang="zh">低頻 force-aware</span><span data-lang="en">Low-freq force-aware</span></b><br>(FoAR)</td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">反應頻率不足</mark>,難處理快速接觸瞬變。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Insufficient reactivity</mark> for fast contact transients.</span></td></tr>
+          <tr><td><b>Slow-fast (RDP)</b></td><td><span data-lang="zh">低階 force decoding <mark class="m-problem" data-t="PROBLEM/GAP">直接依附高階 latent chunk</mark>;高階誤判無接觸而實際接觸時,低階把 OOD 力訊號對映成錯誤動作,難以修正。</span><span data-lang="en">Low-level force decoding is <mark class="m-problem" data-t="PROBLEM/GAP">tied to the high-level latent chunk</mark>; if the high level assumes no contact but contact occurs, the low level maps OOD force to wrong actions and can't correct.</span></td></tr>
+          <tr><td><b>TFF / <span data-lang="zh">結構還原</span><span data-lang="en">structure recovery</span></b><br>(ACP, ForceMimic…)</td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">假設已知幾何/剛性接觸</mark>,或只學控制器參數、只沿單一方向做力控,無法涵蓋多軸約束(如 peg insertion)。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Assume known geometry/rigid contact</mark>, or learn only controller params / single-axis force control—can't cover multi-axis constraints (e.g., peg insertion).</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">兩個核心問題:<b>(1) 如何實現 global-local 組織,讓全局引導能泛化、局部互動能穩定?(2) 如何把任務的互動結構明確表達,使其能跨不同接觸技能遷移?</b></p>
+        <p data-lang="en" style="margin-top:14px">Two core questions: <b>(1) How to realize a global-local organization so global guidance generalizes while local interaction stays stable? (2) How to represent a task's interaction structure explicitly so it transfers across contact skills?</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,Force Policy 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how Force Policy fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">Force Policy 如何補</span><span data-lang="en">How Force Policy fills it</span></th></tr>
+          <tr>
+            <td><b>ForceVLA / TA-VLA</b><br><small><span data-lang="zh">單體、力當觀測</span><span data-lang="en">monolithic, force as obs.</span></small></td>
+            <td><span data-lang="zh">力污染全局決策。</span><span data-lang="en">Force pollutes global decisions.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">解耦 global(僅視覺)/ local(力)</mark>,全局不被噪聲力干擾。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Decouple global (vision-only) from local (force)</mark>; the global stays insulated from noisy force.</span></td>
+          </tr>
+          <tr>
+            <td><b>FoAR</b></td>
+            <td><span data-lang="zh">頻率太低。</span><span data-lang="en">Too low frequency.</span></td>
+            <td><span data-lang="zh">local force policy <mark class="m-method" data-t="METHOD/IDEA">跑 50Hz</mark>,足以反應接觸瞬變。</span><span data-lang="en">The local force policy runs at <mark class="m-method" data-t="METHOD/IDEA">50Hz</mark>, fast enough for transients.</span></td>
+          </tr>
+          <tr>
+            <td><b>RDP</b></td>
+            <td><span data-lang="zh">快慢層耦合,難修正錯誤高階意圖。</span><span data-lang="en">Fast-slow coupling; hard to fix wrong high-level intent.</span></td>
+            <td><span data-lang="zh">local 以全局<b>特徵</b>為條件但<mark class="m-method" data-t="METHOD/IDEA">獨立決策</mark>;global 可即插即換(任意 visuomotor / VLA)。</span><span data-lang="en">Local is conditioned on a global <b>feature</b> yet <mark class="m-method" data-t="METHOD/IDEA">decides independently</mark>; the global is plug-and-play (any visuomotor/VLA).</span></td>
+          </tr>
+          <tr>
+            <td><b>TFF / ACP / ForceMimic</b></td>
+            <td><span data-lang="zh">需已知幾何 / 只單軸力控。</span><span data-lang="en">Need known geometry / single-axis force only.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">用剛度定義 IF</mark>,支援多軸約束,並能從真實示範還原。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Define IF from stiffness</mark>, support multi-axis constraints, recoverable from real demos.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這裡的痛點分兩類:<b>「架構層」</b>(力與視覺該怎麼組織)與<b>「結構層」</b>(接觸的可控自由度怎麼表達)。本文的巧思是<b>用同一個 IF 同時解兩者</b>——IF 既是結構(給控制器的 selection mask/wrench),又天然導出 global↔local 的切換訊號。這種「一個表示打通結構與排程」的設計,是它比堆疊模組更優雅的地方。</p>
+          <p data-lang="en" style="margin-top:6px">The pains split in two: an <b>architecture layer</b> (how to organize force vs vision) and a <b>structure layer</b> (how to express a contact's controllable DoFs). The trick is to <b>solve both with one IF</b>—it is the structure (a selection mask/wrench for the controller) and it naturally yields the global↔local switching signal. "One representation unifying structure and scheduling" is why it's more elegant than stacking modules.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把「force-aware」都當同一回事。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「有用到力」不等於「用對力」</mark>:把力串進觀測(ForceVLA/TA-VLA)反而可能<b>輸給純視覺</b>;關鍵是承認力的<b>間歇性、隨接觸階段而變</b>的本質,只在接觸時、以高頻方式使用它。</span>
+        <span data-lang="en">Don't lump all "force-aware" methods together. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"Uses force" ≠ "uses force right"</mark>: concatenating force into observations (ForceVLA/TA-VLA) can <b>lose to vision-only</b>. The key is to respect force's <b>intermittent, regime-dependent</b> nature—use it only on contact, at high frequency.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">很多接觸任務(插頭、擰螺絲、刮膠)<b>沒有精準施力就必然失敗</b>——單靠視覺無法感知「壓多重、往哪頂」。把力控結構化,是讓機器人做「真正的接觸工作」而非只是「靠近並碰一下」的關鍵。</span>
+        <span data-lang="en">Many contact tasks (plugs, screws, scraping glue) <b>fail without precise force</b>—vision alone can't sense "how hard to press, which way to push." Structuring force control is what lets a robot do <b>real contact work</b> rather than just "approach and touch."</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">基線公平性</span><span data-lang="en">baseline fairness</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">IF 假設</span><span data-lang="en">IF assumptions</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">第一塊拼圖:Interaction Frame(物理視角)</span><span data-lang="en">Piece 1: the Interaction Frame (a physical view)</span></h3>
+        <p data-lang="zh">在互動點 \(p_I\) 用對稱剛度矩陣 \(\mathbf{K}_{\text{env}}(p_I)\) 描述局部環境反應。對其做<mark class="m-method" data-t="METHOD/IDEA">譜分解</mark>得主剛度 \(\lambda_i\) 與主軸 \(q_i\),把互動空間切成兩塊:</p>
+        <p data-lang="en">At interaction point \(p_I\), model the local environment response by a symmetric stiffness \(\mathbf{K}_{\text{env}}(p_I)\). Its <mark class="m-method" data-t="METHOD/IDEA">spectral decomposition</mark> yields principal stiffnesses \(\lambda_i\) and axes \(q_i\), splitting the interaction space into two:</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>約束子空間 \(\mathcal{U}\)</b>:高剛度 \(\lambda_i\gg 0\) 的方向 → 由<mark class="m-method" data-t="METHOD/IDEA">力控制(force control)</mark>。</li>
+          <li data-lang="en"><b>Constraint subspace \(\mathcal{U}\)</b>: high-stiffness \(\lambda_i\gg 0\) directions → governed by <mark class="m-method" data-t="METHOD/IDEA">force control</mark>.</li>
+          <li data-lang="zh"><b>可運動子空間 \(\mathcal{T}\)</b>:剛度 \(\lambda_i\approx 0\) 的方向 → 由<mark class="m-method" data-t="METHOD/IDEA">位置控制(position control)</mark>。</li>
+          <li data-lang="en"><b>Admissible-motion subspace \(\mathcal{T}\)</b>: near-zero stiffness \(\lambda_i\approx 0\) directions → governed by <mark class="m-method" data-t="METHOD/IDEA">position control</mark>.</li>
+        </ul>
+        <p data-lang="zh" style="margin-top:8px">關鍵一步:互動是<b>目標導向</b>的。引入 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">task intent \(\{\xi^*, \mathcal{W}^*\}\)</mark>——意圖 twist \(\xi^*\)(在 \(\mathcal{T}\) 內驅動運動)與意圖 wrench \(\mathcal{W}^*\)(頂住 \(\mathcal{U}\) 的約束)。把剛度主軸「錨定」到這些意圖上,即定義 IF:</p>
+        <p data-lang="en" style="margin-top:8px">Key step: interaction is <b>goal-directed</b>. Introduce a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">task intent \(\{\xi^*, \mathcal{W}^*\}\)</mark>—an intended twist \(\xi^*\) (driving motion within \(\mathcal{T}\)) and an intended wrench \(\mathcal{W}^*\) (pushing against the constraint \(\mathcal{U}\)). Anchoring the stiffness axes to these intents defines the IF:</p>
+        <div class="eq">$$\Sigma(p_I)\triangleq\Psi\big(\mathbf{K}_{\text{env}}(p_I),\,\xi^*(p_I),\,\mathcal{W}^*(p_I)\big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">具體:IF 的 <b>\(z\)-軸 = 主導 wrench 方向</b>;<b>\(x\)-軸 = 把 \(\xi^*\) 投影到 \(z\) 的正交平面</b>;退化情形(靜態壓持、共線螺旋)則以右手定則補齊。這保留了 TFF 的正交分解,卻用<b>環境順從性取代幾何先驗</b>——天生適合非結構化任務。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Concretely: the IF's <b>\(z\)-axis = the dominant wrench direction</b>; its <b>\(x\)-axis = \(\xi^*\) projected onto the plane orthogonal to \(z\)</b>; degenerate cases (static holding, collinear screwing) are completed by the right-hand rule. This keeps TFF's orthogonal decomposition but <b>replaces geometric priors with environmental compliance</b>—inherently suited to unstructured tasks.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Fang2026/fig2_interaction_frame.png" alt="Figure 2 interaction frame">
+        <figcaption data-lang="zh"><b>Fig.2</b> IF 在五個代表任務上的樣貌:(A) 拋光曲面、(B) 插孔、(C) 翻箱、(D) 擰螺絲、(E) 刮貼紙。<b>紅色 = 意圖 wrench \(\mathcal{W}^*\)(\(z\)-軸,受約束、力控)</b>;<b>綠色 = 意圖 twist \(\xi^*\)(\(x\)-軸,可運動、位控)</b>。注意 (B) 插孔的 \(\mathcal{W}^*=0\)(靠摩擦而非法向力),與其它任務對照,正說明「同樣的接觸,IF 未必一樣」。</figcaption>
+        <figcaption data-lang="en"><b>Fig.2</b> IF on five representative tasks: (A) polish a curve, (B) peg-in-hole, (C) flip a box, (D) tighten a screw, (E) scrape a sticker. <b>Red = intended wrench \(\mathcal{W}^*\) (\(z\)-axis, constrained, force-controlled)</b>; <b>green = intended twist \(\xi^*\) (\(x\)-axis, admissible, position-controlled)</b>. Note (B) has \(\mathcal{W}^*=0\) (friction rather than a normal force)—a contrast showing that "same contact" need not mean "same IF."</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">第二塊:從非理想示範還原 IF</span><span data-lang="en">Piece 2: recovering IF from non-ideal demos</span></h3>
+        <p data-lang="zh">理想剛性無摩擦接觸下,觀測 twist/wrench 與意圖完全對齊,功率為零:\(P=\mathcal{W}^\top\xi=0\)。但真實示範不理想——意圖 twist 會誘發沿其方向的<b>寄生 wrench</b> \(\mathcal{W}_c\),意圖 wrench 會誘發<b>寄生 twist</b> \(\xi_c\)。展開功率:</p>
+        <p data-lang="en">Under ideal rigid frictionless contact, observed twist/wrench align with intent and power is zero: \(P=\mathcal{W}^\top\xi=0\). Real demos are non-ideal—the intended twist induces a <b>parasitic wrench</b> \(\mathcal{W}_c\) along its direction, and the intended wrench induces a <b>parasitic twist</b> \(\xi_c\). Expanding power:</p>
+        <div class="eq">$$P=(\mathcal{W}^*+\mathcal{W}_c)^\top(\xi^*+\xi_c)=\mathcal{W}_c^\top\xi^*+\mathcal{W}^{*\top}\xi_c$$</div>
+        <p data-lang="zh">兩項對應不同物理來源:\(\mathcal{W}_c^\top\xi^*\) 是 \(\mathcal{T}\) 內的<mark class="m-method" data-t="METHOD/IDEA">耗散殘差</mark>(摩擦/黏滯,沿運動方向);\(\mathcal{W}^{*\top}\xi_c\) 是 \(\mathcal{U}\) 內的<mark class="m-method" data-t="METHOD/IDEA">結構殘差</mark>(剛度/順從變形,沿施力方向)。於是:</p>
+        <p data-lang="en">The two terms have distinct physical origins: \(\mathcal{W}_c^\top\xi^*\) is a <mark class="m-method" data-t="METHOD/IDEA">dissipative residual</mark> in \(\mathcal{T}\) (friction/viscous, along motion); \(\mathcal{W}^{*\top}\xi_c\) is a <mark class="m-method" data-t="METHOD/IDEA">structural residual</mark> in \(\mathcal{U}\) (stiffness/compliant deflection, along force). Hence:</p>
+        <div class="eq">$$\text{結構殘差主導 · structural-dominant:}\quad \xi^*=\xi-\text{Proj}_{\mathcal{W}}(\xi)$$</div>
+        <div class="eq">$$\text{耗散殘差主導 · dissipative-dominant:}\quad \mathcal{W}^*=\mathcal{W}-\text{Proj}_{\xi}(\mathcal{W})$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">也就是「哪個殘差主導,就用另一個量去正交化它」。判斷「哪個主導」的方式很務實:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">用 Gemini 3 Pro</mark> 讀初始畫面 + 任務描述,依高層語義分類主導功率來源,再套對應公式。<span class="add">[導讀補充] 這等於把一個難以量化的物理判斷,外包給多模態 LLM 的常識。</span></p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">I.e., "whichever residual dominates, orthogonalize it against the other quantity." Deciding "which dominates" is pragmatic: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">prompt Gemini 3 Pro</mark> with the initial frame + task description to classify the dominant power source semantically, then apply the matching formula. <span class="add">[guide note] This effectively outsources a hard-to-quantify physical judgment to a multimodal LLM's common sense.</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">四種任務模式 → selection mask</span><span data-lang="en">Four task modes → selection mask</span></h3>
+        <p data-lang="zh">依 IF 對齊後的 twist/wrench 特徵,把互動片段分成四類,對應到 hybrid control 的 selection mask \(S\in\{0,1\}^6\)(\(S_i=1\) 力控、\(S_i=0\) 位控),順序為 \([T_x,T_y,T_z,R_x,R_y,R_z]\):</p>
+        <p data-lang="en">By the IF-aligned twist/wrench characteristics, interaction patches fall into four modes, mapping to a hybrid-control selection mask \(S\in\{0,1\}^6\) (\(S_i=1\) force, \(S_i=0\) position), ordered \([T_x,T_y,T_z,R_x,R_y,R_z]\):</p>
+        <table>
+          <tr><th><span data-lang="zh">模式</span><span data-lang="en">Mode</span></th><th><span data-lang="zh">判據</span><span data-lang="en">Criterion</span></th><th>Selection mask \(S\)</th></tr>
+          <tr><td><b>Free</b></td><td><span data-lang="zh">無持續接觸 \(\lVert\mathcal{W}\rVert\approx 0\)</span><span data-lang="en">no contact, \(\lVert\mathcal{W}\rVert\approx 0\)</span></td><td class="mono">[0,0,0,0,0,0]</td></tr>
+          <tr><td><b>Surface</b></td><td><span data-lang="zh">單一法向約束 \(\lVert f_z\rVert\gg\lVert f_{xy}\rVert\)</span><span data-lang="en">one normal constraint \(\lVert f_z\rVert\gg\lVert f_{xy}\rVert\)</span></td><td class="mono">[0,0,1,0,0,0]</td></tr>
+          <tr><td><b>Insertion</b></td><td><span data-lang="zh">強摩擦各向異性 \(\lVert f_x\rVert\gg\lVert f_{yz}\rVert\)</span><span data-lang="en">strong friction anisotropy \(\lVert f_x\rVert\gg\lVert f_{yz}\rVert\)</span></td><td class="mono">[0,1,1,0,1,1]*</td></tr>
+          <tr><td><b>Rotation</b></td><td><span data-lang="zh">旋轉主導(如擰螺絲)\(\lVert\omega_z\rVert\gg 0,\ \lVert f_z\rVert\gg 0\)</span><span data-lang="en">rotation-dominant (screwing) \(\lVert\omega_z\rVert\gg 0,\ \lVert f_z\rVert\gg 0\)</span></td><td class="mono">[0,0,1,0,0,0]*</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted);margin-top:6px">* 理論上 insertion 的軸向平移/旋轉屬 \(\mathcal{T}\)、screw 只有軸向旋轉屬 \(\mathcal{T}\);但實務上仍對這些自由度加力/力矩控制,以應付高摩擦、防止卡死(jamming)。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted);margin-top:6px">* In theory insertion's axial translation/rotation lie in \(\mathcal{T}\), and screwing's only axial rotation is in \(\mathcal{T}\); in practice force/torque control is still applied to these DoFs to handle high friction and prevent jamming.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">第三塊:Force Policy 架構</span><span data-lang="en">Piece 3: the Force Policy architecture</span></h3>
+        <figure class="fig"><img src="figs/Fang2026/fig3_architecture.png" alt="Figure 3 architecture">
+          <figcaption data-lang="zh"><b>Fig.3</b> (左)Force Policy = <b>Global Vision Policy(5Hz)</b>(輸入 image/depth/pose,出全局動作與全局特徵 \(\phi\))+ <b>Local Force Policy(50Hz)</b>(輸入 wrist image、proprioceptive history、wrench,出 IF / selection mask / reference wrench / 局部動作)。(右)<b>Dual-Policy Asynchronous Scheduler</b>:Router 依 selection mask 切換 global/local,並用 <b>DTW chunk alignment</b> 丟棄過期波點、對齊執行流,交給非即時 hybrid force-position controller。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> (Left) Force Policy = a <b>Global Vision Policy (5Hz)</b> (image/depth/pose in; global action + global feature \(\phi\) out) + a <b>Local Force Policy (50Hz)</b> (wrist image, proprioceptive history, wrench in; IF / selection mask / reference wrench / local action out). (Right) The <b>Dual-Policy Asynchronous Scheduler</b>: a router switches global/local by the selection mask and uses <b>DTW chunk alignment</b> to drop stale waypoints and align the execution stream for a non-real-time hybrid force-position controller.</figcaption></figure>
+        <p data-lang="zh"><b>Local force policy \(\Pi_{\text{local}}\)</b>——像人的手沿桌緣滑動:接觸後不需精準視覺,只要全局脈絡 + 高頻 proprioception/力回饋:</p>
+        <p data-lang="en"><b>Local force policy \(\Pi_{\text{local}}\)</b>—like a finger sliding along a table edge: after contact you need no precise vision, just the global context plus high-frequency proprioception/force feedback:</p>
+        <div class="eq">$$a^{\text{local}}_t=\Pi_{\text{local}}\big(\Delta s_{t-T_o+1:t},\ \mathcal{W}_{t-T_o+1:t},\ \phi(I_{t'})\big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">其中 \(\phi(I_{t'})\) 是 global policy 在 \(t'\le t\) 更新的全局脈絡(<b>decouple 兩者的推論頻率</b>)。每個局部動作<b>顯式參數化力互動</b>:</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">where \(\phi(I_{t'})\) is the global context updated by the global policy at \(t'\le t\) (<b>decoupling their inference rates</b>). Each local action <b>explicitly parameterizes the force interaction</b>:</p>
+        <div class="eq">$$a^{\text{local}}_t\triangleq\big(\Sigma_{t+1},\ S_{t+1},\ \mathcal{W}^{\text{ref}}_{t+1},\ \Delta s_{t+1:t+T_a}\big)$$</div>
+        <p data-lang="zh"><b>Global vision policy \(\Pi_{\text{global}}\)</b> 用 <mark class="m-method" data-t="METHOD/IDEA">RISE-2</mark>(純 3D 視覺 visuomotor)實例化,自由空間直接出動作;接觸時交棒給 local,只提供全局特徵 \(\phi\)。<mark class="m-method" data-t="METHOD/IDEA">Router</mark> 不另設模組——直接<b>重用 local 預測的 selection mask</b> 當隱式路由:\(S\) 出現非零 → 切到力控;非預期的意外接觸不觸發 \(S\),控制權留在 global。local 內部:wrist image 經 ResNet、proprioception 經 GRU,皆以 \(\phi\) 做 FiLM 條件化,gated 融合後用 MIP head 去噪動作、MLP head 出 IF/wrench/mask。</p>
+        <p data-lang="en"><b>Global vision policy \(\Pi_{\text{global}}\)</b> is instantiated with <mark class="m-method" data-t="METHOD/IDEA">RISE-2</mark> (a 3D-vision visuomotor policy), acting directly in free space and handing off to local on contact—only supplying the global feature \(\phi\). The <mark class="m-method" data-t="METHOD/IDEA">router</mark> adds no module: it <b>reuses the local policy's predicted selection mask</b> as an implicit signal—non-zero \(S\) → switch to force control; unintended contacts don't trigger \(S\), so control stays global. Inside local: the wrist image goes through a ResNet and proprioception through a GRU, both FiLM-conditioned on \(\phi\), gated-fused, then a MIP head denoises the action and an MLP head outputs IF/wrench/mask.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">第四塊:雙頻非同步排程器(部署)</span><span data-lang="en">Piece 4: the dual-policy asynchronous scheduler (deployment)</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.85">
+          <li data-lang="zh"><b>非同步推論/執行</b>:多執行緒把推論與軌跡執行重疊,預先發起推論;兩策略輸出先<b>插值到統一 50Hz</b>,router 加 hysteresis 抑制切換抖動。</li>
+          <li data-lang="en"><b>Async inference/execution</b>: multi-threading overlaps inference with trajectory execution, launching inference preemptively; both outputs are <b>interpolated to a unified 50Hz</b>, and the router uses hysteresis to suppress switching jitter.</li>
+          <li data-lang="zh"><b>DTW chunk 對齊</b>:延遲會讓相鄰 chunk 跳變。用 <mark class="m-method" data-t="METHOD/IDEA">Dynamic Time Warping</mark> 把預測軌跡對齊到近期執行歷史,找最佳進入索引、<b>丟棄前置波點</b>,消除延遲造成的不連續——<b>不改訓練、不綁架構</b>,比 action inpainting 更輕量。</li>
+          <li data-lang="en"><b>DTW chunk alignment</b>: latency causes jumps between chunks. <mark class="m-method" data-t="METHOD/IDEA">Dynamic Time Warping</mark> aligns the predicted trajectory to recent execution history, finds an optimal entry index, and <b>drops preceding waypoints</b>—removing latency-induced discontinuities <b>without changing training or architecture</b>, lighter than action inpainting.</li>
+          <li data-lang="zh"><b>加速度連續規劃</b>:高階連續性抑制 jerk、降低慣性擾動,<mark class="m-result" data-t="RESULT/EVIDENCE">提升力感測保真度</mark>;最後交給非即時 hybrid force-position controller 執行。</li>
+          <li data-lang="en"><b>Acceleration-continuous planning</b>: higher-order continuity suppresses jerk and inertial disturbances, <mark class="m-result" data-t="RESULT/EVIDENCE">improving force-sensing fidelity</mark>; the result is dispatched to a non-real-time hybrid force-position controller.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\Sigma(p_I)\)</td><td><span data-lang="zh">Interaction Frame:互動點的局部座標系,\(z\)=施力方向、\(x\)=運動方向。</span><span data-lang="en">Interaction Frame: the local basis at the contact, with \(z\)=force axis, \(x\)=motion axis.</span></td></tr>
+          <tr><td>\(\xi=[v^\top,\omega^\top]^\top\)</td><td><span data-lang="zh">twist:末端的線速度 \(v\) + 角速度 \(\omega\)。\(\xi^*\)=意圖 twist。</span><span data-lang="en">twist: end-effector linear \(v\) + angular \(\omega\) velocity. \(\xi^*\)=intended twist.</span></td></tr>
+          <tr><td>\(\mathcal{W}=[f^\top,m^\top]^\top\)</td><td><span data-lang="zh">wrench:力 \(f\) + 力矩 \(m\)(已重力補償)。\(\mathcal{W}^*\)=意圖 wrench。</span><span data-lang="en">wrench: force \(f\) + moment \(m\) (gravity-compensated). \(\mathcal{W}^*\)=intended wrench.</span></td></tr>
+          <tr><td>\(\mathbf{K}_{\text{env}}\)</td><td><span data-lang="zh">環境剛度(對稱);其主軸=局部幾何方向,是 IF 的物理來源。</span><span data-lang="en">Environmental stiffness (symmetric); its principal axes = local geometry, the physical source of IF.</span></td></tr>
+          <tr><td>\(S\in\{0,1\}^6\)</td><td><span data-lang="zh">selection mask:每個自由度選力控(1)或位控(0);也當隱式 router。</span><span data-lang="en">Selection mask: per-DoF force (1) vs position (0) control; also the implicit router.</span></td></tr>
+          <tr><td>\(\mathcal{W}^{\text{ref}}\)</td><td><span data-lang="zh">reference wrench:接觸時力控方向要追蹤的目標力。</span><span data-lang="en">Reference wrench: the target force to track along force-controlled axes on contact.</span></td></tr>
+          <tr><td>\(\phi(I_{t'})\)</td><td><span data-lang="zh">global policy 給的全局視覺脈絡,條件化 local(FiLM)。</span><span data-lang="en">Global visual context from the global policy, conditioning local via FiLM.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">先問「這個接觸<b>哪些方向該頂住力、哪些方向能自由動</b>」(=IF),把它變成給控制器的 selection mask 與目標力;再讓視覺低頻管「去哪」、力覺高頻管「怎麼接觸」,中間用 DTW 把兩個頻率縫順。</span>
+        <span data-lang="en">First ask "for this contact, <b>which directions must hold a force and which are free to move</b>" (=IF), turn it into a selection mask + target force for the controller; then let low-freq vision own "where to go" and high-freq force own "how to touch," stitched by DTW.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">巧思:mask 兼當 router</span><span data-lang="en">Neat: mask as router</span></span>
+        <span data-lang="zh">不另設路由網路,直接用 local 預測的 <mark class="m-result" data-t="RESULT/EVIDENCE">selection mask 是否非零</mark> 來決定 global↔local 切換。好處:意外碰撞(mask 不觸發)不會誤切成力控,保留全局規劃的穩定性。</span>
+        <span data-lang="en">No routing network—use whether the local policy's <mark class="m-result" data-t="RESULT/EVIDENCE">selection mask is non-zero</mark> to switch global↔local. Benefit: accidental bumps (mask not triggered) won't wrongly flip to force control, keeping global planning stable.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">IF 的理論基礎(supp. Theorem 1)假設 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Hertzian 接觸模型</mark>,才使平移與旋轉剛度能被同一旋轉 \(R\) 對角化。這是個<b>相當強的物理假設</b>,適用於平滑、局部保守、拓樸不變的接觸。</span>
+        <span data-lang="en">IF's theory (supp. Theorem 1) assumes a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Hertzian contact model</mark> so translational and rotational stiffness diagonalize under one rotation \(R\). That's a <b>fairly strong physical assumption</b>, valid for smooth, locally conservative, topology-invariant contact.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <figure class="fig"><img src="figs/Fang2026/fig4_tasks.png" alt="Figure 4 tasks">
+        <figcaption data-lang="zh"><b>Fig.4</b> 三個真實任務(涵蓋「拋光」與「插入」兩大類)。<b>Push and Flip</b>:把箱子推到重物旁再翻正,翻的過程接觸點一直在變(動態 IF)。<b>Plug in EV Charger</b>:對齊並插入插座,插入需<b>約 160N</b> 且方向要對。<b>Scrape off Sticker</b>:刮除貼紙,Easy 只需接觸,Hard 需<b>約 35N</b> 壓力刮掉帶膠貼紙。平台:Flexiv Rizon 4 + GN-02 夾爪 + 6-DoF 力矩感測 + 2× RealSense D415。每任務 50 筆遙操作示範(帶力回饋)。</figcaption>
+        <figcaption data-lang="en"><b>Fig.4</b> Three real tasks (spanning "polishing" and "insertion"). <b>Push and Flip</b>: push a box against a heavy object, then flip it upright—contact points change continuously through the flip (a dynamic IF). <b>Plug in EV Charger</b>: align and insert, requiring <b>~160N</b> in the right direction. <b>Scrape off Sticker</b>: Easy needs only contact; Hard needs <b>~35N</b> pressing to remove a glued sticker. Platform: Flexiv Rizon 4 + GN-02 gripper + a 6-DoF F/T sensor + 2× RealSense D415. 50 force-feedback teleop demos per task.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">成功率(Tab.II,累積、分階段)</span><span data-lang="en">Success rates (Tab.II, accumulative, stage-wise)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th>Flip <span data-lang="zh">(翻)</span></th><th>EV plug in <span data-lang="zh">(插)</span></th><th>Scrape Hard <span data-lang="zh">(刮淨)</span></th></tr>
+          <tr><td>RISE-2 <small>(vision)</small></td><td>42.5%</td><td>0.0%</td><td>10.0%</td></tr>
+          <tr><td>&pi;0.5 <small>(vision)</small></td><td>52.5%</td><td>0.0%</td><td>20.0%</td></tr>
+          <tr><td>RDP</td><td>57.5%</td><td>5.0%</td><td>20.0%</td></tr>
+          <tr><td>FoAR</td><td>60.0%</td><td>10.0%</td><td>20.0%</td></tr>
+          <tr><td>ForceVLA</td><td class="bad">30.0%</td><td>0.0%</td><td class="bad">0.0%</td></tr>
+          <tr><td>TA-VLA</td><td>62.5%</td><td>0.0%</td><td>10.0%</td></tr>
+          <tr><td class="win">Force Policy (ours)</td><td class="win">95.0%</td><td class="win">65.0%</td><td class="win">90.0%</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">最大增益出現在<mark class="m-result" data-t="RESULT/EVIDENCE">需要精準快速力調控的階段</mark>——EV 插入(65% vs 至多 10%)、刮淨(90% vs 至多 20%)。多個 force-aware 基線在最難階段幾乎歸零;ForceVLA <b>甚至常輸給純視覺 backbone</b>(把噪聲力串進觀測反傷全局)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">The biggest gains land in <mark class="m-result" data-t="RESULT/EVIDENCE">phases needing precise, rapid force regulation</mark>—EV insertion (65% vs ≤10%) and full scrape-off (90% vs ≤20%). Several force-aware baselines collapse to near-zero on the hardest phase; ForceVLA <b>often even loses to a vision-only backbone</b> (noisy force in observations hurts the global).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">力調控 &amp; 泛化</span><span data-lang="en">Force regulation &amp; generalization</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">評測</span><span data-lang="en">Eval</span></th><th>Force Policy</th><th><span data-lang="zh">對照</span><span data-lang="en">Baselines</span></th></tr>
+          <tr><td><span data-lang="zh">力調控 / Push and Flip<br><small>被推距離 \(d\)(cm)↓,越小越好<br>(示範用 ~15N;推動重物需 ~45N)</small></span><span data-lang="en">Force reg. / Push and Flip<br><small>pushed distance \(d\)(cm)↓, lower is better<br>(demos ~15N; moving the heavy object needs ~45N)</small></span></td><td class="win">0.00</td><td>&pi;0.5 0.00 · FoAR 0.25 · ForceVLA 0.50 · RISE-2 0.86 · RDP 1.13 · TA-VLA 1.25 <small><span data-lang="zh">(施力過大)</span><span data-lang="en">(excessive force)</span></small></td></tr>
+          <tr><td><span data-lang="zh">泛化 / 未見物體(6 組)<br><small>成功數 /5</small></span><span data-lang="en">Generalization / unseen objects (6 sets)<br><small>successes /5</small></span></td><td class="win">5,5,4,4,3,2</td><td><span data-lang="zh">基線常大面積 0/5(如 RDP、FoAR 多為 0/5)</span><span data-lang="en">Baselines often mostly 0/5 (RDP, FoAR largely 0/5)</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">力調控:本法緊貼示範力曲線(Fig.5),基線常<mark class="m-problem" data-t="PROBLEM/GAP">力震盪、下壓不足或施力過大</mark>而失敗。泛化:一個關鍵觀察是——RISE-2 在新物體上常 0% 成功,<b>但它幾乎都能導航到接近接觸區</b>;失敗發生在「自由→接觸」的臨界轉換。Force Policy <mark class="m-result" data-t="RESULT/EVIDENCE">繼承了視覺 backbone 的到位泛化,再由 local force policy 接手穩定建立接觸</mark>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Force: our method hugs the demo force profile (Fig.5); baselines fail via <mark class="m-problem" data-t="PROBLEM/GAP">oscillation, insufficient downforce, or excessive force</mark>. Generalization: a key observation—RISE-2 often scores 0% on novel objects <b>yet nearly always reaches the near-contact region</b>; failure occurs at the free→contact transition. Force Policy <mark class="m-result" data-t="RESULT/EVIDENCE">inherits the visual backbone's reaching generalization, then the local force policy takes over to robustly establish contact</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融:IF 還原 &amp; 排程器(Q4/Q5)</span><span data-lang="en">Ablations: IF recovery &amp; scheduler (Q4/Q5)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">IF 還原法(Scrape 任務)</span><span data-lang="en">IF recovery (Scrape task)</span></th><th><span data-lang="zh">失敗率(&gt;20°)↓</span><span data-lang="en">Failure rate (&gt;20°)↓</span></th></tr>
+          <tr><td>Power <small>(power-min. [63])</small></td><td class="bad">61.2%</td></tr>
+          <tr><td>Analytic <small>(statistical fusion [58])</small></td><td class="bad">37.6%</td></tr>
+          <tr><td>Wrench-only <small>[25,53]</small></td><td>4.9%</td></tr>
+          <tr><td>Twist-only</td><td>4.0%</td></tr>
+          <tr><td class="win">Ours (adaptive)</td><td class="win">3.6%</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:6px">在刮貼紙(摩擦耗散主導)這題,twist-only 與本法優於 wrench-only;本法再靠「刮前短暫下壓(結構殘差主導)」的自適應切換略勝一籌。<b>關鍵下游證據</b>:改用 wrench-only 標的 IF 來訓練 Force Policy,成功率<mark class="m-result" data-t="RESULT/EVIDENCE">從 90% 掉到 50%</mark>——證明「更準的 IF 標註 → 更好的策略」。語義分類準確率 100% / 92% / 98%。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:6px">On scraping (dissipation-dominant), twist-only and ours beat wrench-only; ours edges ahead by adaptively catching the brief pre-scrape press (structural-dominant). <b>Key downstream evidence</b>: training Force Policy with wrench-only IF labels <mark class="m-result" data-t="RESULT/EVIDENCE">drops success from 90% to 50%</mark>—more accurate IF labels → a better policy. Semantic-classification accuracy: 100% / 92% / 98%.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><b>排程器(Q5)</b>:用 SPARC(↑ 越平滑)衡量,加上排程器後線性 SPARC \(-4.515\to-3.935\)、角度 \(-2.640\to-2.967\),<mark class="m-result" data-t="RESULT/EVIDENCE">動作與力的 jerk 都下降</mark>,軌跡更平滑。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><b>Scheduler (Q5)</b>: by SPARC (↑ = smoother), the scheduler moves linear SPARC \(-4.515\to-3.935\) and angular \(-2.640\to-2.967\), <mark class="m-result" data-t="RESULT/EVIDENCE">reducing both motion and force jerk</mark> for smoother trajectories.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">這些實驗證明 / 不證明什麼</span><span data-lang="en">What the experiments do / don't prove</span></h3>
+        <p data-lang="zh"><b>證明:</b>在<b>接觸密集、需精準力</b>的階段,把力控結構化 + 分頻分工,能同時提升成功率、力保真度與泛化;更準的 IF 標註確實轉化為更好的策略。</p>
+        <p data-lang="en"><b>Proves:</b> on <b>contact-rich, force-critical</b> phases, structuring force control + splitting roles by rate lifts success, force fidelity, and generalization together; and more accurate IF labels do translate into a better policy.</p>
+        <p data-lang="zh"><b>未證明:</b>僅 <mark class="m-limit" data-t="LIMITATION/FUTURE">3 個任務、每任務 50 筆示範、每設定 10–20 trials</mark>;都是<b>靜態、拓樸不變</b>的接觸(無斷裂/大形變/torque 控)。跨更廣任務族、更大資料、長時序漂移等未測。</p>
+        <p data-lang="en"><b>Doesn't prove:</b> only <mark class="m-limit" data-t="LIMITATION/FUTURE">3 tasks, 50 demos each, 10–20 trials per setting</mark>; all <b>static, topology-invariant</b> contact (no fracture/large deformation/torque control). Broader task families, larger data, and long-horizon drift are untested.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">在最吃力的接觸階段拉開差距:<b>EV 插入 65% vs ≤10%、刮淨 90% vs ≤20%</b>;力貼近示範、對未見物體泛化更好。<b>分工 + 明確結構 + 延遲補償</b>三者缺一不可。</span>
+        <span data-lang="en">The gap opens on the hardest contact phases: <b>EV insertion 65% vs ≤10%, full scrape 90% vs ≤20%</b>; force hugs the demos, generalizing better to unseen objects. <b>Division of labor + explicit structure + latency compensation</b>—all three are needed.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">泛化評測僅在 <b>Push and Flip 一個任務</b> 上做未見物體;IF 還原量化只在 <b>Scrape 一個任務</b>(且 GT 剛好對齊世界垂直軸,量測較容易)。跨任務的 IF 精度、其它任務的泛化<mark class="m-limit" data-t="LIMITATION/FUTURE">缺乏系統性數據</mark>。</span>
+        <span data-lang="en">Generalization is tested on <b>only Push and Flip</b> with unseen objects; IF-recovery is quantified on <b>only Scrape</b> (whose GT conveniently aligns with world vertical, easing measurement). Cross-task IF accuracy and generalization elsewhere <mark class="m-limit" data-t="LIMITATION/FUTURE">lack systematic data</mark>.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">任務數量</span><span data-lang="en">few tasks</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">硬體門檻</span><span data-lang="en">hardware</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>評測規模偏小</b>:僅 <mark class="m-limit" data-t="LIMITATION/FUTURE">3 個任務、每任務 50 示範、每設定 10–20 trials</mark>。成功率差異雖大,但 10 trials 的統計解析度有限(一次成敗 = 10%),缺乏多 seed / 信賴區間。對一個主打「泛化」的方法,任務多樣性仍偏窄。</li>
+          <li data-lang="en"><b>Small evaluation scale</b>: only <mark class="m-limit" data-t="LIMITATION/FUTURE">3 tasks, 50 demos each, 10–20 trials per setting</mark>. Gaps are large, but 10 trials gives coarse resolution (one success = 10%), with no multi-seed / confidence intervals. For a method pitched on "generalization," task diversity is still narrow.</li>
+          <li data-lang="zh"><b>對外部 LLM 的隱性依賴</b>:IF 還原的「哪種殘差主導」是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">用 Gemini 3 Pro 語義分類</mark>決定的。這把一個物理判斷外包給閉源模型:準確率 92–100% 看似高,但只在 3 個任務上量測;分類錯誤如何隨任務分佈變化、是否可離線複現,都未探討。</li>
+          <li data-lang="en"><b>Hidden reliance on an external LLM</b>: "which residual dominates" in IF recovery is decided by <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Gemini 3 Pro semantic classification</mark>. This outsources a physical judgment to a closed model: 92–100% accuracy looks high but is measured on 3 tasks only; how errors scale with task distribution, or whether it's offline-reproducible, is unexplored.</li>
+          <li data-lang="zh"><b>理論假設相當強</b>:IF 的可對角化性(Theorem 1)建立在 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Hertzian 接觸 + 局部保守 + 拓樸不變 + 反射對稱</mark>之上。真實接觸(邊角、多點、非對稱摩擦)未必滿足;論文把不滿足的情況直接排除在 scope 外,而非量化其退化。</li>
+          <li data-lang="en"><b>Strong theoretical assumptions</b>: IF's diagonalizability (Theorem 1) rests on <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Hertzian contact + local conservatism + topology-invariance + reflectional symmetry</mark>. Real contacts (edges, multi-point, asymmetric friction) may violate these; the paper excludes such cases from scope rather than quantifying the degradation.</li>
+          <li data-lang="zh"><b>增益來源難拆解</b>:Force Policy 同時引入了「IF 結構」「global-local 分工」「50Hz 力控」「DTW 排程器」。<mark class="m-limit" data-t="LIMITATION/FUTURE">缺乏把這四者逐一移除的完整消融</mark>——例如「同樣分工但用單軸力控」對比,無法斷定成功率主要來自哪一塊。</li>
+          <li data-lang="en"><b>Hard to attribute the gain</b>: Force Policy bundles "IF structure," "global-local split," "50Hz force control," and "DTW scheduler" at once. There's <mark class="m-limit" data-t="LIMITATION/FUTURE">no full ablation removing each in turn</mark>—e.g., "same split but single-axis force control"—so one can't pin down which piece drives the success.</li>
+          <li data-lang="zh"><b>基線公平性</b>:VLA 類基線(&pi;0.5、ForceVLA、TA-VLA)本是大規模預訓練模型,在此僅用<b>每任務 50 筆</b>示範微調,可能水土不服(ForceVLA 常低於 RISE-2 即是信號)。這究竟是「方法本身弱」還是「資料量不匹配」,值得保留判斷。</li>
+          <li data-lang="en"><b>Baseline fairness</b>: VLA baselines (&pi;0.5, ForceVLA, TA-VLA) are large pretrained models fine-tuned here on just <b>50 demos per task</b>, which may not suit them (ForceVLA often below RISE-2 is a tell). Whether that reflects "the method is weak" or "a data mismatch" is worth reserving judgment on.</li>
+          <li data-lang="zh"><b>硬體門檻</b>:方法綁定 <mark class="m-limit" data-t="LIMITATION/FUTURE">高階力控機器人(Flexiv Rizon)+ 6-DoF 力矩感測 + 帶力回饋的遙操作</mark>,並需非即時 hybrid controller。對只有位置控制手臂、無 F/T 感測的實驗室,重現門檻不低。</li>
+          <li data-lang="en"><b>Hardware barrier</b>: it requires a <mark class="m-limit" data-t="LIMITATION/FUTURE">high-end force-controlled arm (Flexiv Rizon) + a 6-DoF F/T sensor + force-feedback teleoperation</mark>, plus a non-real-time hybrid controller. For labs with position-only arms and no F/T sensing, reproduction is non-trivial.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>四合一的拆解</b>:若固定 global-local 分工,只把「IF + 多軸 mask」換成 ForceMimic 式單軸力控,成功率掉多少?增益主要來自結構、分工、頻率,還是排程器?</li>
+          <li data-lang="en"><b>Decompose the bundle</b>: fixing the global-local split, if "IF + multi-axis mask" is swapped for ForceMimic-style single-axis force control, how much drops? Is the gain mainly from structure, split, rate, or scheduler?</li>
+          <li data-lang="zh"><b>LLM 分類的必要性</b>:能否用純物理判據(如比較兩殘差量級)取代 Gemini?若能,方法就不必依賴閉源 LLM;若不能,說明物理判據不足以區分,值得深究為何。</li>
+          <li data-lang="en"><b>Is the LLM necessary?</b> Could a purely physical criterion (comparing the two residual magnitudes) replace Gemini? If yes, the method needn't depend on a closed LLM; if no, that says the physics alone can't disambiguate—worth digging into why.</li>
+          <li data-lang="zh"><b>假設破裂時的行為</b>:遇到邊角接觸、多點接觸、明顯非對稱摩擦(違反 Hertzian/對稱假設)時,IF 還原與策略如何退化?high-freq 修正真能救回多少?</li>
+          <li data-lang="en"><b>Behavior when assumptions break</b>: at edge/multi-point contact or clearly asymmetric friction (violating Hertzian/symmetry), how do IF recovery and the policy degrade? How much can high-freq correction actually recover?</li>
+          <li data-lang="zh"><b>統計嚴謹度</b>:10 trials、單 seed 下,95% 這類數字的變異有多大?能否給多 seed 或 bootstrap 區間,讓「全面領先」更站得住?</li>
+          <li data-lang="en"><b>Statistical rigor</b>: with 10 trials and a single seed, how variable are figures like 95%? Could multi-seed or bootstrap intervals make "leads across the board" more defensible?</li>
+          <li data-lang="zh"><b>可移植性</b>:把 global policy 從 RISE-2 換成任意 VLA 時,\(\phi\) 特徵介面是否真「即插即用」?不同 backbone 的 \(\phi\) 語義差異會不會讓 local policy 需重訓?</li>
+          <li data-lang="en"><b>Portability</b>: swapping the global policy from RISE-2 to an arbitrary VLA—is the \(\phi\) feature interface truly plug-and-play? Would differing \(\phi\) semantics across backbones force the local policy to be retrained?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把它讀成「<b>又一個把力塞進網路的 force-aware 策略</b>」。恰恰相反:本文的主張是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">融合式(把力當觀測)常常有害</mark>,關鍵在<b>解耦 + 明確結構(IF/mask/wrench)+ 對接經典 hybrid controller</b>。它其實是「學習」與「古典控制」的橋接,而非純學習方案。</span>
+        <span data-lang="en">Reading it as "<b>yet another force-aware net with force stuffed in</b>." The opposite: the paper argues <mark class="m-assume" data-t="ASSUMPTION/CLAIM">fusion (force as observation) is often harmful</mark>; the key is <b>decoupling + explicit structure (IF/mask/wrench) + a classic hybrid controller</b>. It's a bridge between learning and classical control, not a pure-learning scheme.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">Limitations 寫得誠實(明說 IF scope 限於穩定接觸、無 torque 控、無 force-driven 高層決策)。且提供了<b>直接的下游證據</b>(wrench-only IF → 成功率 90%→50%),把「結構品質」與「策略表現」因果連起來,而非只報漂亮總數。</span>
+        <span data-lang="en">The Limitations are honest (IF scope limited to stable contact, no torque control, no force-driven high-level decisions). And it gives <b>direct downstream evidence</b> (wrench-only IF → 90%→50% success), causally linking "structure quality" to "policy performance" rather than just headline numbers.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「結構先行」而非「端到端硬學」</b>:當任務有清楚物理結構(如接觸的可控自由度),與其把一切丟進大網路,不如<b>先把結構形式化、讓策略去預測結構</b>,再對接成熟的控制器。這對接觸操作、裝配、甚至更廣的物理互動任務都適用。</li>
+          <li data-lang="en"><b>"Structure-first" over "end-to-end brute force"</b>: when a task has clear physical structure (e.g., a contact's controllable DoFs), rather than dumping everything into a big net, <b>formalize the structure and have the policy predict it</b>, then hand off to a mature controller. This applies to contact manipulation, assembly, and broader physical-interaction tasks.</li>
+          <li data-lang="zh"><b>按「資訊尺度」分頻分工</b>:不同模態在不同尺度最有用(視覺=全局低頻、力=局部高頻)。與其融合,不如<b>解耦並各自跑最合適的頻率</b>,再用輕量、模型無關的排程器(如 DTW 對齊)縫合——這個模式可移植到任何多頻率、多模態的控制系統。</li>
+          <li data-lang="en"><b>Split roles by "information scale"</b>: modalities are useful at different scales (vision = global/low-freq, force = local/high-freq). Rather than fuse, <b>decouple and run each at its natural rate</b>, stitched by a lightweight, model-agnostic scheduler (e.g., DTW alignment)—a pattern portable to any multi-rate, multi-modal control system.</li>
+          <li data-lang="zh"><b>用 LLM 做「難以量化的高層判斷」</b>:本文用 Gemini 判斷「摩擦主導或剛度主導」,是「把物理常識外包給多模態模型」的實例。值得借用,但務必<b>量測其錯誤率並設計 fallback</b>(此處靠 high-freq 修正)。</li>
+          <li data-lang="en"><b>Use an LLM for "hard-to-quantify high-level judgments"</b>: using Gemini to decide "friction- vs stiffness-dominant" exemplifies outsourcing physical common sense to a multimodal model. Borrowable—but <b>measure its error rate and design a fallback</b> (here, high-freq correction).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「把力當觀測融合可能有害」</span><span data-lang="en">"fusing force as an observation can hurt"</span></td><td><span data-lang="zh">引其 ForceVLA/TA-VLA 有時輸給純視覺的觀察 + global-local 解耦論述。</span><span data-lang="en">Cite the observation that ForceVLA/TA-VLA sometimes lose to vision-only + the global-local decoupling argument.</span></td></tr>
+          <tr><td><span data-lang="zh">「可從示範還原多軸接觸結構」</span><span data-lang="en">"multi-axis contact structure is recoverable from demos"</span></td><td><span data-lang="zh">引 IF 的物理定義 + 功率殘差分解 + wrench-only→90%/50% 的下游證據。</span><span data-lang="en">Cite the physical IF definition + power-residual decomposition + the wrench-only 90%/50% downstream evidence.</span></td></tr>
+          <tr><td><span data-lang="zh">「模型無關的延遲/jerk 補償」</span><span data-lang="en">"model-agnostic latency/jerk compensation"</span></td><td><span data-lang="zh">引 DTW 波點丟棄排程器與 SPARC 平滑度增益。</span><span data-lang="en">Cite the DTW waypoint-dropout scheduler and the SPARC smoothness gains.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">Force Policy 把接觸操作重新組織成「<b>視覺管全局(5Hz)、力覺管局部(50Hz)</b>」的分工,並用物理奠基的 <b>Interaction Frame</b> 把「該控哪些自由度」變成可還原、可預測的控制介面,直接對接經典 hybrid force-position controller。它證明:對接觸物理而言,<b>明確的結構 + 分工</b>,勝過把力硬塞進單體大網路。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">Force Policy reorganizes contact manipulation into a split—<b>vision owns the global (5Hz), force owns the local (50Hz)</b>—and uses a physically grounded <b>Interaction Frame</b> to turn "which DoFs to control" into a recoverable, predictable control interface feeding a classic hybrid force-position controller. It shows that for contact physics, <b>explicit structure + division of labor</b> beats cramming force into a monolithic net.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">TFF (Bruyninckx &amp; De Schutter)</span>
+          <span class="chip">Hybrid Position/Force (Raibert &amp; Craig)</span>
+          <span class="chip">RISE-2 / AirExo-2</span>
+          <span class="chip">RDP</span>
+          <span class="chip">ForceMimic</span>
+          <span class="chip">ACP</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文(arXiv:2602.22088)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper (arXiv:2602.22088).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Fang et al. 2026 (Force Policy) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Force Policy reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>FoAR — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"FoAR: Force-Aware Reactive Policy for Contact-Rich Robotic Manipulation","authors":"Zihao He, Hongjie Fang, Jingjing Chen, Hao-Shu Fang, Cewu Lu","year":"2025","venue":"arXiv (SJTU)","tags":["Force-Aware Manipulation","Robotic Manipulation","Contact-Rich","Force/Torque Sensing","Imitation Learning","Diffusion Policy"],"tldr":"在 RISE 視覺策略上加入高頻力/扭矩感測,用一個「未來接觸預測器」動態調整力覺特徵的融合權重,並以此驅動 reactive control;僅靠簡單位置控制就在擦拭、削皮、切菜等接觸密集任務上大幅超越所有 baseline。","tldr_en":"On top of the RISE vision policy, FoAR adds high-frequency force/torque sensing and a future-contact predictor that dynamically gates the force feature during fusion, then drives a reactive controller; with only simple position control it far outperforms all baselines on wiping, peeling and chopping."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:96px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">FoAR 在既有的 3D 視覺模仿學習策略 <b>RISE</b> 之上,加入<b>高頻(100Hz)力/扭矩感測</b>。核心是一個<mark class="m-method" data-t="METHOD/IDEA">未來接觸預測器(future contact predictor)</mark>:它輸出「接下來會不會發生接觸」的機率 \(\phi\),用來<b>動態調整力覺特徵在多模態融合中的權重</b>——接觸階段放大力覺、非接觸階段抑制其噪聲。同一個 \(\phi\) 還驅動部署時的 <mark class="m-method" data-t="METHOD/IDEA">reactive control</mark>,讓機器人<b>只用簡單位置控制</b>就能完成擦拭、削皮、切菜等接觸密集任務,且<mark class="m-result" data-t="RESULT/EVIDENCE">大幅超越所有 baseline</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">FoAR augments the existing 3D-vision imitation policy <b>RISE</b> with <b>high-frequency (100Hz) force/torque sensing</b>. Its core is a <mark class="m-method" data-t="METHOD/IDEA">future contact predictor</mark> that outputs a probability \(\phi\) of whether contact will happen next, used to <b>dynamically gate the force feature during multimodal fusion</b>—amplifying force in contact phases, suppressing its noise in non-contact phases. The same \(\phi\) also drives a deployment-time <mark class="m-method" data-t="METHOD/IDEA">reactive controller</mark>, so the robot completes wiping, peeling and chopping <b>with only simple position control</b>, while <mark class="m-result" data-t="RESULT/EVIDENCE">far outperforming every baseline</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/He2025/fig1_overview.png" alt="Figure 1 overview">
+        <figcaption data-lang="zh"><b>Fig.1</b> FoAR 總覽。<b>左</b>:光看視覺(RGB/點雲)幾乎分不出「接觸/未接觸」,但力/扭矩曲線(下)一目了然——這是加入力覺的動機。<b>中</b>:FoAR 策略同時輸出「預測動作」與「未來接觸機率 \(\phi\)」。<b>右</b>:reactive control 依 \(\phi\) 決定是否啟動 Force-Aware Refinement(\(\phi=1.0\) 為接觸階段)。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> FoAR overview. <b>Left</b>: vision alone (RGB/point cloud) barely distinguishes contact vs non-contact, but the force/torque curves (bottom) make it obvious—the motivation for adding force. <b>Middle</b>: the FoAR policy jointly outputs predicted actions and a future contact probability \(\phi\). <b>Right</b>: reactive control uses \(\phi\) to decide whether to trigger Force-Aware Refinement (\(\phi=1.0\) is a contact phase).</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 純視覺策略在<mark class="m-problem" data-t="PROBLEM/GAP">接觸密集任務(擦拭、削皮、切菜)上力不從心</mark>,因為缺少力/扭矩這類關鍵接觸回饋;視覺在接觸前後幾乎沒差別。</li>
+          <li data-lang="en"><b>Problem</b> — Pure-vision policies <mark class="m-problem" data-t="PROBLEM/GAP">struggle on contact-rich tasks (wiping, peeling, chopping)</mark> because they lack critical contact feedback like force/torque; vision barely changes before vs after contact.</li>
+          <li data-lang="zh"><b>觀察</b> — 過去把力/扭矩「<mark class="m-problem" data-t="PROBLEM/GAP">全程融合</mark>」進策略,忽略了力覺是<b>稀疏觸發</b>的:一個任務只有部分階段真正在接觸,非接觸階段的力覺感測器噪聲反而<b>拖累</b>表現。</li>
+          <li data-lang="en"><b>Observation</b> — Prior work fuses force/torque <mark class="m-problem" data-t="PROBLEM/GAP">throughout the whole task</mark>, ignoring that force is <b>sparsely activated</b>: only some phases truly involve contact, and sensor noise in non-contact phases <b>hurts</b> performance.</li>
+          <li data-lang="zh"><b>方法</b> — 用一個<mark class="m-method" data-t="METHOD/IDEA">未來接觸預測器 \(\phi\)</mark> 當「開關」,以 \(\phi\) 動態加權力覺特徵的融合;同一個 \(\phi\) 再驅動 <mark class="m-method" data-t="METHOD/IDEA">reactive control</mark>,力覺不足時把動作往預測方向推一小步。</li>
+          <li data-lang="en"><b>Method</b> — A <mark class="m-method" data-t="METHOD/IDEA">future contact predictor \(\phi\)</mark> acts as a "switch," gating the force feature during fusion by \(\phi\); the same \(\phi\) then drives <mark class="m-method" data-t="METHOD/IDEA">reactive control</mark> that nudges the action a small step toward the predicted direction when force is insufficient.</li>
+          <li data-lang="zh"><b>結果</b> — 僅用 <b>50 條示範</b>,在 Wiping/Peeling/Chopping 上<mark class="m-result" data-t="RESULT/EVIDENCE">全面大勝</mark>(如 Wiping score 0.875 vs RISE 0.500),接觸操作成功率 100%,且在動態干擾下仍穩定。</li>
+          <li data-lang="en"><b>Results</b> — With only <b>50 demonstrations</b>, it <mark class="m-result" data-t="RESULT/EVIDENCE">wins across the board</mark> on Wiping/Peeling/Chopping (e.g. Wiping score 0.875 vs RISE 0.500), reaching 100% contact-operation success, and stays robust under dynamic disturbances.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">近年 <mark class="m-method" data-t="METHOD/IDEA">視覺模仿學習</mark>(ACT、Diffusion Policy、RISE、OpenVLA/RT 系列)在一般抓取放置上進展神速,但這些策略<mark class="m-problem" data-t="PROBLEM/GAP">缺乏力/扭矩、觸覺等接觸回饋</mark>,在需要「持續、精細接觸」的任務上表現受限。</p>
+        <p data-lang="en">Recent <mark class="m-method" data-t="METHOD/IDEA">visual imitation learning</mark> (ACT, Diffusion Policy, RISE, OpenVLA/RT families) has advanced fast on ordinary pick-and-place, but these policies <mark class="m-problem" data-t="PROBLEM/GAP">lack contact feedback like force/torque and touch</mark>, limiting them on tasks demanding sustained, delicate contact.</p>
+        <p data-lang="zh">為此,研究者引入額外模態:<b>音訊</b>(易受背景噪聲干擾)、<b>觸覺</b>(感測器種類繁雜、難標準化與更換)、與 <mark class="m-method" data-t="METHOD/IDEA">力/扭矩</mark>(直接量測物理互動,通用又直觀)。但既有力覺方法多半<mark class="m-problem" data-t="PROBLEM/GAP">假設「物體已被抓住 / 固定於機器人」</mark>,只顧接觸階段,或把力覺全程融合而受非接觸噪聲拖累。</p>
+        <p data-lang="en">Researchers thus add modalities: <b>audio</b> (vulnerable to background noise), <b>tactile</b> (heterogeneous sensors, hard to standardize/replace), and <mark class="m-method" data-t="METHOD/IDEA">force/torque</mark> (directly measures physical interaction—versatile and intuitive). Yet most force methods <mark class="m-problem" data-t="PROBLEM/GAP">assume the object is already grasped/fixed to the robot</mark>, focus only on contact phases, or fuse force throughout and suffer from non-contact noise.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的關鍵洞見不是「加力覺」(前人已做),而是「<b>什麼時候該相信力覺</b>」。它把「force 是稀疏觸發的」這個觀察,轉化成一個<b>可學習的時序開關 \(\phi\)</b>,並讓這個開關同時服務「特徵融合」與「部署控制」——一個預測、兩處收益。這是一個小而漂亮的 co-design。</p>
+          <p data-lang="en" style="margin-top:6px">The key insight is not "add force" (done before) but "<b>when should we trust force</b>." It turns the observation "force is sparsely activated" into a <b>learnable temporal switch \(\phi\)</b>, and lets that switch serve both feature fusion and deployment control—one prediction, two payoffs. A small but elegant co-design.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不是「又一個力覺策略」,而是底下幾個設計觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not "yet another force policy" but these design ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">力覺是「稀疏觸發」的,融合要動態。</b> 不該全程等權融合力/視覺;用 \(\phi\) 當閘門,接觸時放大力覺、非接觸時用中性 embedding \(h^*\) 抑制噪聲——<mark class="m-result" data-t="RESULT/EVIDENCE">明顯優於直接串接或塞 token</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Force is "sparsely activated"—fusion must be dynamic.</b> Don't fuse force/vision with equal weight throughout; use \(\phi\) as a gate, amplifying force on contact and suppressing noise with a neutral embedding \(h^*\) otherwise—<mark class="m-result" data-t="RESULT/EVIDENCE">clearly beats plain concatenation or token-stuffing</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">預測「未來」接觸,而非偵測「當前」接觸。</b> 用 future contact predictor 而非 contact detection,能<mark class="m-result" data-t="RESULT/EVIDENCE">避免接觸延遲或漏接</mark>——策略能提前為接觸做準備。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Predict "future" contact, not "current" contact.</b> Using a future-contact predictor rather than detection <mark class="m-result" data-t="RESULT/EVIDENCE">avoids delayed or missed contact</mark>—the policy can prepare ahead of time.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">一個 \(\phi\),服務融合與控制的 co-design。</b> 同一個未來接觸機率既調融合權重,又驅動 reactive control——讓機器人<mark class="m-result" data-t="RESULT/EVIDENCE">只靠簡單位置控制</mark>就能力覺驅動地修正動作,免去 stiffness / 力方向等複雜參數。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">One \(\phi\) co-designs fusion and control.</b> The same future-contact probability gates fusion and drives reactive control—letting the robot correct actions force-drivenly with <mark class="m-result" data-t="RESULT/EVIDENCE">only simple position control</mark>, avoiding complex parameters like stiffness or force direction.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">預測器要與策略主幹「分開」。</b> 讓 predictor 用獨立的 ResNet18 影像編碼器,而非共享稀疏 3D 編碼器——共享會造成<b>注意力衝突</b>,反而比 RISE baseline 還差(FoAR 3D-cls score 只有 0.175)。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Keep the predictor separate from the policy backbone.</b> The predictor uses its own ResNet18 image encoder, not the shared sparse-3D encoder—sharing causes <b>conflicting attention</b> and does worse than RISE (FoAR 3D-cls scores just 0.175).</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">高頻力覺 + 時序建模有用。</b> 用 100Hz(≈2 秒歷史)並以 Transformer 沿時間軸編碼,<mark class="m-result" data-t="RESULT/EVIDENCE">優於 2/10Hz 及用 MLP 取代 Transformer</mark>——力/扭矩的瞬態訊號需要時序表徵。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">High-frequency force + temporal modeling helps.</b> Using 100Hz (~2s history) with a Transformer along the time axis <mark class="m-result" data-t="RESULT/EVIDENCE">beats 2/10Hz and replacing the Transformer with an MLP</mark>—transient force signals need a temporal representation.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">FoAR: Force-Aware Reactive Policy for Contact-Rich Robotic Manipulation</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>He, Fang, Chen, Fang, Lu</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Shanghai Jiao Tong University</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2025 · arXiv:2411.15753v2</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Robotic Manipulation</span>
+          <b><span data-lang="zh">網站</span><span data-lang="en">Site</span></b><span>tonyfang.net/FoAR</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「加不加力覺」的老問題,升級成「<b>什麼時候、以多大權重相信力覺</b>」。用一個學到的未來接觸機率 \(\phi\) 同時解決<b>多模態融合</b>與<b>控制</b>兩件事,並證明<b>簡單位置控制</b>也能做好接觸密集任務。<span class="add">[導讀補充] 建立於同組的 RISE 策略之上,是 RISE 的力覺化延伸。</span></span>
+        <span data-lang="en">Upgrades the old "force or not" question into "<b>when and how much to trust force</b>." One learned future-contact probability \(\phi\) tackles both <b>multimodal fusion</b> and <b>control</b>, and shows <b>simple position control</b> can handle contact-rich tasks. <span class="add">[guide note] Built on the same group's RISE policy—a force-aware extension of RISE.</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Force/Torque</span><span class="chip">Future Contact Predictor</span>
+          <span class="chip">Reactive Control</span><span class="chip">Diffusion Policy</span>
+          <span class="chip">RISE backbone</span><span class="chip">Contact-Rich</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">純視覺策略</span><span data-lang="en">Pure-vision policies</span></b><br>(ACT, Diffusion Policy, RISE)</td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">缺力/扭矩回饋</mark>,接觸前後視覺幾乎相同,無法感知接觸狀態 → 接觸密集任務精度差。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">No force/torque feedback</mark>; vision looks almost the same before/after contact, so contact state is unperceivable → poor accuracy on contact-rich tasks.</span></td></tr>
+          <tr><td><b><span data-lang="zh">全程力覺融合</span><span data-lang="en">Always-on force fusion</span></b><br><small>[21,31,46] 等</small></td><td><span data-lang="zh">力覺是<mark class="m-problem" data-t="PROBLEM/GAP">稀疏觸發</mark>的,但這些法子把力覺全程等權融合;非接觸階段的<b>感測器噪聲反而拖累</b>策略。</span><span data-lang="en">Force is <mark class="m-problem" data-t="PROBLEM/GAP">sparsely activated</mark>, yet these fuse it uniformly throughout; <b>sensor noise in non-contact phases hurts</b> the policy.</span></td></tr>
+          <tr><td><b><span data-lang="zh">力覺 + 進階控制</span><span data-lang="en">Force + advanced control</span></b><br><small><span data-lang="zh">順應/阻抗/混合力位控制</span><span data-lang="en">compliance / impedance / hybrid</span></small></td><td><span data-lang="zh">常<mark class="m-problem" data-t="PROBLEM/GAP">假設物體已抓住或固定於機器人</mark>,只顧接觸階段;且需要 stiffness、接觸力方向等<b>額外參數與調校</b>。</span><span data-lang="en">Often <mark class="m-problem" data-t="PROBLEM/GAP">assume the object is grasped or fixed to the robot</mark>, focusing only on contact; and need <b>extra parameters/tuning</b> (stiffness, contact-force direction).</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「如何讓策略在『該用力覺時』才用力覺,並用最簡單的控制完成接觸密集任務?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"How to make a policy use force only when it should, and finish contact-rich tasks with the simplest control?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,FoAR 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how FoAR fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">FoAR 如何補上</span><span data-lang="en">How FoAR fills it</span></th></tr>
+          <tr>
+            <td><b>RISE</b><br><small><span data-lang="zh">3D 視覺策略(本文 backbone)</span><span data-lang="en">3D vision policy (backbone)</span></small></td>
+            <td><span data-lang="zh">純視覺,<mark class="m-problem" data-t="PROBLEM/GAP">無接觸回饋</mark>。</span><span data-lang="en">Vision-only, <mark class="m-problem" data-t="PROBLEM/GAP">no contact feedback</mark>.</span></td>
+            <td><span data-lang="zh">加入<mark class="m-method" data-t="METHOD/IDEA">高頻力/扭矩分支</mark>與接觸感知融合。</span><span data-lang="en">Adds a <mark class="m-method" data-t="METHOD/IDEA">high-frequency force/torque branch</mark> and contact-aware fusion.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">全程融合 / 塞 token</span><span data-lang="en">Always-on fusion / token-stuffing</span></b></td>
+            <td><span data-lang="zh">非接觸階段被<mark class="m-problem" data-t="PROBLEM/GAP">力覺噪聲干擾</mark>。</span><span data-lang="en">Non-contact phases <mark class="m-problem" data-t="PROBLEM/GAP">disturbed by force noise</mark>.</span></td>
+            <td><span data-lang="zh">用 \(\phi\) 動態<mark class="m-method" data-t="METHOD/IDEA">閘控力覺特徵</mark>,非接觸時以 \(h^*\) 中性化。</span><span data-lang="en">Uses \(\phi\) to <mark class="m-method" data-t="METHOD/IDEA">gate the force feature</mark>, neutralizing it with \(h^*\) off-contact.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">進階力控</span><span data-lang="en">Advanced force control</span></b></td>
+            <td><span data-lang="zh">需 stiffness / 力方向等<mark class="m-problem" data-t="PROBLEM/GAP">額外參數</mark>。</span><span data-lang="en">Needs <mark class="m-problem" data-t="PROBLEM/GAP">extra params</mark> (stiffness, force direction).</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">reactive control + 簡單位置控制</mark>,免除複雜調參。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Reactive control + simple position control</mark>, no complex tuning.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這裡的痛點是<b>「融合方式」與「控制複雜度」</b>,而非「有沒有力覺」。FoAR 的賭注是:與其設計複雜的力控器,不如讓策略<b>學會什麼時候該用力覺</b>,剩下的交給最樸素的位置控制。把「智慧」放進感知融合而非控制器,是這篇的哲學。</p>
+          <p data-lang="en" style="margin-top:6px">Note the pain points are about <b>"how to fuse" and "control complexity,"</b> not "force or not." FoAR's bet: rather than designing a complex force controller, let the policy <b>learn when to use force</b> and leave the rest to the plainest position control. Putting the "intelligence" in perception/fusion rather than the controller is this paper's philosophy.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把「加力覺就會更好」當定理。表 I 中 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">RISE (force-token) 在某些設定反而降低抓取成功率</mark>——證明<b>怎麼融合</b>比<b>有沒有融合</b>更關鍵。錯誤的融合會把非接觸階段的噪聲引入決策。</span>
+        <span data-lang="en">Don't treat "adding force helps" as a theorem. In Table I, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">RISE (force-token) actually lowers grasp success in some settings</mark>—proving <b>how you fuse</b> matters more than <b>whether you fuse</b>. Bad fusion injects non-contact noise into decisions.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">擦拭、削皮、切菜這類任務有明確的「非接觸→接觸→非接觸」相位。能<b>相位感知地</b>用力覺,是把力覺模態真正變成資產(而非負擔)的關鍵——對日常/製造場景的實用機器人意義重大。</span>
+        <span data-lang="en">Tasks like wiping/peeling/chopping have clear "non-contact→contact→non-contact" phases. Using force in a <b>phase-aware</b> way is key to turning the force modality into an asset (not a liability)—important for practical robots in daily-life and manufacturing settings.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">閾值依賴</span><span data-lang="en">threshold</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">任務規模</span><span data-lang="en">task scale</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">問題定義:在 RISE 上加力覺</span><span data-lang="en">Problem setup: force on top of RISE</span></h3>
+        <p data-lang="zh">RISE 學一個從當前觀測到未來動作的映射 \(\pi(p_t)=a_{t:t+T_a}\),其中 \(p_t\in\mathbb{R}^{N_t\times 6}\) 是由 RGB-D 影像萃取的點雲。FoAR 額外把<mark class="m-method" data-t="METHOD/IDEA">高頻力/扭矩觀測 \(f_{t-T_o:t}\in\mathbb{R}^{T_o\times 6}\)</mark> 當輸入:</p>
+        <p data-lang="en">RISE learns a map from the current observation to future actions \(\pi(p_t)=a_{t:t+T_a}\), where \(p_t\in\mathbb{R}^{N_t\times 6}\) is a point cloud from an RGB-D image. FoAR additionally takes <mark class="m-method" data-t="METHOD/IDEA">high-frequency force/torque \(f_{t-T_o:t}\in\mathbb{R}^{T_o\times 6}\)</mark> as input:</p>
+        <div class="eq">$$\mathrm{FoAR}\big(p_t,\ f_{t-T_o:t},\ I_t\big)=\big(\phi,\ a_{t:t+T_a}\big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">關鍵尺度差:力/扭矩歷史 \(T_o\) 以 <b>~100Hz</b> 取樣(此處 \(T_o=200\),≈2 秒);動作視野 \(T_a\) 以較低頻率(如 10Hz)預測(此處 \(T_a=20\))。每個力/扭矩讀數 \(f\in\mathbb{R}^6\)(3 力 + 3 扭矩)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Key scale gap: the force history \(T_o\) is sampled at <b>~100Hz</b> (here \(T_o=200\), ≈2s); the action horizon \(T_a\) is predicted at a lower rate (e.g. 10Hz, here \(T_a=20\)). Each reading \(f\in\mathbb{R}^6\) (3 forces + 3 torques).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">架構:雙分支 + 接觸引導融合 + 擴散頭</span><span data-lang="en">Architecture: two branches + contact-guided fusion + diffusion head</span></h3>
+        <figure class="fig"><img src="figs/He2025/fig2_arch.png" alt="Figure 2 architecture">
+          <figcaption data-lang="zh"><b>Fig.2</b> FoAR 架構。<b>視覺分支</b>:點雲 \(p_t\) → 稀疏 3D 編碼器 → Transformer → 場景特徵 \(h_t^s\)。<b>力覺分支</b>:力/扭矩 \(f_{t-T_o:t}\) → MLP → Transformer(沿時間軸位置編碼)→ 力特徵 \(h_t^f\)。<b>未來接觸預測器</b>(獨立影像編碼器)輸出 \(\phi\),用來把 \(h_t^f\) 與可學習中性向量 \(h^*\) 加權融合。融合特徵餵入<b>擴散動作頭</b>去噪出動作 \(a_{t:t+T_a}\)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> FoAR architecture. <b>Vision branch</b>: point cloud \(p_t\) → sparse 3D encoder → Transformer → scene feature \(h_t^s\). <b>Force branch</b>: force/torque \(f_{t-T_o:t}\) → MLP → Transformer (temporal positional encoding) → force feature \(h_t^f\). A <b>future contact predictor</b> (separate image encoder) outputs \(\phi\), used to blend \(h_t^f\) with a learnable neutral vector \(h^*\). The fused feature conditions a <b>diffusion action head</b> that denoises actions \(a_{t:t+T_a}\).</figcaption></figure>
+        <p data-lang="zh">四個組件:(1) 點雲編碼器(承襲 RISE:稀疏 3D 編碼器 + Transformer,voxel 5mm);(2) 力/扭矩編碼器(3 層 MLP → Transformer,把時序力覺編成 \(h_t^f\));(3) 未來接觸預測器;(4) 擴散動作頭(CNN-based diffusion,DDIM 推理 20 步)。</p>
+        <p data-lang="en">Four components: (1) a point-cloud encoder (inherited from RISE: sparse 3D encoder + Transformer, 5mm voxels); (2) a force/torque encoder (3-layer MLP → Transformer, encoding the time series into \(h_t^f\)); (3) the future contact predictor; (4) a diffusion action head (CNN-based diffusion, DDIM with 20 inference steps).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 1:接觸引導的特徵融合</span><span data-lang="en">Key idea 1: contact-guided feature fusion</span></h3>
+        <p data-lang="zh">與其把力/視覺<b>等權串接</b>,FoAR 用未來接觸機率 \(\phi(t)\in[0,1]\) 當閘門:</p>
+        <p data-lang="en">Instead of <b>equally concatenating</b> force/vision, FoAR gates with the future contact probability \(\phi(t)\in[0,1]\):</p>
+        <div class="eq">$$h_t=\Big[\,h_t^s\ ;\ \phi(t)\cdot h_t^f+\big(1-\phi(t)\big)\cdot h^*\,\Big]$$</div>
+        <p data-lang="zh">其中 \(h^*\) 是<mark class="m-method" data-t="METHOD/IDEA">可學習的中性 embedding</mark>,\([\,\cdot\,;\,\cdot\,]\) 為串接。直覺:<b>接觸階段(\(\phi\to1\))</b>讓真實力特徵 \(h_t^f\) 主導;<b>非接觸階段(\(\phi\to0\))</b>用 \(h^*\) 取代,<mark class="m-method" data-t="METHOD/IDEA">把噪聲力覺「靜音」</mark>。</p>
+        <p data-lang="en">Here \(h^*\) is a <mark class="m-method" data-t="METHOD/IDEA">learnable neutral embedding</mark> and \([\,\cdot\,;\,\cdot\,]\) is concatenation. Intuition: in <b>contact phases (\(\phi\to1\))</b> the real force feature \(h_t^f\) dominates; in <b>non-contact phases (\(\phi\to0\))</b> it is replaced by \(h^*\), <mark class="m-method" data-t="METHOD/IDEA">"muting" noisy force</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 2:未來接觸預測器 \(\phi\)</span><span data-lang="en">Key idea 2: the future contact predictor \(\phi\)</span></h3>
+        <p data-lang="zh">預測器吃<b>當前 RGB 影像 \(I_t\)</b> 與<b>力/扭矩 \(f_{t-T_o:t}\)</b>,輸出「未來會發生接觸」的機率 \(\phi\)。設計理由:(1) 用 RGB 而非點雲讓預測器<b>更輕量</b>(在接觸判定上兩者表現相近);(2) 力/扭矩雖不能直接預測未來接觸,但能在<b>意外接觸</b>發生時<b>修正</b>預測器。</p>
+        <p data-lang="en">The predictor takes the <b>current RGB image \(I_t\)</b> and <b>force/torque \(f_{t-T_o:t}\)</b>, outputting the probability \(\phi\) of future contact. Rationale: (1) RGB (not point cloud) keeps it <b>lightweight</b> (both perform similarly for contact determination); (2) force/torque can't directly predict future contact, but can <b>correct</b> the predictor when <b>unexpected contact</b> occurs.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><b>監督訊號</b>:GT 未來接觸狀態<b>自動</b>從示範中抽取——檢查時間窗 \([t-2s,\,t+2s]\) 內力/扭矩是否超過閾值 \(\delta_{\text{demo}}\)(閾值可從示範手動決定)。以 <b>BCE loss</b> \(\mathcal{L}_{\text{predictor}}\) 監督。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><b>Supervision</b>: the GT future-contact state is <b>auto-extracted</b> from demos—checking whether force/torque exceeds a threshold \(\delta_{\text{demo}}\) within a window \([t-2s,\,t+2s]\) (threshold set manually from demos). Supervised by <b>BCE loss</b> \(\mathcal{L}_{\text{predictor}}\).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 3:部署時的 reactive control</span><span data-lang="en">Key idea 3: reactive control at deployment</span></h3>
+        <p data-lang="zh">部署時(Alg. 1)以 \(\phi\) 分流:</p>
+        <p data-lang="en">At deployment (Alg. 1), \(\phi\) routes the flow:</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.85">
+          <li data-lang="zh"><b>若 \(\phi<\delta_\phi\)(非接觸)</b>:動作存入一般 buffer,照常執行。</li>
+          <li data-lang="en"><b>If \(\phi<\delta_\phi\) (non-contact)</b>: actions go to the normal buffer and execute as usual.</li>
+          <li data-lang="zh"><b>若 \(\phi\ge\delta_\phi\)(接觸/即將接觸)</b>:檢查當前力/扭矩;若<mark class="m-method" data-t="METHOD/IDEA">力覺不足</mark>(\(\text{force}(f_t)<\delta_f\) 且 \(\text{torque}(f_t)<\delta_t\)),就把預測動作往「預測方向 \(d\)」推一小步:\(a\leftarrow a+\epsilon\cdot d/\|d\|_2\)。</li>
+          <li data-lang="en"><b>If \(\phi\ge\delta_\phi\) (contact/imminent)</b>: check current force/torque; if <mark class="m-method" data-t="METHOD/IDEA">force is insufficient</mark> (\(\text{force}(f_t)<\delta_f\) and \(\text{torque}(f_t)<\delta_t\)), nudge the predicted action a small step toward the predicted direction \(d\): \(a\leftarrow a+\epsilon\cdot d/\|d\|_2\).</li>
+        </ul>
+        <p data-lang="zh" style="margin-top:8px;font-size:14px;color:var(--muted)">方向 \(d=\mathrm{avg}(a_{t:t+T_f}).\text{pos}-q_t.\text{pos}\)(由預測動作 chunk 與當前末端位姿 \(q_t\) 估計)。接觸與非接觸<b>各用獨立的 temporal ensemble buffer</b> 以免互相干擾。整套只用<b>末端位置控制</b>,不需 stiffness/力方向等參數。</p>
+        <p data-lang="en" style="margin-top:8px;font-size:14px;color:var(--muted)">The direction \(d=\mathrm{avg}(a_{t:t+T_f}).\text{pos}-q_t.\text{pos}\) (from the predicted action chunk and current end-effector pose \(q_t\)). Contact and non-contact phases use <b>separate temporal-ensemble buffers</b> to avoid mutual interference. The whole thing uses only <b>end-effector position control</b>—no stiffness/force-direction params.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">訓練損失 &amp; 符號白話對照</span><span data-lang="en">Training loss &amp; symbols in plain words</span></h3>
+        <p data-lang="zh">動作以擴散過程的 L2 損失 \(\mathcal{L}_{\text{action}}\) 監督;整體損失為兩項線性組合:</p>
+        <p data-lang="en">Actions are supervised by the diffusion L2 loss \(\mathcal{L}_{\text{action}}\); the overall loss is a linear combination:</p>
+        <div class="eq">$$\mathcal{L}=\mathcal{L}_{\text{action}}+\alpha\,\mathcal{L}_{\text{predictor}}$$</div>
+        <table class="sym">
+          <tr><td>\(\phi\in[0,1]\)</td><td><span data-lang="zh"><b>未來接觸機率</b>——本文的核心開關;調融合權重、也驅動 reactive control。</span><span data-lang="en"><b>Future contact probability</b>—the core switch; gates fusion and drives reactive control.</span></td></tr>
+          <tr><td>\(h_t^s,\ h_t^f\)</td><td><span data-lang="zh">場景(視覺)特徵 / 力覺特徵,皆 512 維。</span><span data-lang="en">Scene (vision) feature / force feature, both 512-D.</span></td></tr>
+          <tr><td>\(h^*\)</td><td><span data-lang="zh"><b>可學習中性 embedding</b>;非接觸時替代力特徵,靜音噪聲。</span><span data-lang="en"><b>Learnable neutral embedding</b>; replaces the force feature off-contact to mute noise.</span></td></tr>
+          <tr><td>\(T_o,\ T_a,\ T_f\)</td><td><span data-lang="zh">力覺歷史(200)/ 動作視野(20)/ 估方向用的步數(5)。</span><span data-lang="en">Force history (200) / action horizon (20) / steps used to estimate direction (5).</span></td></tr>
+          <tr><td>\(\delta_\phi,\delta_f,\delta_t,\epsilon\)</td><td><span data-lang="zh">接觸機率閾值(0.9)/ 力閾值(8N)/ 扭矩閾值(5N·m)/ 修正步長(0.006m)。</span><span data-lang="en">Contact-prob threshold (0.9) / force (8N) / torque (5N·m) / correction step (0.006m).</span></td></tr>
+          <tr><td>\(\alpha\)</td><td><span data-lang="zh">predictor loss 的權重(0.1)。</span><span data-lang="en">Weight on the predictor loss (0.1).</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">訓練:2× A100,batch 240,lr \(3\times10^{-4}\),cosine 衰減;點雲增強 + color jittering。硬體平台:Flexiv Rizon 機械臂 + Dahuan AG-95 夾爪 + OptoForce 力/扭矩感測器(裝在法蘭與夾爪之間)+ RealSense D435。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Training: 2× A100, batch 240, lr \(3\times10^{-4}\), cosine decay; point-cloud augmentation + color jitter. Hardware: Flexiv Rizon arm + Dahuan AG-95 gripper + OptoForce F/T sensor (between flange and gripper) + RealSense D435.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">學一個「<b>接下來會不會碰到東西</b>」的開關 \(\phi\):碰的時候把力覺打開、不碰的時候關掉噪聲;同一個開關在部署時還會在「該用力卻沒使上力」時,幫你把手往前推一點。</span>
+        <span data-lang="en">Learn a switch \(\phi\) for "<b>am I about to touch something</b>": open force when touching, mute its noise when not; at deployment the same switch also nudges the hand forward when "force is expected but not yet felt."</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何 predictor 要獨立?</span><span data-lang="en">Why a separate predictor</span></span>
+        <span data-lang="zh">預測器要的視覺資訊(「橡皮擦有沒有在白板上方」)與策略要的(「物體/末端精確位置」)<mark class="m-result" data-t="RESULT/EVIDENCE">本質不同</mark>。共享 3D 編碼器會造成<b>注意力衝突</b>,反而全面拖累(FoAR 3D-cls 甚至低於 RISE)。</span>
+        <span data-lang="en">The predictor's needed cues ("is the eraser above the board") differ <mark class="m-result" data-t="RESULT/EVIDENCE">fundamentally</mark> from the policy's ("precise object/end-effector positions"). A shared 3D encoder causes <b>conflicting attention</b> and drags everything down (FoAR 3D-cls even trails RISE).</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">GT 接觸標籤靠<mark class="m-assume" data-t="ASSUMPTION/CLAIM">力/扭矩超過人工閾值 \(\delta_{\text{demo}}\)</mark> 自動標注。這個「靜態閾值」在評測任務有效,但也是作者自陳的限制之一(複雜環境可能失效)。</span>
+        <span data-lang="en">GT contact labels are auto-annotated by <mark class="m-assume" data-t="ASSUMPTION/CLAIM">force/torque exceeding a manual threshold \(\delta_{\text{demo}}\)</mark>. This "static threshold" works on the evaluated tasks but is one of the authors' own stated limits (may fail in complex environments).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果:三大接觸任務(Tab.I,Score ↑)</span><span data-lang="en">Main results: three contact tasks (Tab.I, Score ↑)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th>Wiping</th><th>Wiping (Gen.)</th><th>Peeling</th></tr>
+          <tr><td>ACT</td><td>0.275</td><td>0.250</td><td>0.120</td></tr>
+          <tr><td>Diffusion Policy</td><td>0.400</td><td>0.350</td><td>0.386</td></tr>
+          <tr><td>RISE <span data-lang="zh">(純視覺 backbone)</span><span data-lang="en">(vision backbone)</span></td><td>0.500</td><td>0.500</td><td>0.377</td></tr>
+          <tr><td>RISE (force-token)</td><td>0.575</td><td>0.600</td><td>0.487</td></tr>
+          <tr><td>RISE (force-concat)</td><td>0.475</td><td>0.675</td><td>0.524</td></tr>
+          <tr><td>FoAR (3D-cls)<span data-lang="zh"> — 共享編碼器</span><span data-lang="en"> — shared enc.</span></td><td class="bad">0.175</td><td class="bad">0.200</td><td class="bad">0.270</td></tr>
+          <tr><td class="win">FoAR (ours)</td><td class="win">0.875</td><td class="win">0.850</td><td class="win">0.756</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">FoAR <mark class="m-result" data-t="RESULT/EVIDENCE">在三項任務上皆遠勝所有 baseline 與變體</mark>,且在抓取工具與接觸操作(擦/削)上都達 <b>100% 動作成功率(ASR)</b>。RISE (force-token/concat) 只是小幅贏過純 RISE,證明<b>簡單融合遠不如接觸引導融合</b>。FoAR (3D-cls) 崩盤 → 預測器必須與策略主幹分離。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">FoAR <mark class="m-result" data-t="RESULT/EVIDENCE">far surpasses all baselines and variants</mark> on all three, hitting <b>100% action success (ASR)</b> on both tool grasping and contact operations (wipe/peel). RISE (force-token/concat) only slightly beats plain RISE, proving <b>naive fusion is far worse than contact-guided fusion</b>. FoAR (3D-cls) collapses → the predictor must be separated from the policy backbone.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">切菜任務(Tab.II)&amp; 質性結果</span><span data-lang="en">Chopping (Tab.II) &amp; qualitative</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th># Segments ↑</th><th>Norm.Len Avg ↓</th><th>Std ↓</th></tr>
+          <tr><td>RISE</td><td>1.8 ± 0.6</td><td>0.727</td><td>0.411</td></tr>
+          <tr><td class="win">FoAR (ours)</td><td class="win">3.9 ± 0.9</td><td class="win">0.353</td><td class="win">0.094</td></tr>
+          <tr><td><span data-lang="zh">Oracle(示範)</span><span data-lang="en">Oracle (demo)</span></td><td>5.0 ± 0.0</td><td>0.200</td><td>0.056</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">切菜(瞬時力衝擊任務)中,FoAR 切出的<mark class="m-result" data-t="RESULT/EVIDENCE">段數翻倍(3.9 vs 1.8)</mark>、平均段長更短(0.353 vs 0.727)、且更均勻(std 0.094 vs 0.411)——顯著逼近 oracle。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">On chopping (instantaneous force impact), FoAR <mark class="m-result" data-t="RESULT/EVIDENCE">doubles the segment count (3.9 vs 1.8)</mark>, with shorter average segments (0.353 vs 0.727) and more uniform ones (std 0.094 vs 0.411)—markedly closer to the oracle.</p>
+        <figure class="fig"><img src="figs/He2025/fig4_peeling.png" alt="Figure 4 qualitative peeling">
+          <figcaption data-lang="zh"><b>Fig.4</b> 削皮任務質性結果。綠底=完整削皮,黃底=部分削皮,紅底=失敗。注意<b>只有 FoAR(右下)整排都是綠色的完整削皮</b>;所有 baseline(含加力覺的 RISE 變體)都出現大量部分削皮或失敗。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Qualitative peeling. Green=full peel, yellow=partial, red=failure. Note that <b>only FoAR (bottom-right) is a full row of green full peels</b>; every baseline (including force-augmented RISE variants) shows many partial peels or failures.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融(Wiping,Tab.III)</span><span data-lang="en">Ablations (Wiping, Tab.III)</span></h3>
+        <table>
+          <tr><th>F/T Freq.</th><th>Predictor</th><th>Reactive</th><th>Score ↑</th></tr>
+          <tr><td>100Hz</td><td>✓</td><td>✗</td><td>0.650</td></tr>
+          <tr><td>100Hz</td><td>✗</td><td>✓</td><td>0.650</td></tr>
+          <tr><td>2Hz</td><td>✓</td><td>✓</td><td>0.625</td></tr>
+          <tr><td>10Hz</td><td>✓</td><td>✓</td><td>0.800</td></tr>
+          <tr><td class="win">100Hz</td><td class="win">✓</td><td class="win">✓</td><td class="win">0.875</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">拿掉 reactive control(0.650)或降到 2Hz(0.625)都明顯掉分;<mark class="m-result" data-t="RESULT/EVIDENCE">三者(高頻力覺 + predictor + reactive)缺一不可</mark>。另有 Tab.V:把力覺編碼器的 Transformer 換成 MLP,削皮 score 從 0.588 掉到 0.426(仍勝 RISE 0.293)→ <b>時序建模重要</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Dropping reactive control (0.650) or lowering to 2Hz (0.625) clearly hurts; <mark class="m-result" data-t="RESULT/EVIDENCE">all three (high-freq force + predictor + reactive) are needed</mark>. Also Tab.V: replacing the force encoder's Transformer with an MLP drops peeling score from 0.588 to 0.426 (still beats RISE 0.293) → <b>temporal modeling matters</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">動態干擾下的穩健性(Tab.IV,Wiping General)</span><span data-lang="en">Robustness to disturbances (Tab.IV, Wiping General)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th>Original</th><th>Rewrite</th><th>Move</th><th>Rewrite+Move</th></tr>
+          <tr><td>RISE</td><td>0.500</td><td>0.500</td><td>0.600</td><td>0.500</td></tr>
+          <tr><td>RISE (force-token)</td><td>0.600</td><td>0.450</td><td>0.500</td><td>0.600</td></tr>
+          <tr><td class="win">FoAR (ours)</td><td class="win">0.850</td><td class="win">0.800</td><td class="win">0.850</td><td class="win">0.800</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">擦完後<b>重寫圖案 / 移動白板 / 兩者並用</b>三種干擾下,FoAR <mark class="m-result" data-t="RESULT/EVIDENCE">維持一致高分(0.80–0.85)</mark>;RISE (force-token) 反而在複雜情境掙扎——干擾把策略推回非接觸相位,力覺噪聲又放大誤差。<b>這正是接觸引導融合的價值。</b></p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Under <b>rewrite / move the board / both</b> after wiping, FoAR <mark class="m-result" data-t="RESULT/EVIDENCE">stays consistently high (0.80–0.85)</mark>; RISE (force-token) struggles in complex scenarios—disturbances push the policy back into non-contact phases where force noise amplifies errors. <b>Exactly the payoff of contact-guided fusion.</b></p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">三項接觸任務<b>大幅刷新</b>、接觸操作 100% 成功、動態干擾下仍穩;消融顯示 predictor + reactive + 高頻力覺<b>缺一不可</b>。「<b>相位感知地用力覺</b>」是它最強的論述。</span>
+        <span data-lang="en"><b>Sharply raises</b> all three contact tasks, 100% contact-op success, robust under disturbances; ablations show predictor + reactive + high-freq force are <b>all indispensable</b>. "<b>Use force in a phase-aware way</b>" is its strongest claim.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">評測是<b>單臂、少任務(3 種)、真機小樣本</b>(每法 10–20 trials)。<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有跨場景/跨物體的大規模泛化實驗</mark>,也沒有與「進階力控」的正面對比(只比自家變體與純視覺)。</span>
+        <span data-lang="en">Evaluation is <b>single-arm, few tasks (3), small real-robot samples</b> (10–20 trials each). <mark class="m-limit" data-t="LIMITATION/FUTURE">No large-scale cross-scene/cross-object generalization</mark>, and no head-to-head vs "advanced force control" (only own variants and vision-only).</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">baseline 公平?</span><span data-lang="en">fair baselines?</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">閾值調校</span><span data-lang="en">threshold tuning</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>大量手工閾值</b>:方法依賴一組<mark class="m-limit" data-t="LIMITATION/FUTURE">靜態閾值</mark>——標注用的 \(\delta_{\text{demo}}\)、接觸機率 \(\delta_\phi=0.9\)、力 \(\delta_f=8N\)、扭矩 \(\delta_t=5N\cdot m\)、步長 \(\epsilon\)。作者自陳「複雜環境可能失效」。這些閾值在三個受控任務上調得漂亮,但<b>跨任務/跨物體的可轉移性未證明</b>。</li>
+          <li data-lang="en"><b>Many hand-tuned thresholds</b>: the method relies on a set of <mark class="m-limit" data-t="LIMITATION/FUTURE">static thresholds</mark>—labeling \(\delta_{\text{demo}}\), contact \(\delta_\phi=0.9\), force \(\delta_f=8N\), torque \(\delta_t=5N\cdot m\), step \(\epsilon\). Authors admit they "may struggle in complex environments." Tuned nicely on three controlled tasks, but <b>cross-task/cross-object transfer is unproven</b>.</li>
+          <li data-lang="zh"><b>評測規模有限</b>:只有 <b>3 個任務、單臂、真機 10–20 trials</b>。雖然是真機(可貴),但樣本小、任務窄,<mark class="m-limit" data-t="LIMITATION/FUTURE">統計顯著性與泛化邊界不清</mark>。缺少對難度更高、更多樣物體的系統測試。</li>
+          <li data-lang="en"><b>Limited eval scale</b>: only <b>3 tasks, single-arm, 10–20 real trials</b>. Real-robot (commendable) but small-sample and narrow, so <mark class="m-limit" data-t="LIMITATION/FUTURE">statistical significance and generalization bounds are unclear</mark>. Lacks systematic tests on harder, more diverse objects.</li>
+          <li data-lang="zh"><b>baseline 的公平性</b>:主要對手是<b>自家的 RISE 變體</b>(force-token/concat)與純視覺策略。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">沒有與真正的進階力控法(順應/阻抗/混合力位)正面比較</mark>——而這些正是接觸密集任務的傳統強者。「贏在融合設計」的論述因此少了一塊對照。</li>
+          <li data-lang="en"><b>Baseline fairness</b>: main rivals are <b>own RISE variants</b> (force-token/concat) and vision-only policies. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">No head-to-head with genuine advanced force control (compliance/impedance/hybrid)</mark>—the traditional strong performers on contact-rich tasks. The "win via fusion design" claim thus lacks a key comparison.</li>
+          <li data-lang="zh"><b>reactive control 的貢獻難以拆分</b>:reactive 修正(把動作往預測方向推)本身就會提升接觸成功率。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">多少增益來自「更好的融合特徵」、多少來自「部署時的手動推力」</mark>?消融顯示兩者都重要,但兩者<b>耦合</b>(reactive 依賴 predictor 的 \(\phi\)),難以完全解耦歸因。</li>
+          <li data-lang="en"><b>Reactive control's share is hard to isolate</b>: the reactive nudge (pushing actions toward the predicted direction) itself raises contact success. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">How much gain is "better fused features" vs "a manual push at deployment"</mark>? Ablations show both matter, but they are <b>coupled</b> (reactive depends on the predictor's \(\phi\)), complicating attribution.</li>
+          <li data-lang="zh"><b>控制的簡化是雙面刃</b>:只用位置控制固然簡潔,但作者也承認這<mark class="m-limit" data-t="LIMITATION/FUTURE">限制了適應性</mark>。reactive 的「推一小步 \(\epsilon\)」是相當粗糙的力補償,面對需要精細力軌跡追蹤的任務(如插拔、拋光)可能不足。</li>
+          <li data-lang="en"><b>Control simplicity cuts both ways</b>: position-only control is clean, but authors admit it <mark class="m-limit" data-t="LIMITATION/FUTURE">limits adaptability</mark>. The reactive "nudge by \(\epsilon\)" is a rather crude force compensation and may fall short on tasks needing fine force-trajectory tracking (insertion, polishing).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>融合 vs 控制</b>:若<b>只</b>用接觸引導融合(關掉 reactive control),對上<b>只</b>用 reactive(等權融合),哪個增益更大?表 III 顯示各自 0.650,但兩者的因果貢獻能否更乾淨地拆開?</li>
+          <li data-lang="en"><b>Fusion vs control</b>: with <b>only</b> contact-guided fusion (reactive off) vs <b>only</b> reactive (uniform fusion), which gains more? Tab.III shows 0.650 each, but can their causal contributions be disentangled more cleanly?</li>
+          <li data-lang="zh"><b>baseline 對齊</b>:為何不與順應/阻抗/混合力位控制正面比較?FoAR 的位置控制 + reactive 推力,是否只是一個「隱式、粗糙的力控」,而專門力控在難任務上會反超?</li>
+          <li data-lang="en"><b>Baseline alignment</b>: why not compare head-to-head with compliance/impedance/hybrid control? Is FoAR's position control + reactive nudge just an "implicit, crude force controller" that dedicated force control would overtake on harder tasks?</li>
+          <li data-lang="zh"><b>閾值的可轉移性</b>:換一個新任務、新物體、新感測器,那組閾值(\(\delta_f,\delta_t,\delta_\phi,\epsilon\))要重調多少?能否學習/自適應化,而非手動設定?</li>
+          <li data-lang="en"><b>Threshold transfer</b>: on a new task/object/sensor, how much must \((\delta_f,\delta_t,\delta_\phi,\epsilon)\) be retuned? Can they be learned/adaptive rather than manual?</li>
+          <li data-lang="zh"><b>預測器的失敗模式</b>:當 \(\phi\) 預測錯誤(該接觸卻判非接觸,或反之)時會怎樣?力覺被錯誤靜音或錯誤放大,對安全與精度的影響有多大?論文缺少這類錯誤分析。</li>
+          <li data-lang="en"><b>Predictor failure modes</b>: what happens when \(\phi\) is wrong (contact judged as non-contact or vice versa)? Force gets wrongly muted/amplified—how much does this hurt safety and accuracy? The paper lacks such error analysis.</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 FoAR 讀成「<b>只是把力覺加進 RISE</b>」。真正的貢獻是那個<mark class="m-assume" data-t="ASSUMPTION/CLAIM">動態閘門 \(\phi\)</mark>:直接加力覺(RISE force-token/concat)只小贏、甚至有時掉分。收益來自「<b>相位感知地選擇性使用力覺</b>」與「用同一個 \(\phi\) 驅動 reactive control」的 co-design。</span>
+        <span data-lang="en">Reading FoAR as "<b>just add force to RISE</b>." The real contribution is the <mark class="m-assume" data-t="ASSUMPTION/CLAIM">dynamic gate \(\phi\)</mark>: naively adding force (RISE force-token/concat) barely wins, sometimes loses. The gain comes from "<b>phase-aware, selective use of force</b>" plus the co-design of driving reactive control with the same \(\phi\).</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">全程<b>真機實驗</b>(非模擬)、僅 50 條示範、消融紮實(頻率、predictor、reactive、encoder 都拆過),且 Limitations 寫得誠實(靜態閾值、位置控制、未及雙臂/靈巧手)。對一篇工程導向的機器人論文,定位合理而務實。</span>
+        <span data-lang="en">All-<b>real-robot experiments</b> (not sim), only 50 demos, solid ablations (frequency, predictor, reactive, encoder all dissected), and candid Limitations (static thresholds, position control, no dual-arm/dexterous hand yet). A reasonable, pragmatic stance for an engineering-oriented robotics paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「相位/階段感知的多模態融合」是可推廣的模式</b>:當某模態只在部分階段有效(力覺、音訊、觸覺),與其全程等權融合,不如學一個<b>輕量的階段開關</b>去閘控它——並用中性 embedding 靜音無關階段的噪聲。</li>
+          <li data-lang="en"><b>"Phase/stage-aware multimodal fusion" is a generalizable pattern</b>: when a modality is only useful in some phases (force, audio, tactile), rather than fuse it uniformly, learn a <b>lightweight stage switch</b> to gate it—and mute noise in irrelevant phases with a neutral embedding.</li>
+          <li data-lang="zh"><b>讓「一個預測」服務多個環節</b>:未來接觸機率 \(\phi\) 同時用於融合與控制,是很經濟的 co-design。做系統時,想想能否讓一個學到的中間量在多處複用。</li>
+          <li data-lang="en"><b>Let "one prediction" serve multiple stages</b>: using \(\phi\) for both fusion and control is an economical co-design. When building systems, ask whether one learned intermediate can be reused in several places.</li>
+          <li data-lang="zh"><b>編碼器要按「所需資訊」分離</b>:預測器與策略需要的視覺線索不同,共享編碼器反而互相干擾。<b>「一個 backbone 打天下」不總是最優</b>——任務衝突時,分離往往更好。</li>
+          <li data-lang="en"><b>Separate encoders by "information needed"</b>: predictor and policy need different visual cues; sharing an encoder causes interference. <b>"One backbone for all" isn't always optimal</b>—separate when tasks conflict.</li>
+          <li data-lang="zh"><b>簡單控制 + 好的感知</b>:把智慧放進感知/融合,反而能用最樸素的位置控制完成接觸任務。若你在糾結複雜控制器,先問:<b>是不是感知還不夠好?</b></li>
+          <li data-lang="en"><b>Simple control + good perception</b>: putting intelligence into perception/fusion lets the plainest position control finish contact tasks. If you're wrestling with a complex controller, first ask: <b>is perception just not good enough?</b></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「力覺應相位感知地融合,而非全程等權」</span><span data-lang="en">"force should be fused phase-awarely, not uniformly"</span></td><td><span data-lang="zh">引未來接觸預測器 + \(\phi\) 閘控融合,以及 force-token/concat 的反例。</span><span data-lang="en">Cite the future-contact predictor + \(\phi\)-gated fusion and the force-token/concat counterexamples.</span></td></tr>
+          <tr><td><span data-lang="zh">「簡單位置控制也能做接觸密集任務」</span><span data-lang="en">"simple position control can do contact-rich tasks"</span></td><td><span data-lang="zh">引 reactive control 設計與消融(vs 進階力控的免調參優勢)。</span><span data-lang="en">Cite the reactive-control design and ablations (tuning-free vs advanced force control).</span></td></tr>
+          <tr><td><span data-lang="zh">「高頻 + 時序建模對力覺有益」</span><span data-lang="en">"high-freq + temporal modeling helps force"</span></td><td><span data-lang="zh">引 100Hz vs 2/10Hz、Transformer vs MLP 的消融(Tab.III, V)。</span><span data-lang="en">Cite the 100Hz vs 2/10Hz and Transformer vs MLP ablations (Tab.III, V).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">FoAR 的貢獻不是「加力覺」,而是「<b>學一個未來接觸機率 \(\phi\),用它相位感知地閘控力覺融合、並驅動 reactive control</b>」。這讓純視覺 backbone(RISE)搖身變成力覺敏感的策略,只靠簡單位置控制就在擦/削/切等接觸密集任務上大幅超越所有 baseline——證明<b>「什麼時候相信力覺」比「有沒有力覺」更關鍵</b>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">FoAR's contribution isn't "adding force" but "<b>learning a future-contact probability \(\phi\) that phase-awarely gates force fusion and drives reactive control</b>." It turns a vision backbone (RISE) into a force-sensitive policy that, with only simple position control, far outperforms all baselines on wiping/peeling/chopping—showing that <b>"when to trust force" matters more than "force or not."</b></p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">RISE</span>
+          <span class="chip">Diffusion Policy</span>
+          <span class="chip">ACT</span>
+          <span class="chip">ForceMimic</span>
+          <span class="chip">Adaptive Compliance Policy</span>
+          <span class="chip">MinkowskiEngine</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · He et al. 2025 (FoAR) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'FoAR reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>FACTR — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"FACTR: Force-Attending Curriculum Training for Contact-Rich Policy Learning","authors":"Jason Jingzhou Liu, Yulong Li, Kenneth Shaw, Tony Tao, Ruslan Salakhutdinov, Deepak Pathak","year":"2025","venue":"RSS","tags":["Force-Aware Manipulation","Robot Learning","Force Feedback","Imitation Learning","Curriculum Learning","Teleoperation"],"tldr":"用「逐步解模糊視覺」的課程訓練逼機器人策略先學會用力覺,搭配一套低成本雙向力回饋遙操作系統,讓接觸密集任務對未見物體的泛化提升約 40%。","tldr_en":"A curriculum that progressively de-blurs the visual input forces a robot policy to first learn from force, paired with a low-cost bilateral force-feedback teleoperation rig, boosting generalization to unseen objects in contact-rich tasks by ~40%."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:96px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">很多接觸密集(contact-rich)任務——抬箱子、擀麵團——人類靠<b>力覺回饋</b>來完成,但機器人策略幾乎只看視覺。原因之一是<mark class="m-problem" data-t="PROBLEM/GAP">策略容易 overfit 到視覺、忽略力覺</mark>。本文一是造一套<b>低成本雙向力回饋遙操作系統</b>把接觸力傳回操作者;二是提出 <b>FACTR</b> 課程訓練:<mark class="m-method" data-t="METHOD/IDEA">訓練初期把視覺輸入模糊化,再逐步解模糊</mark>,逼策略先學會用力覺。對未見物體的泛化<mark class="m-result" data-t="RESULT/EVIDENCE">平均提升約 40%</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Many contact-rich tasks—lifting a box, rolling dough—rely on <b>force feedback</b> for humans, yet robot policies mostly watch pixels. One reason: <mark class="m-problem" data-t="PROBLEM/GAP">policies overfit to vision and ignore force</mark>. This paper (1) builds a <b>low-cost bilateral force-feedback teleoperation rig</b> that relays contact forces to the operator, and (2) proposes <b>FACTR</b>, a curriculum that <mark class="m-method" data-t="METHOD/IDEA">blurs the visual input early and progressively sharpens it</mark>, forcing the policy to learn from force first. Generalization to unseen objects improves by <mark class="m-result" data-t="RESULT/EVIDENCE">~40% on average</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Liu2025/fig1_teaser.png" alt="Figure 1 teaser">
+        <figcaption data-lang="zh"><b>Fig.1</b> 系統全貌。<b>左</b>:低成本 leader-follower 遙操作,用<b>被驅動的伺服馬達</b>把 follower 感測到的外部關節力矩傳回 leader,讓操作者「摸得到」環境(綠箭=力、紅箭=運動)。<b>右</b>:FACTR 訓練出的自主策略,對不同幾何/紋理的<b>未見物體</b>能泛化。注意兩件事其實是「資料怎麼收」與「策略怎麼學」的一套組合拳。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> System overview. <b>Left</b>: a low-cost leader-follower teleoperation rig whose <b>actuated servos</b> relay the follower's external joint torques back to the leader, so the operator can "feel" the environment (green = force, red = motion). <b>Right</b>: FACTR-trained autonomous policies generalize to <b>unseen objects</b> of diverse geometry/texture. Note the two pieces form one combo: "how data is collected" + "how the policy learns."</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 機器手臂其實普遍能讀<mark class="m-problem" data-t="PROBLEM/GAP">關節力矩,但遙操作與策略學習都很少用</mark>;更糟的是把力硬塞進策略,策略往往<b>直接忽略它、只看視覺</b>(因為接觸力大部分時間近乎為零、不夠有辨別度)。</li>
+          <li data-lang="en"><b>Problem</b> — Robot arms readily expose <mark class="m-problem" data-t="PROBLEM/GAP">joint torques, but teleop and policy learning rarely use them</mark>; worse, when force is naively added, the policy <b>ignores it and rides on vision</b> (contact force is near-zero most of the time and hardly discriminative).</li>
+          <li data-lang="zh"><b>方法 A(收資料)</b> — 一套 <mark class="m-method" data-t="METHOD/IDEA">雙向(bilateral)力回饋遙操作</mark>:只把 follower 的<b>外部</b>關節力矩傳回 leader,附帶重力補償與冗餘度解算,操作直覺又不受內部摩擦干擾。</li>
+          <li data-lang="en"><b>Method A (data)</b> — A <mark class="m-method" data-t="METHOD/IDEA">bilateral force-feedback teleoperation</mark> rig relaying only the follower's <b>external</b> joint torques to the leader, plus gravity compensation and redundancy resolution—intuitive, free of internal-friction artifacts.</li>
+          <li data-lang="zh"><b>方法 B(學策略)</b> — <mark class="m-method" data-t="METHOD/IDEA">FACTR 課程</mark>:對視覺輸入(像素或 latent)加高斯模糊/降採樣,尺度 \(\sigma_n\) 隨訓練遞減;初期視覺「看不清」→ 逼模型先靠力覺,後期再納入細節。並用 <b>NTK</b> 提供理論直覺。</li>
+          <li data-lang="en"><b>Method B (policy)</b> — <mark class="m-method" data-t="METHOD/IDEA">The FACTR curriculum</mark>: apply Gaussian blur / downsampling to the visual input (pixel or latent), with scale \(\sigma_n\) decaying over training; early on vision is "unclear" → the model must lean on force, then fine detail returns. Grounded with an <b>NTK</b> argument.</li>
+          <li data-lang="zh"><b>結果</b> — 遙操作:完成率 <mark class="m-result" data-t="RESULT/EVIDENCE">+64.7%</mark>、耗時 −37.4%、易用度 +83.3%。策略:對未見物體,vision-only 21.3% → 無課程加力 61.2% → <mark class="m-result" data-t="RESULT/EVIDENCE">FACTR 87.5%</mark>。</li>
+          <li data-lang="en"><b>Results</b> — Teleop: completion rate <mark class="m-result" data-t="RESULT/EVIDENCE">+64.7%</mark>, time −37.4%, ease-of-use +83.3%. Policy on unseen objects: vision-only 21.3% → naive force 61.2% → <mark class="m-result" data-t="RESULT/EVIDENCE">FACTR 87.5%</mark>.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">模仿學習(imitation learning)近年靠 <mark class="m-method" data-t="METHOD/IDEA">Diffusion Policy</mark>、<mark class="m-method" data-t="METHOD/IDEA">Action Chunking Transformer(ACT / ALOHA)</mark> 在精細操作上大有進展,但主要吃視覺 + 關節位置,<mark class="m-problem" data-t="PROBLEM/GAP">對未見物體(不同外觀、幾何)泛化不佳</mark>。人類遇到這種情況會「一旦接觸就忽略無關的視覺細節、改用力覺」——這正是本文想給機器人的能力。</p>
+        <p data-lang="en">Imitation learning has advanced rapidly via <mark class="m-method" data-t="METHOD/IDEA">Diffusion Policy</mark> and <mark class="m-method" data-t="METHOD/IDEA">Action Chunking Transformers (ACT / ALOHA)</mark> for fine manipulation, but they mostly consume vision + joint positions and <mark class="m-problem" data-t="PROBLEM/GAP">generalize poorly to unseen objects</mark> (novel appearance, geometry). Humans, once in contact, discard irrelevant visual detail and rely on force—exactly the capability this paper wants to give robots.</p>
+        <p data-lang="zh">遙操作端,<mark class="m-method" data-t="METHOD/IDEA">GELLO / ALOHA</mark> 這類低成本 leader-follower 系統很流行,但多半是<mark class="m-problem" data-t="PROBLEM/GAP">被動(leader 不驅動)且單向(leader 收不到 follower 的力)</mark>,難以做接觸密集的遙操作。也有雙向系統(如 Kobayashi et al.),但把 follower <b>全部</b>力矩(含運動時的慣性/摩擦)都傳回來,反而干擾操作。</p>
+        <p data-lang="en">On the teleop side, low-cost leader-follower rigs like <mark class="m-method" data-t="METHOD/IDEA">GELLO / ALOHA</mark> are popular but usually <mark class="m-problem" data-t="PROBLEM/GAP">passive (unactuated leader) and unilateral (leader gets no force from the follower)</mark>, so contact-rich teleop is hard. Bilateral variants exist (e.g. Kobayashi et al.) but relay the follower's <b>full</b> torque (including inertia/friction during motion), which disturbs the operator.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的巧思是把問題拆成<b>兩個互相咬合的環節</b>:力覺策略要學得好,前提是<b>資料裡有好的力覺示範</b>(→ 造遙操作系統);而就算資料有力,<b>訓練時模型還是會偷懶只看視覺</b>(→ 用課程逼它)。單獨做任一半都不夠——這是「系統 + 演算法」一起出手的典型 robot learning 論文。</p>
+          <p data-lang="en" style="margin-top:6px">The neat move is splitting the problem into <b>two interlocking halves</b>: a good force policy needs <b>good force demonstrations</b> (→ build the teleop rig); yet even with force in the data, <b>training lets the model cheat on vision</b> (→ force it with a curriculum). Neither half alone suffices—a classic "system + algorithm" robot-learning paper.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不只是「加了力覺」,而是底下幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not "we added force" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">多模態學習的「模態偷懶」問題。</b> 當一個模態(視覺)強、好學,另一個(力覺)弱、稀疏時,模型會<mark class="m-problem" data-t="PROBLEM/GAP">收斂到只用強模態</mark>。這不是機器人特有,是多模態融合的通病。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">The "lazy modality" problem.</b> When one modality (vision) is strong and easy while another (force) is weak and sparse, the model <mark class="m-problem" data-t="PROBLEM/GAP">collapses to the strong one</mark>. Not robot-specific—a general pathology of multimodal fusion.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">用「降低強模態的辨別度」來平衡學習。</b> 與其想辦法放大弱模態,不如<mark class="m-method" data-t="METHOD/IDEA">暫時把強模態弄糊</mark>,讓兩者的梯度貢獻在訓練初期拉平——再逐步還原。這是一個很可遷移的訓練技巧。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Balance by dulling the strong modality.</b> Instead of amplifying the weak one, <mark class="m-method" data-t="METHOD/IDEA">temporarily blur the strong one</mark> so gradient contributions equalize early—then restore it. A highly transferable training trick.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">課程 &gt; 固定模糊 &gt; 資料增強。</b> 關鍵是「<b>遞減</b>」:最終策略仍需清晰視覺,固定模糊會讓它拿不到細節;隨機資料增強則在「夠不夠逼出力覺」與「破壞視覺」間難以兩全。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Curriculum &gt; fixed blur &gt; augmentation.</b> The point is the <b>decay</b>: the final policy needs sharp vision, so constant blur starves it of detail, while random augmentation can't both force-attend and preserve vision.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">力覺是「模式切換」的訊號。</b> 接觸/脫離接觸的時刻(抬到箱子、抓到水果、麵團擀壓的來回)在力訊號上有明顯特徵,幫策略判斷「現在該換動作」,也帶來更好的<b>失敗恢復</b>能力。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Force signals mode switches.</b> Making/breaking contact (touching the box, grasping fruit, the oscillation of rolling) shows up sharply in force, telling the policy "switch behavior now"—and yields better <b>failure recovery</b>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">FACTR: Force-Attending Curriculum Training for Contact-Rich Policy Learning</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Liu, Li, Shaw, Tao, Salakhutdinov, Pathak</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Carnegie Mellon University</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2025 · RSS(arXiv:2502.17432)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Robot Learning</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>jasonjzliu.com/factr/</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「機器人策略只會做<b>準靜態、免力覺</b>的任務」這個天花板往上推。用一個便宜的力回饋遙操作 + 一個簡單通用的課程訓練,就讓策略真的<b>用起</b>本來就有、卻長期被忽略的關節力矩訊號。<span class="add">[導讀補充] 本文為 RSS 2025 發表。</span></span>
+        <span data-lang="en">Raises the ceiling of "robot policies only doing <b>quasi-static, force-free</b> tasks." With a cheap force-feedback rig plus a simple, general curriculum, policies finally <b>use</b> the joint-torque signal that was always available yet long ignored. <span class="add">[guide note] Published at RSS 2025.</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Force feedback</span><span class="chip">Bilateral teleop</span>
+          <span class="chip">ACT / ALOHA</span><span class="chip">Curriculum</span>
+          <span class="chip">Gaussian blur</span><span class="chip">NTK</span>
+        </div>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">四個評測任務</span><span data-lang="en">The four tasks</span></div>
+        <span data-lang="zh" style="font-size:13px">雙臂<b>抬箱</b>、非抓取式<b>翻轉(pivot)</b>、<b>水果</b>夾放、<b>擀麵團</b>——都需要感知並回應接觸力。</span>
+        <span data-lang="en" style="font-size:13px">Bimanual <b>box lift</b>, non-prehensile <b>pivot</b>, <b>fruit</b> pick-and-place, <b>dough rolling</b>—all require sensing and responding to contact force.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">純視覺模仿學習</span><span data-lang="en">Vision-only imitation</span></b><br>(ACT, Diffusion Policy)</td><td><span data-lang="zh">對訓練分布內物體表現好,但<mark class="m-problem" data-t="PROBLEM/GAP">換未見物體(不同幾何/紋理)就掉分</mark>——因為它學到的是視覺捷徑,而非任務的物理。</span><span data-lang="en">Great in-distribution, but <mark class="m-problem" data-t="PROBLEM/GAP">drops on unseen objects (novel geometry/texture)</mark>—it learned visual shortcuts, not the task physics.</span></td></tr>
+          <tr><td><b><span data-lang="zh">硬加力覺的策略</span><span data-lang="en">Naive force-augmented policy</span></b></td><td><span data-lang="zh">把力矩直接 concat 進觀測,策略常<mark class="m-problem" data-t="PROBLEM/GAP">收斂到忽略力覺</mark>——接觸力大多時間近乎為零、辨別度低,不如視覺「好學」。</span><span data-lang="en">Concatenating torque into the observation often makes the policy <mark class="m-problem" data-t="PROBLEM/GAP">converge to ignoring force</mark>—it's near-zero and undiscriminative most of the time, "harder to learn" than vision.</span></td></tr>
+          <tr><td><b><span data-lang="zh">被動/單向遙操作</span><span data-lang="en">Passive / unilateral teleop</span></b><br>(GELLO, ALOHA)</td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">收不到力回饋</mark>,操作者感覺不到環境幾何約束,接觸密集任務下 follower 易脫離接觸、超速。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">No force feedback</mark>: the operator can't feel geometric constraints; in contact-rich tasks the follower loses contact and overshoots velocity limits.</span></td></tr>
+          <tr><td><b><span data-lang="zh">傳全力矩的雙向遙操作</span><span data-lang="en">Full-torque bilateral teleop</span></b><br>(Kobayashi et al.)</td><td><span data-lang="zh">連 follower 運動時的<mark class="m-problem" data-t="PROBLEM/GAP">慣性/摩擦也一起回饋</mark>,干擾操作、降低精度與易用度。</span><span data-lang="en">Also relays the follower's <mark class="m-problem" data-t="PROBLEM/GAP">inertia/friction during motion</mark>, disturbing the operator and hurting precision/usability.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「如何讓機器人策略真正『用起』隨手可得的力覺,以在接觸密集任務上泛化到未見物體?」</b>——而這又先要解決「怎麼收到好的力覺示範資料」。</p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"How do we make robot policies actually <i>use</i> the readily available force signal, to generalize to unseen objects in contact-rich tasks?"</b>—which first requires collecting good force demonstrations.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,FACTR 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how FACTR fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">本文如何補上</span><span data-lang="en">How this paper fills it</span></th></tr>
+          <tr>
+            <td><b>GELLO</b><br><small><span data-lang="zh">低成本遙操作</span><span data-lang="en">low-cost teleop</span></small></td>
+            <td><span data-lang="zh">leader 被動、靠<mark class="m-problem" data-t="PROBLEM/GAP">彈簧/橡皮筋</mark>做重力補償,無力回饋。</span><span data-lang="en">Passive leader; gravity comp via <mark class="m-problem" data-t="PROBLEM/GAP">springs/rubber bands</mark>; no force feedback.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">主動驅動伺服</mark>提供力回饋 + 主動重力補償 + 可自訂冗餘度解算。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Actuated servos</mark> give force feedback + active gravity comp + customizable redundancy resolution.</span></td>
+          </tr>
+          <tr>
+            <td><b>FoAR</b><br><small><span data-lang="zh">力覺反應策略</span><span data-lang="en">force-aware policy</span></small></td>
+            <td><span data-lang="zh">需<mark class="m-problem" data-t="PROBLEM/GAP">額外標註接觸/非接觸階段</mark>來調控視/力融合。</span><span data-lang="en">Needs <mark class="m-problem" data-t="PROBLEM/GAP">extra labels of contact/non-contact phases</mark> to gate vision/force fusion.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">課程自動平衡</mark>兩模態,<b>不需額外標註</b>。</span><span data-lang="en">The <mark class="m-method" data-t="METHOD/IDEA">curriculum auto-balances</mark> the modalities, <b>no extra labels</b>.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">純視覺 ACT</span><span data-lang="en">Vision-only ACT</span></b></td>
+            <td><span data-lang="zh">未見物體泛化差(平均 21.3%)。</span><span data-lang="en">Poor unseen-object generalization (avg 21.3%).</span></td>
+            <td><span data-lang="zh">同一 backbone 加力覺 + 課程 → <mark class="m-result" data-t="RESULT/EVIDENCE">87.5%</mark>。</span><span data-lang="en">Same backbone + force + curriculum → <mark class="m-result" data-t="RESULT/EVIDENCE">87.5%</mark>.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意本文的力覺來源是<b>手臂的外部關節力矩(external joint torque)</b>,不是額外裝觸覺皮膚或六軸力/力矩感測器。這是刻意的「<mark class="m-assume" data-t="ASSUMPTION/CLAIM">用現成、免額外硬體的訊號</mark>」定位——Franka Panda、KUKA iiwa 本來就有。好處是門檻低、易推廣;代價是這個訊號比較粗、雜訊大(作者在 Limitations 也坦承)。</p>
+          <p data-lang="en" style="margin-top:6px">Note the force source is the arm's <b>external joint torque</b>, not an added tactile skin or 6-axis F/T sensor. This is a deliberate "<mark class="m-assume" data-t="ASSUMPTION/CLAIM">use the readily-available, no-extra-hardware signal</mark>" stance—Franka Panda and KUKA iiwa already expose it. Upside: low barrier, broad applicability; cost: the signal is coarse and noisy (the authors admit this in Limitations).</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把「策略忽略力覺」誤解成「力覺沒用」。恰恰相反——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">力覺很有用,但預設訓練學不到它</mark>。問題出在<b>優化動力學</b>(視覺梯度訊號強、先被學走),不是力覺本身沒資訊。FACTR 攻的正是這個「學習順序」問題。</span>
+        <span data-lang="en">Don't read "the policy ignores force" as "force is useless." The opposite—<mark class="m-assume" data-t="ASSUMPTION/CLAIM">force is useful, but default training fails to learn it</mark>. The culprit is <b>optimization dynamics</b> (vision's gradient is strong and gets learned first), not a lack of information in force. FACTR targets this "order of learning."</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">擀麵團任務最能說明:視覺上麵團來回擀壓幾乎<b>看不出差別</b>,純視覺策略直接把麵團壓扁、完全失敗(0% 成功);而力訊號有清楚的<b>振盪模式</b>,讓有力覺的策略能區分當下狀態。</span>
+        <span data-lang="en">Rolling dough says it best: the oscillatory rolling is <b>visually near-indistinguishable</b>, so the vision-only policy just smashes the dough—0% success; force has a clear <b>oscillatory pattern</b> that lets force-using policies tell states apart.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">超參敏感</span><span data-lang="en">hyperparams</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">規模有限</span><span data-lang="en">small scale</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">問題定義:力覺條件下的行為克隆</span><span data-lang="en">Problem setup: force-conditioned behavior cloning</span></h3>
+        <p data-lang="zh">學一個策略 \(\pi_\theta\),給定當下影像 \(I_t\) 與外部關節力矩 \(\tau_t\),預測未來 \(k\) 步的關節位置目標 \(\hat q_{t:t+k}\)(action chunking)。用專家示範資料集 \(\mathcal D\)(每筆 \((I_t,\tau_t,q_t)\))做行為克隆,損失為 MSE:</p>
+        <p data-lang="en">Learn a policy \(\pi_\theta\) that, given image \(I_t\) and external joint torque \(\tau_t\), predicts the next \(k\) joint-position targets \(\hat q_{t:t+k}\) (action chunking). Behavior-clone from expert data \(\mathcal D\) (tuples \((I_t,\tau_t,q_t)\)) with an MSE loss:</p>
+        <div class="eq">$$\mathcal{L}=\mathrm{MSE}\big(\hat q_{t:t+k},\,q_{t:t+k}\big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">[導讀補充] 一個容易漏看但很關鍵的設計(在 Appendix X):<mark class="m-method" data-t="METHOD/IDEA">故意<b>不</b>把當下手臂關節角餵給策略當 proprioception</mark>,以免策略走捷徑「預測接近當下狀態的動作」,反而逼它從影像抽取物體資訊。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">[guide note] An easy-to-miss but key choice (Appendix X): <mark class="m-method" data-t="METHOD/IDEA">deliberately <b>exclude</b> the current arm joints from proprioception</mark>, so the policy can't shortcut to "predict actions near the current state," forcing it to extract object info from images.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Part A — 雙向力回饋遙操作(收資料)</span><span data-lang="en">Part A — bilateral force-feedback teleop (data)</span></h3>
+        <p data-lang="zh">leader 臂的伺服馬達施加合成力矩,由五項相加:</p>
+        <p data-lang="en">The leader arm's servos apply a composite torque, the sum of five terms:</p>
+        <div class="eq">$$\tau=\tau_{\text{feedback}}+\tau_{\text{null}}+\tau_{\text{grav}}+\tau_{\text{friction}}+\tau_{\text{limit}}$$</div>
+        <p data-lang="zh">最關鍵的力回饋項<b>只</b>傳 follower 的外部力矩 \(\tau_{\text{ext}}\)(不含內部慣性/摩擦),並用縮放係數 \(\mu_f\) 做「中介式(mediated)」回饋以降低操作者認知負荷:</p>
+        <p data-lang="en">The key feedback term relays <b>only</b> the follower's external torque \(\tau_{\text{ext}}\) (excluding internal inertia/friction), scaled by \(\mu_f\) for "mediated" feedback that lowers operator cognitive load:</p>
+        <div class="eq">$$\tau_{\text{feedback}}=\mu_f K_{f,p}\,\tau_{\text{ext}}-K_{f,d}\,\dot q$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">其餘各項:\(\tau_{\text{null}}\) 用<b>零空間投影</b> \((I-J^\dagger J)\) 在不影響末端的前提下把冗餘關節穩在使用者自訂的休息姿態 \(q_{\text{rest}}\);\(\tau_{\text{grav}}\) 用 RNEA 逆動力學做重力補償;\(\tau_{\text{friction}}\) 補償靜/動摩擦;\(\tau_{\text{limit}}\) 用人工勢場擋在 follower 的關節極限內。gripper 則用伺服<b>電流</b>讀值經 EMA 濾波當力回饋。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Other terms: \(\tau_{\text{null}}\) uses a <b>null-space projector</b> \((I-J^\dagger J)\) to hold the redundant joints at a user-defined rest posture \(q_{\text{rest}}\) without imposing end-effector wrenches; \(\tau_{\text{grav}}\) is RNEA inverse-dynamics gravity comp; \(\tau_{\text{friction}}\) compensates static/kinetic friction; \(\tau_{\text{limit}}\) is an artificial-potential barrier at the follower's joint limits. The gripper uses the servo <b>current</b> reading (EMA-filtered) as feedback.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Part B — 策略架構 + FACTR 課程(學策略)</span><span data-lang="en">Part B — policy architecture + FACTR curriculum</span></h3>
+        <figure class="fig"><img src="figs/Liu2025/fig4_method.png" alt="Figure 4 method">
+          <figcaption data-lang="zh"><b>Fig.4</b> FACTR 全貌。影像 \(I\) 經 <b>ViT 視覺編碼器</b> \(f_\phi\) 成 \(M_v\) 個 token,力矩 \(\tau\) 經 <b>MLP 力編碼器</b> \(g_\psi\) 成<b>單一</b>力 token,一起丟進 <b>Action Transformer</b> \(\pi_\theta\) 回歸 \(q_{t:t+k}\)。要注意的關鍵:模糊操作有<b>兩處可選</b>——<b>左(pixel space)</b>對原圖卷積 \(\sigma_n^p\)、<b>右(latent space)</b>對視覺 token 卷積 \(\sigma_n^l\);兩者的 \(\sigma\) 都從大值起、隨訓練(\(n{=}0\to\text{Max Iter}\))遞減到近乎無模糊。力覺分支<b>永遠不被模糊</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> FACTR overview. Image \(I\) → <b>ViT vision encoder</b> \(f_\phi\) into \(M_v\) tokens; torque \(\tau\) → <b>MLP force encoder</b> \(g_\psi\) into a <b>single</b> force token; both feed an <b>Action Transformer</b> \(\pi_\theta\) regressing \(q_{t:t+k}\). Key thing to notice: blurring is applied at <b>one of two places</b>—<b>left (pixel space)</b> convolving the image by \(\sigma_n^p\), or <b>right (latent space)</b> convolving the visual tokens by \(\sigma_n^l\); both \(\sigma\) start large and decay over training (\(n{=}0\to\text{Max Iter}\)) to near-zero blur. The force branch is <b>never blurred</b>.</figcaption></figure>
+        <p data-lang="zh">策略是 <mark class="m-method" data-t="METHOD/IDEA">encoder-decoder transformer(ACT 風格)</mark>:視覺 token \(z^V_t\in\mathbb{R}^{M_v\times d}\) 與力 token \(z^F_t\in\mathbb{R}^{1\times d}\) 串接進 encoder;decoder 用 \(k\) 個 action token 對 encoder 記憶做 <b>cross-attention</b>,再投影成關節動作。每個 action token 對視覺/力的注意力權重 \(\alpha^{(l)}_V,\alpha^{(l)}_F\) 之後會被拿來分析「策略到底看視覺還是看力」。</p>
+        <p data-lang="en">The policy is an <mark class="m-method" data-t="METHOD/IDEA">encoder-decoder transformer (ACT-style)</mark>: visual tokens \(z^V_t\in\mathbb{R}^{M_v\times d}\) and a force token \(z^F_t\in\mathbb{R}^{1\times d}\) are concatenated into the encoder; \(k\) action tokens in the decoder <b>cross-attend</b> to the encoder memory, then project to joint actions. The per-token attention to vision/force, \(\alpha^{(l)}_V,\alpha^{(l)}_F\), is later analyzed to see "does the policy watch vision or force."</p>
+        <p data-lang="zh">FACTR 定義兩個模糊算子,尺度 \(\sigma_n\) 由 scheduler 控制:</p>
+        <p data-lang="en">FACTR defines two blurring operators with scale \(\sigma_n\) set by a scheduler:</p>
+        <div class="eq">$$\beta_P(I,\sigma)=I*G_\sigma \qquad \beta_L(z^V,\sigma)=z^V*g_\sigma$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(G_\sigma\) 是 2D 高斯核(作用像素)、\(g_\sigma\) 是 1D 高斯核(作用 latent token)。另一種算子是<b>降採樣</b>(MaxPool + 最近鄰插值)。直覺:當 \(\sigma\to\infty\),所有影像被糊成<b>幾乎同一張</b>,視覺再也無法區分不同輸入 → 模型只能靠<b>力覺</b>去分辨、把梯度用來訓練力編碼器。隨 \(\sigma_n\) 遞減,細節逐步回來。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(G_\sigma\) is a 2D Gaussian (on pixels), \(g_\sigma\) a 1D Gaussian (on latent tokens). An alternative operator is <b>downsampling</b> (MaxPool + nearest interp). Intuition: as \(\sigma\to\infty\) all images blur to <b>nearly the same tensor</b>, so vision can no longer distinguish inputs → the model must use <b>force</b> to tell them apart, spending gradients on the force encoder. As \(\sigma_n\) decays, detail returns.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">課程排程(scheduler)</span><span data-lang="en">Curriculum schedulers</span></h3>
+        <p data-lang="zh">給定初始尺度 \(\sigma_0\),沿訓練步 \(n=1\dots N\) 遞減 \(\sigma_n\)。比較五種:</p>
+        <p data-lang="en">Given \(\sigma_0\), decay \(\sigma_n\) over steps \(n=1\dots N\). Five variants compared:</p>
+        <div class="eq">$$\text{Linear: }\sigma_n=\sigma_0\Big(1-\tfrac{n}{N}\Big)\qquad \text{Cosine: }\sigma_n=\tfrac{\sigma_0}{2}\Big(1+\cos\tfrac{n\pi}{N}\Big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">另有 Constant(固定,即無課程對照)、Exponential、Step。並在最前面<b>warm-up</b>:先把 \(\sigma\) 固定在 \(\sigma_0\) 若干步,讓隨機初始化的力編碼器先在「低視覺資訊」環境暖身。整體流程見 Algorithm 1。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Plus Constant (the no-curriculum control), Exponential, and Step. A <b>warm-up</b> first holds \(\sigma\) at \(\sigma_0\) for some steps so the randomly-initialized force encoder can warm up under low visual information. See Algorithm 1.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">理論直覺:為什麼模糊能逼出力覺(NTK)</span><span data-lang="en">Theory: why blur forces force-attending (NTK)</span></h3>
+        <p data-lang="zh">用 <mark class="m-method" data-t="METHOD/IDEA">Neural Tangent Kernel</mark> 在簡化的兩層模型上分析。輸入先被高斯核卷積 \(f(x)=W^\top(K_\sigma * x)\),其 NTK 為 \(k_\sigma(x,x')=\mathbb{E}_W\langle K_\sigma*x,\,K_\sigma*x'\rangle\)。當 \(\sigma\) 變大,高斯卷積是<b>低通濾波</b>,任兩輸入被糊得越來越像;極限 \(\sigma\to\infty\) 時所有 \(K_\sigma*x_i\to\phi\)(同一向量),核矩陣退化成 rank-1 的全一矩陣:</p>
+        <p data-lang="en">Analyzed via the <mark class="m-method" data-t="METHOD/IDEA">Neural Tangent Kernel</mark> on a simplified two-layer model. With input first convolved, \(f(x)=W^\top(K_\sigma * x)\), the NTK is \(k_\sigma(x,x')=\mathbb{E}_W\langle K_\sigma*x,\,K_\sigma*x'\rangle\). Larger \(\sigma\) means the Gaussian acts as a <b>low-pass filter</b>, making any two inputs ever more similar; in the limit \(\sigma\to\infty\) all \(K_\sigma*x_i\to\phi\) (one vector) and the kernel matrix degenerates to a rank-1 all-ones matrix:</p>
+        <div class="eq">$$k_\sigma(x_i,x_j)=\langle\phi,\phi\rangle=\|\phi\|^2,\qquad K=\|\phi\|^2\,\mathbf{1}\mathbf{1}^\top$$</div>
+        <p data-lang="zh">在無限寬 NTK 下,訓練殘差 \(r(t)=e^{-\eta K t}r(0)\)。把 \(r(0)\) 拆成平行/垂直於全一向量 \(v\) 的分量 \(r_\parallel+r_\perp\),由於 \(K\) 是 rank-1:</p>
+        <p data-lang="en">Under the infinite-width NTK, the residual is \(r(t)=e^{-\eta K t}r(0)\). Decompose \(r(0)=r_\parallel+r_\perp\) along/orthogonal to the all-ones \(v\); since \(K\) is rank-1:</p>
+        <div class="eq">$$e^{-\eta K t}\,r(0)=r_\perp+e^{-\eta\lambda t}\,r_\parallel,\qquad \lambda=n\|\phi\|^2$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">意思是:視覺分支在高模糊下<b>只能學到一個全域常數</b>(對每張圖輸出一樣),它把誤差降到「平均值」就到頂了,失去辨別力。於是訓練初期的梯度只好<mark class="m-result" data-t="RESULT/EVIDENCE">轉去更新力編碼器</mark>,用力覺去區分不同輸入——這正是我們要的。<span class="add">[導讀補充] 這是「直覺論證」而非嚴格對 ViT 成立的定理,只在兩層模型 + 無限寬假設下推導。</span></p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Meaning: under heavy blur the vision branch can <b>only learn a global constant</b> (same output for every image), bottoming out by matching the mean and losing discriminative power. So early gradients instead <mark class="m-result" data-t="RESULT/EVIDENCE">go to the force encoder</mark> to distinguish inputs via force—exactly what we want. <span class="add">[guide note] This is an intuition argument, not a rigorous theorem for ViTs—derived under a two-layer, infinite-width assumption.</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\pi_\theta,\,f_\phi,\,g_\psi\)</td><td><span data-lang="zh">動作 transformer、視覺(ViT)編碼器、力(MLP)編碼器。</span><span data-lang="en">Action transformer, vision (ViT) encoder, force (MLP) encoder.</span></td></tr>
+          <tr><td>\(\hat q_{t:t+k}\)</td><td><span data-lang="zh">預測的未來 \(k\) 步關節位置目標(action chunk,實作 \(k{=}100\))。</span><span data-lang="en">Predicted next \(k\) joint-position targets (action chunk; \(k{=}100\) in practice).</span></td></tr>
+          <tr><td>\(\tau_{\text{ext}}\)</td><td><span data-lang="zh">follower 感測到的<b>外部</b>關節力矩——策略的力覺輸入,也是回饋給 leader 的訊號。</span><span data-lang="en">The follower's <b>external</b> joint torque—the policy's force input and the signal fed back to the leader.</span></td></tr>
+          <tr><td>\(\beta_P,\beta_L\)</td><td><span data-lang="zh">像素空間 / latent 空間的模糊算子(高斯或降採樣)。</span><span data-lang="en">Pixel-space / latent-space blurring operators (Gaussian or downsampling).</span></td></tr>
+          <tr><td>\(\sigma_n\)</td><td><span data-lang="zh">第 \(n\) 步的模糊尺度,隨訓練由 \(\sigma_0\) 遞減——課程的核心旋鈕。</span><span data-lang="en">Blur scale at step \(n\), decaying from \(\sigma_0\)—the curriculum's core knob.</span></td></tr>
+          <tr><td>\(\alpha^{(l)}_V,\alpha^{(l)}_F\)</td><td><span data-lang="zh">decoder 第 \(l\) 層 action token 對視覺 / 力的 cross-attention 權重(用來診斷模態使用)。</span><span data-lang="en">Layer-\(l\) cross-attention of action tokens to vision / force (used to diagnose modality use).</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">先把課本上的圖<b>糊掉</b>,學生只好認真聽<b>老師講(力覺)</b>;等他學會聽講,再把圖慢慢還原清晰,最後兩者都會用。</span>
+        <span data-lang="en">Blur the textbook figures first, so the student must actually <b>listen (force)</b>; once they can, gradually restore the figures, and in the end they use both.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何「只傳外部力矩」是關鍵</span><span data-lang="en">Why "external-only" matters</span></span>
+        <span data-lang="zh">若把 follower 運動時的慣性、摩擦也回饋給 leader,操作者會覺得手臂「黏黏的、有阻力」,分不清那是<b>環境接觸</b>還是<b>手臂自身動力學</b>。只傳 \(\tau_{\text{ext}}\) 讓操作者對環境的感知乾淨清晰——這是勝過 Kobayashi et al. 的設計要點。</span>
+        <span data-lang="en">Relaying the follower's inertia/friction during motion makes the arm feel "sticky," blurring <b>environment contact</b> vs the <b>arm's own dynamics</b>. Relaying only \(\tau_{\text{ext}}\) keeps the operator's sense of the environment clean—the design edge over Kobayashi et al.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">課程只作用在<mark class="m-assume" data-t="ASSUMPTION/CLAIM">視覺</mark>分支;力覺分支從頭到尾清晰。這隱含一個假設:<b>你想強化的那個模態(力)本身是乾淨可學的</b>——若力訊號本身太雜,課程也救不了(見 Limitations)。</span>
+        <span data-lang="en">The curriculum acts <mark class="m-assume" data-t="ASSUMPTION/CLAIM">only on vision</mark>; force stays sharp throughout. This assumes <b>the modality you want to boost (force) is itself clean enough to learn</b>—if force is too noisy, the curriculum can't save it (see Limitations).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果:對未見物體的泛化(Fig.6)</span><span data-lang="en">Main result: generalization to unseen objects (Fig.6)</span></h3>
+        <p data-lang="zh">四項任務、三種方法,各在<b>訓練物體</b>與<b>測試(未見)物體</b>上評測成功率(每物體 5–10 trials,收 50 條示範)。</p>
+        <p data-lang="en">Four tasks, three methods, success rate on <b>train</b> and <b>test (unseen)</b> objects (5–10 trials/object, 50 demos).</p>
+        <table>
+          <tr><th><span data-lang="zh">測試物體成功率</span><span data-lang="en">Test-object success</span></th><th>Vision-Only</th><th>Vision+Force<br><small><span data-lang="zh">(無課程)</span><span data-lang="en">(no curric.)</span></small></th><th>FACTR</th></tr>
+          <tr><td>Box Lift</td><td>31.7%</td><td>58.3%</td><td class="win">91.7%</td></tr>
+          <tr><td>Non-Prehensile Pivot</td><td>26.0%</td><td>42.0%</td><td class="win">76.0%</td></tr>
+          <tr><td>Fruit Pick-Place</td><td>26.7%</td><td>73.3%</td><td class="win">93.3%</td></tr>
+          <tr><td>Rolling Dough</td><td class="bad">0.0%</td><td>70.0%</td><td class="win">80.0%</td></tr>
+          <tr><td><b><span data-lang="zh">平均</span><span data-lang="en">Average</span></b></td><td>21.3%</td><td>61.2%</td><td class="win">87.5%</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">三個關鍵讀法:(1) 三方法在<b>訓練物體</b>上大多接近(除了純視覺在擀麵團完全失敗)→ 差距幾乎全在<b>泛化</b>。(2) 光加力覺(無課程)就從 21.3%→61.2%,<b>但</b>FACTR 再往上推到 <mark class="m-result" data-t="RESULT/EVIDENCE">87.5%</mark> → 課程貢獻約 +26 個百分點。(3) 論文摘要說「比無課程 baseline 提升 43%」、正文說平均 40.0%,是<b>相對提升</b>的不同算法。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Three key reads: (1) the three methods are close on <b>train objects</b> (except vision-only fully failing at dough) → the gap is almost entirely <b>generalization</b>. (2) Adding force alone (no curriculum) lifts 21.3%→61.2%, <b>but</b> FACTR pushes to <mark class="m-result" data-t="RESULT/EVIDENCE">87.5%</mark> → the curriculum adds ~26 points. (3) The abstract's "43% over the no-curriculum baseline" and the body's "40.0% avg" are different ways of computing relative improvement.</p>
+        <figure class="fig"><img src="figs/Liu2025/fig6_results.png" alt="Figure 6 results">
+          <figcaption data-lang="zh"><b>Fig.6</b> 訓練物體(上)vs 測試物體(下)。要注意的是<b>上下對比</b>:上排三色幾乎等高(訓練物體大家都會),下排藍色(FACTR)明顯高出一截。這張圖的說服力在於「訓練分布內沒差、分布外才拉開」——正是泛化的定義。</figcaption>
+          <figcaption data-lang="en"><b>Fig.6</b> Train (top) vs test (bottom) objects. Notice the <b>top-vs-bottom contrast</b>: top bars are near-equal (everyone handles train objects), while bottom blue (FACTR) stands clearly higher. The persuasive point: no gap in-distribution, a large gap out-of-distribution—the very definition of generalization.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">遙操作使用者研究(Fig.7)</span><span data-lang="en">Teleoperation user study (Fig.7)</span></h3>
+        <p data-lang="zh">對比「我們的力回饋 leader」vs「無驅動、機械式關節穩定的 leader-follower(類 GELLO)」,跨四項接觸密集任務:</p>
+        <p data-lang="en">Our force-feedback leader vs an unactuated, mechanically-regularized leader-follower (GELLO-like), across four contact-rich tasks:</p>
+        <table>
+          <tr><th><span data-lang="zh">指標</span><span data-lang="en">Metric</span></th><th><span data-lang="zh">相對改善</span><span data-lang="en">Improvement</span></th></tr>
+          <tr><td><span data-lang="zh">任務完成率 ↑</span><span data-lang="en">Task completion rate ↑</span></td><td class="ok">+64.7%</td></tr>
+          <tr><td><span data-lang="zh">完成時間 ↓</span><span data-lang="en">Completion time ↓</span></td><td class="ok">−37.4%</td></tr>
+          <tr><td><span data-lang="zh">主觀易用度 ↑</span><span data-lang="en">Subjective ease of use ↑</span></td><td class="ok">+83.3%</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">無力回饋時,操作者感覺不到環境約束,follower 常<mark class="m-problem" data-t="PROBLEM/GAP">脫離接觸</mark>;且 leader/follower 關節誤差一大,PID 會產生大力矩造成<b>超速抖動</b>。力回饋讓操作者「摸到」約束,自然把 leader 停在 follower 附近。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Without feedback the operator can't feel constraints and the follower often <mark class="m-problem" data-t="PROBLEM/GAP">loses contact</mark>; large leader/follower joint error then makes the PID emit big torques causing <b>velocity-limit jerks</b>. Feedback lets the operator "feel" constraints and keep the leader near the follower.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">力覺=模式切換訊號(Fig.9)+ 失敗恢復</span><span data-lang="en">Force = mode-switch signal (Fig.9) + recovery</span></h3>
+        <figure class="fig"><img src="figs/Liu2025/fig9_attention.png" alt="Figure 9 attention">
+          <figcaption data-lang="zh"><b>Fig.9</b> 抬箱時 decoder 第一層 action token 對<b>視覺(橘)/力(藍)</b>的平均 cross-attention 隨時間變化。<b>左(無課程)</b>:注意力長期偏向視覺,藍線壓在底部——策略沒真的用力。<b>右(FACTR)</b>:接觸箱子那一刻<b>力的注意力反超視覺</b>(綠框),清楚標記「模式切換」。這是本文「策略確實學會用力」的直接證據。</figcaption>
+          <figcaption data-lang="en"><b>Fig.9</b> Average first-layer cross-attention of action tokens to <b>vision (orange) / force (blue)</b> over time, box-lift. <b>Left (no curriculum)</b>: attention stays vision-heavy, blue pinned low—force isn't really used. <b>Right (FACTR)</b>: at the moment of contact <b>force overtakes vision</b> (green box), marking the "mode switch." Direct evidence the policy actually learned to use force.</figcaption></figure>
+        <p data-lang="zh">失敗恢復(box lift,先成功抬起 → 打掉 → 看第二次):測試物體上,純視覺從第一次 31.7% 掉到第二次 <mark class="m-problem" data-t="PROBLEM/GAP">13.3%</mark>(打掉後常呆住不重試);力覺策略維持相近成功率。表 I:測試物體 27/30(FACTR)vs 16/30(視覺+力)vs 4/30(純視覺)。FACTR 靠力矩讀值回落到「抬起前」的值來偵測脫離接觸,於是能重試。</p>
+        <p data-lang="en">Failure recovery (box lift: lift → knock down → retry): on test objects, vision-only drops from 31.7% (1st) to <mark class="m-problem" data-t="PROBLEM/GAP">13.3%</mark> (2nd)—it often freezes; force policies hold steady. Table I: 27/30 (FACTR) vs 16/30 (vision+force) vs 4/30 (vision-only) on test objects. FACTR detects loss of contact via torque reverting to pre-lift values, so it retries.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融:課程 vs 固定;各種算子/排程(Tab.II)</span><span data-lang="en">Ablations: curriculum vs fixed; operators/schedulers (Tab.II)</span></h3>
+        <p data-lang="zh">在最難的 pivot 任務上,只評測 5 個測試物體 × 5 trials(滿分 25):</p>
+        <p data-lang="en">On the hardest task (pivot), 5 test objects × 5 trials (out of 25):</p>
+        <table>
+          <tr><th><span data-lang="zh">排程</span><span data-lang="en">Scheduler</span></th><th>Pixel·Blur</th><th>Pixel·Down</th><th>Latent·Blur</th><th>Latent·Down</th></tr>
+          <tr><td><b>Constant</b><br><small><span data-lang="zh">(≈無課程)</span><span data-lang="en">(≈no curric.)</span></small></td><td class="bad">16/25</td><td class="bad">15/25</td><td>17/25</td><td>16/25</td></tr>
+          <tr><td>Linear</td><td>19/25</td><td>18/25</td><td>19/25</td><td>18/25</td></tr>
+          <tr><td>Cosine</td><td class="win">20/25</td><td>19/25</td><td>17/25</td><td>19/25</td></tr>
+          <tr><td>Exp</td><td>19/25</td><td class="win">21/25</td><td class="win">20/25</td><td>19/25</td></tr>
+          <tr><td>Step</td><td>19/25</td><td>18/25</td><td class="win">20/25</td><td>19/25</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">兩個結論:(1) <mark class="m-result" data-t="RESULT/EVIDENCE">任何遞減課程都優於 Constant</mark>(固定模糊)——因為最終策略仍需清晰視覺;固定模糊要嘛不夠逼力覺、要嘛拿不到細節。(2) 在 pixel/latent、blur/downsample、四種遞減排程之間<mark class="m-result" data-t="RESULT/EVIDENCE">沒有一致的最優</mark> → FACTR 對課程超參相對<b>穩健</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Two takeaways: (1) <mark class="m-result" data-t="RESULT/EVIDENCE">any decaying curriculum beats Constant</mark> (fixed blur)—the final policy still needs sharp vision; fixed blur either under-forces force or starves detail. (2) Across pixel/latent, blur/downsample and four decay schedules there's <mark class="m-result" data-t="RESULT/EVIDENCE">no uniform winner</mark> → FACTR is relatively <b>robust</b> to curriculum hyperparameters.</p>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted)">[導讀補充] 附錄另有兩個對照:用 <b>AdaNorm</b>(以力覺條件化 action token)取代課程 → 訓練不穩、overfit(pivot test 僅 6.1%);單純<b>資料增強</b>(對視覺加噪)→ 低強度贏訓練物體卻輸測試、高強度則兩邊都爛。都不如 FACTR。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted)">[guide note] The appendix adds two controls: replacing the curriculum with <b>AdaNorm</b> (conditioning action tokens on force) → unstable, overfits (pivot test only 6.1%); plain <b>data augmentation</b> (visual noise) → low levels win train but lose test, high levels lose both. Both trail FACTR.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">力回饋遙操作讓<b>收資料</b>更好(完成率 +64.7%);FACTR 課程讓<b>學策略</b>真的用起力覺,對未見物體泛化從 21.3% 拉到 <b>87.5%</b>,並帶來更好的失敗恢復。</span>
+        <span data-lang="en">Force-feedback teleop makes <b>data collection</b> better (completion +64.7%); the FACTR curriculum makes the <b>policy</b> actually use force, lifting unseen-object generalization from 21.3% to <b>87.5%</b>, with better failure recovery.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">規模要看清</span><span data-lang="en">Mind the scale</span></div>
+        <span data-lang="zh">全部結論建立在 <b>50 條示範、4 個真機任務、每物體 5–10 trials</b> 之上。這是紮實的真機實驗,但<mark class="m-limit" data-t="LIMITATION/FUTURE">樣本數不大、無模擬大規模驗證</mark>,成功率的信賴區間會偏寬。</span>
+        <span data-lang="en">All conclusions rest on <b>50 demos, 4 real-robot tasks, 5–10 trials/object</b>. Solid real-world evidence, but <mark class="m-limit" data-t="LIMITATION/FUTURE">small sample sizes and no large-scale sim validation</mark>—success-rate confidence intervals are wide.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">兩貢獻纏在一起</span><span data-lang="en">entangled</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">NTK 適用性</span><span data-lang="en">NTK validity</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>兩個貢獻纏在一起,難以歸因</b>:遙操作系統與 FACTR 課程一起提出。策略的泛化增益,有多少來自「課程」、有多少其實來自「<mark class="m-assume" data-t="ASSUMPTION/CLAIM">力回饋讓示範資料本身品質更高</mark>」?policy 消融雖固定了資料只比訓練法,但「這批資料是用力回饋收的」這件事仍是共同前提,兩半的效益沒有完全解耦。</li>
+          <li data-lang="en"><b>Two entangled contributions, hard to attribute</b>: the teleop rig and FACTR are proposed together. Of the policy's generalization gain, how much is the "curriculum" vs the fact that "<mark class="m-assume" data-t="ASSUMPTION/CLAIM">force feedback made the demonstrations themselves higher-quality</mark>"? The policy ablation fixes the data and varies only training, but "this data was collected with force feedback" remains a shared premise—the two halves aren't fully decoupled.</li>
+          <li data-lang="zh"><b>實驗規模小、統計力弱</b>:<mark class="m-limit" data-t="LIMITATION/FUTURE">50 條示範、每物體僅 5–10 trials</mark>。真機實驗珍貴可理解,但成功率差異(如 76% vs 42%)在這種樣本數下缺乏誤差棒/顯著性檢定,穩健性存疑。附錄雖把測試物體加倍(Bi-ACT vs FACTR)佐證,但也僅 3 個任務。</li>
+          <li data-lang="en"><b>Small scale, weak statistical power</b>: <mark class="m-limit" data-t="LIMITATION/FUTURE">50 demos, only 5–10 trials/object</mark>. Real-robot cost is understandable, but success-rate gaps (e.g. 76% vs 42%) at this sample size lack error bars / significance tests. The appendix doubles test objects (Bi-ACT vs FACTR) for support, but only on 3 tasks.</li>
+          <li data-lang="zh"><b>NTK 論證的適用性</b>:理論只在<mark class="m-assume" data-t="ASSUMPTION/CLAIM">兩層、無限寬、線性讀出</mark>的玩具模型上推導,卻用來解釋一個 1.2 億級的 ViT + transformer 策略。作者也自承這只是「直覺論證(a sketch)」。它給了漂亮的敘事,但不構成對真實架構的保證。</li>
+          <li data-lang="en"><b>Validity of the NTK argument</b>: the theory is derived on a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">two-layer, infinite-width, linear-readout</mark> toy, then invoked to explain a large ViT + transformer policy. The authors themselves call it "a sketch." It gives a nice narrative but isn't a guarantee for the actual architecture.</li>
+          <li data-lang="zh"><b>力覺訊號的品質天花板</b>:用的是<mark class="m-limit" data-t="LIMITATION/FUTURE">關節力矩,而非末端六軸力/力矩或觸覺皮膚</mark>,作者坦承精度有限、雜訊大,對「細膩力調節」的任務可能不夠用。也就是說本文成立的任務類型偏「有明顯接觸/脫離事件」的,對真正精細的力控未必適用。</li>
+          <li data-lang="en"><b>Ceiling on force-signal quality</b>: it uses <mark class="m-limit" data-t="LIMITATION/FUTURE">joint torques, not an end-effector F/T sensor or tactile skin</mark>; the authors admit limited precision and noise, possibly insufficient for tasks needing subtle force modulation. So the demonstrated task class skews toward clear contact/release events, not truly fine force control.</li>
+          <li data-lang="zh"><b>課程超參仍需調</b>:雖宣稱對排程/算子穩健,但 Tab.II 最好與最差(21/25 vs 15/25)差距不小,且<mark class="m-assume" data-t="ASSUMPTION/CLAIM">\(\sigma_0\)、warm-up 步數、對哪個任務用 pixel 還是 latent</mark> 都是要選的旋鈕。作者也把「高度依賴超參、需大量調校」列為限制。</li>
+          <li data-lang="en"><b>Curriculum still needs tuning</b>: despite the robustness claim, Tab.II's best-vs-worst (21/25 vs 15/25) is non-trivial, and <mark class="m-assume" data-t="ASSUMPTION/CLAIM">\(\sigma_0\), warm-up length, and pixel-vs-latent per task</mark> are all knobs. The authors list "highly hyperparameter-dependent, needs extensive tuning" as a limitation.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>資料 vs 訓練法</b>:若拿「無力回饋遙操作」收的資料 + FACTR 課程,泛化還能到 87.5% 嗎?反過來,用力回饋資料 + 無課程只有 61.2%——所以到底是「好資料」還是「好課程」在主導?能否設計交叉實驗徹底解耦?</li>
+          <li data-lang="en"><b>Data vs training</b>: with data from a <i>non</i>-force-feedback rig + FACTR, would generalization still reach 87.5%? Conversely, force-feedback data + no curriculum gives only 61.2%—so is it "good data" or "good curriculum" that dominates? Can a crossed experiment fully decouple them?</li>
+          <li data-lang="zh"><b>失敗模式</b>:當 \(\sigma_0\) 設太大或衰減太慢,是否會出現「策略永遠學不好視覺、只靠力」的反效果?有沒有觀察到課程<b>過猶不及</b>的情形?</li>
+          <li data-lang="en"><b>Failure modes</b>: if \(\sigma_0\) is too large or decays too slowly, does the policy over-rely on force and never learn vision? Was any "too much of a good thing" behavior observed?</li>
+          <li data-lang="zh"><b>規模化</b>:結論建立在 50 條示範、4 個任務。若擴到數百條示範、更多樣的任務,課程的邊際效益會不會遞減(資料一多,模型自然學得到力)?</li>
+          <li data-lang="en"><b>Scaling</b>: conclusions rest on 50 demos, 4 tasks. Scaled to hundreds of demos and more diverse tasks, does the curriculum's marginal benefit shrink (with enough data, the model learns force anyway)?</li>
+          <li data-lang="zh"><b>與更強力覺硬體比</b>:若把關節力矩換成末端六軸力/力矩或觸覺皮膚,FACTR 的增益是變大(更值得用力)還是變小(訊號夠好本就學得到)?這關係到方法的長期價值。</li>
+          <li data-lang="en"><b>Vs better force hardware</b>: swapping joint torque for an end-effector F/T sensor or tactile skin—does FACTR's benefit grow (more worth attending to) or shrink (a good enough signal is learned anyway)? This bears on the method's long-term value.</li>
+          <li data-lang="zh"><b>理論的可證偽性</b>:NTK 敘事預測「初期梯度轉向力編碼器」。能否直接<b>量測訓練早期力/視覺編碼器的梯度範數</b>來驗證這個機制,而不只看最終注意力?</li>
+          <li data-lang="en"><b>Falsifiability of the theory</b>: the NTK story predicts "early gradients shift to the force encoder." Could one directly <b>measure early-training gradient norms of the force vs vision encoders</b> to test this mechanism, not just final attention?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 FACTR 讀成「一種資料增強」。它<b>不是</b>——資料增強是為了對抗過擬合、增加視覺不變性;FACTR 的模糊是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">刻意在訓練早期削弱視覺的辨別度,以改變兩模態的學習順序</mark>,而且關鍵在「遞減」到最後幾乎無模糊。論文的 DataAug 對照正是要說明這兩者不同、且增強更差。</span>
+        <span data-lang="en">Reading FACTR as "a data augmentation." It's <b>not</b>—augmentation fights overfitting and adds visual invariance; FACTR's blur <mark class="m-assume" data-t="ASSUMPTION/CLAIM">deliberately weakens vision's discriminative power early to change the learning order of the two modalities</mark>, and crucially <i>decays</i> to near-zero. The paper's DataAug control exists precisely to show these differ—and that augmentation is worse.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">(1) 兩個對照(AdaNorm、DataAug)做得誠實,主動排除「其實別的方法也行」。(2) Limitations 坦白(力矩精度、需額外力矩感測器、超參依賴)。(3) 用 attention 曲線與失敗恢復實驗,把「策略真的用了力」講得有血有肉,而非只報最終數字。</span>
+        <span data-lang="en">(1) The AdaNorm and DataAug controls are honest, pre-empting "other methods might also work." (2) Limitations are candid (torque precision, need for torque sensors, hyperparameter dependence). (3) Attention curves + recovery experiments make "the policy really uses force" concrete, not just headline numbers.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「弱模態被強模態壓過」是可設計解的</b>:任何多模態融合(視覺+語言、影像+音訊、影像+感測器)只要有一個模態又強又好學,就可能發生模態偷懶。FACTR 給的通用配方是——<b>在訓練早期暫時削弱強模態的辨別度、再逐步還原</b>,把學習順序掰回來。</li>
+          <li data-lang="en"><b>"Strong modality drowns the weak" is a designable problem</b>: any multimodal fusion (vision+language, image+audio, image+sensor) with one strong, easy modality risks a lazy modality. FACTR's general recipe—<b>temporarily dull the strong modality's discriminability early, then restore it</b>—rebalances the learning order.</li>
+          <li data-lang="zh"><b>課程的核心是「遞減」而非「擾動」</b>:與資料增強的本質差別,提醒我們設計 curriculum 時要問「最終模型需要的是什麼?」——若最終需要清晰視覺,就必須讓它在後期拿得到,否則只是自我設限。</li>
+          <li data-lang="en"><b>The curriculum's essence is "decay," not "perturbation"</b>: the essential difference from augmentation reminds us to ask "what does the final model need?"—if it needs sharp vision, it must get it late, else you just handicap yourself.</li>
+          <li data-lang="zh"><b>系統與演算法要一起想</b>:力覺策略學不好,可能問題出在「資料裡根本沒有好的力覺示範」。做 robot learning 時,<b>資料收集介面(遙操作)</b>和<b>學習演算法</b>是耦合的,值得一起設計。</li>
+          <li data-lang="en"><b>Co-design system and algorithm</b>: a poor force policy may stem from "no good force demos in the data." In robot learning, the <b>data-collection interface (teleop)</b> and the <b>learning algorithm</b> are coupled and worth designing together.</li>
+          <li data-lang="zh"><b>力覺=事件偵測器</b>:即使不追求精細力控,力訊號在「接觸/脫離/滑動」這類<b>離散事件</b>上極有辨別度,適合當「模式切換」與「失敗恢復」的觸發器——這在很多操作任務都用得上。</li>
+          <li data-lang="en"><b>Force = an event detector</b>: even without fine force control, force is highly discriminative for <b>discrete events</b> (contact/release/slip), ideal as a trigger for "mode switching" and "failure recovery"—useful across many manipulation tasks.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「多模態策略會忽略弱/稀疏模態」</span><span data-lang="en">"multimodal policies ignore the weak/sparse modality"</span></td><td><span data-lang="zh">作為具體證據 + 一種課程解法(附 attention 診斷)。</span><span data-lang="en">Concrete evidence + a curriculum fix (with attention diagnostics).</span></td></tr>
+          <tr><td><span data-lang="zh">「力覺提升接觸密集任務的物體泛化」</span><span data-lang="en">"force improves object generalization in contact-rich tasks"</span></td><td><span data-lang="zh">引主結果(21.3%→87.5%)與擀麵團的視覺不可分案例。</span><span data-lang="en">Cite the main result (21.3%→87.5%) and the visually-indistinguishable dough case.</span></td></tr>
+          <tr><td><span data-lang="zh">「低成本雙向力回饋遙操作」</span><span data-lang="en">"low-cost bilateral force-feedback teleoperation"</span></td><td><span data-lang="zh">引「只傳外部力矩」設計與使用者研究(+64.7% 完成率)。</span><span data-lang="en">Cite the "external-torque-only" design and user study (+64.7% completion).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">FACTR 用一個簡單卻反直覺的招式——<b>訓練初期把視覺弄糊、再逐步還原</b>——治好了「機器人策略忽略力覺」的老毛病;搭配一套只傳外部力矩的低成本力回饋遙操作,讓接觸密集任務對未見物體的泛化從 21.3% 拉到 87.5%。它的價值不在單一 SOTA 數字,而在點出並解決一個多模態學習的普遍病症。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">FACTR uses a simple, counter-intuitive move—<b>blur vision early, then progressively sharpen it</b>—to cure the chronic "robot policies ignore force" problem; paired with a low-cost, external-torque-only force-feedback teleop rig, it lifts unseen-object generalization in contact-rich tasks from 21.3% to 87.5%. Its value is less a single SOTA number than naming and fixing a general pathology of multimodal learning.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">ACT / ALOHA</span>
+          <span class="chip">Diffusion Policy</span>
+          <span class="chip">GELLO</span>
+          <span class="chip">FoAR</span>
+          <span class="chip">NTK (Jacot 2018)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">一句話定位</span><span data-lang="en">One-line placement</span></span>
+        <span data-lang="zh">它和「多模態分類為何難訓練」(Wang et al. 2020)是同一問題的兩端:一個診斷、一個在機器人策略上給出訓練解。</span>
+        <span data-lang="en">It sits at the same problem as "what makes multimodal classification hard to train" (Wang et al. 2020): one diagnoses, this one offers a training-side fix for robot policies.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Liu et al. 2025 (FACTR) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'FACTR reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

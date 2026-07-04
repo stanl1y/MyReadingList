@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>FACTR 2 (NEXT + FIRST) — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"FACTR 2: Learning External Force Sensing for Commodity Robot Arms Improves Policy Learning","authors":"Steven Oh, Jason Jingzhou Liu, Tony Tao, Philip Han, Kenneth Shaw, Satoshi Funabashi, Ruslan Salakhutdinov, Deepak Pathak","year":"2026","venue":"arXiv (CMU · Waseda)","tags":["Force-Aware Manipulation","Robot Manipulation","Force Sensing","Imitation Learning","Teleoperation","Contact-Rich"],"tldr":"用一個只吃 10 分鐘無接觸資料、訓練 1 分鐘的 LSTM(NEXT)在無力感測器的廉價機械臂上估測外部關節力矩,再用估到的力把示範切成接觸相位並上採樣(FIRST),讓行為克隆在五個接觸密集任務上平均任務進度提升 >17%。","tldr_en":"NEXT is an LSTM trained on 10 min of contact-free data (1 min of training) that estimates external joint torque on sensor-less low-cost arms; FIRST then uses that force to segment demos into contact phases and up-sample them, lifting behavior-cloning task progress by >17% across five contact-rich tasks."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:96px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">接觸密集的操作(插入、鎖螺絲、變形物體)需要<b>力覺</b>,但大多數廉價機械臂沒有力感測器。本文提出兩件互補的東西:<mark class="m-method" data-t="METHOD/IDEA">NEXT</mark>——只吃 <b>10 分鐘無接觸軌跡</b>、訓練 <b>1 分鐘</b>的 LSTM,靠「量測馬達力矩 − 學到的自由空間力矩」的殘差來估外部關節力矩,<mark class="m-result" data-t="RESULT/EVIDENCE">不需任何力感測器</mark>;以及 <mark class="m-method" data-t="METHOD/IDEA">FIRST</mark>——用估到的力把示範切成 free / pre-contact / contact 三相位,並<b>上採樣接觸相關片段</b>來訓練行為克隆策略。五個長程接觸任務上,FIRST 比先前的力感知策略平均<mark class="m-result" data-t="RESULT/EVIDENCE">任務進度高 &gt;17%</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Contact-rich manipulation (insertion, fastening, deformable objects) needs <b>force sensitivity</b>, yet most low-cost arms lack force sensors. This paper contributes two complementary pieces: <mark class="m-method" data-t="METHOD/IDEA">NEXT</mark>—an LSTM trained on just <b>10 min of contact-free trajectories</b> in <b>1 min</b>, estimating external joint torque as the residual "measured motor torque − learned free-space torque," with <mark class="m-result" data-t="RESULT/EVIDENCE">no force sensor at all</mark>; and <mark class="m-method" data-t="METHOD/IDEA">FIRST</mark>—which uses that force to segment demos into free / pre-contact / contact phases and <b>up-samples the contact-relevant segments</b> during behavior cloning. Across five long-horizon contact tasks, FIRST beats prior force-aware policies by <mark class="m-result" data-t="RESULT/EVIDENCE">&gt;17% in task progress</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 力覺對接觸密集操作很關鍵,但<mark class="m-problem" data-t="PROBLEM/GAP">力/力矩感測器只裝在昂貴平台</mark>(Franka、Flexiv、KUKA);廉價臂(Piper $2,500)沒有,加裝更貴、易壞。傳統無感測估力靠<mark class="m-problem" data-t="PROBLEM/GAP">動力學建模 + 系統辨識</mark>,工程繁重且對摩擦/齒隙等非線性很脆弱。</li>
+          <li data-lang="en"><b>Problem</b> — Force sensing is key for contact-rich tasks, but <mark class="m-problem" data-t="PROBLEM/GAP">F/T sensors ship only on expensive platforms</mark> (Franka, Flexiv, KUKA); low-cost arms (Piper, $2,500) lack them and retrofitting is costly and fragile. Classic sensor-less estimation relies on <mark class="m-problem" data-t="PROBLEM/GAP">dynamics modeling + system identification</mark>—labor-heavy and brittle to nonlinear friction/backlash.</li>
+          <li data-lang="zh"><b>方法 (1) NEXT</b> — 不用解析逆動力學,而是<mark class="m-method" data-t="METHOD/IDEA">學一個「自由空間逆動力學」LSTM</mark> \(\hat\tau_f=f_\theta(x)\),外部力矩就是殘差 \(\hat\tau_{\text{ext}}=\tau_m-\hat\tau_f\)。輸入是本體感覺歷史(位置、速度、追蹤誤差)。</li>
+          <li data-lang="en"><b>Method (1) NEXT</b> — Instead of analytic inverse dynamics, <mark class="m-method" data-t="METHOD/IDEA">learn a "free-space inverse-dynamics" LSTM</mark> \(\hat\tau_f=f_\theta(x)\); external torque is the residual \(\hat\tau_{\text{ext}}=\tau_m-\hat\tau_f\). Input is a proprioceptive history (position, velocity, tracking error).</li>
+          <li data-lang="zh"><b>方法 (2) FIRST</b> — 用 \(\|\hat\tau_{\text{ext}}\|_1\) 加遲滯門檻把示範切成三相位,再<mark class="m-method" data-t="METHOD/IDEA">上採樣 pre-contact / contact 片段</mark>(改的只是抽樣分布,不改 loss),把訓練火力集中在最容易失敗的接觸前後。</li>
+          <li data-lang="en"><b>Method (2) FIRST</b> — Segment demos into three phases via \(\|\hat\tau_{\text{ext}}\|_1\) + hysteresis thresholding, then <mark class="m-method" data-t="METHOD/IDEA">up-sample pre-contact / contact segments</mark> (only the sampling distribution changes, not the loss), focusing training on the failure-prone moments around contact.</li>
+          <li data-lang="zh"><b>結果</b> — 在 Franka 上接觸力矩 L1 誤差僅 <b>0.547 Nm</b>(比 FILIC 低 87.6%);自由空間下 <mark class="m-result" data-t="RESULT/EVIDENCE">甚至比 Franka 原廠感測器更準</mark>。teleop 使用者研究媲美有感測器的 FACTR;FIRST 五任務平均 <mark class="m-result" data-t="RESULT/EVIDENCE">任務進度 &gt;17% 提升</mark>。</li>
+          <li data-lang="en"><b>Results</b> — On Franka, contact torque L1 error is only <b>0.547 Nm</b> (87.6% below FILIC); in free space it is <mark class="m-result" data-t="RESULT/EVIDENCE">even more accurate than Franka's own factory sensor</mark>. The teleop user study matches sensorized FACTR; FIRST lifts average task progress by <mark class="m-result" data-t="RESULT/EVIDENCE">&gt;17%</mark> across five tasks.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">這篇是 <mark class="m-method" data-t="METHOD/IDEA">FACTR</mark>(RSS 2025,同組)的延伸——原 FACTR 需要「有專用力矩感測器的機械臂」;FACTR 2 把力覺<b>民主化到任何機械臂</b>。它踩在兩條線的交叉點:(1) <mark class="m-method" data-t="METHOD/IDEA">無感測外力估測</mark>(過去多靠解析動力學殘差,或監督式學習需要成對接觸標註);(2) <mark class="m-method" data-t="METHOD/IDEA">力感知模仿學習</mark>(把力當額外輸入,如 TA-VLA、BiACT、ForceVLA;或用力控在推論時混合)。</p>
+        <p data-lang="en">This extends <mark class="m-method" data-t="METHOD/IDEA">FACTR</mark> (RSS 2025, same group)—the original FACTR required arms <b>with dedicated torque sensors</b>; FACTR 2 <b>democratizes</b> force sensing to any arm. It sits at the intersection of two lines: (1) <mark class="m-method" data-t="METHOD/IDEA">sensor-less external-force estimation</mark> (previously analytic dynamics residuals, or supervised learning needing paired contact labels); and (2) <mark class="m-method" data-t="METHOD/IDEA">force-aware imitation learning</mark> (force as extra input—TA-VLA, BiACT, ForceVLA—or hybrid force control at inference).</p>
+        <p data-lang="zh">第三條相關線是<mark class="m-method" data-t="METHOD/IDEA">資料重加權</mark>:RL 的 AWR/CRR/AWAC、模仿學習的 Re-Mix / DataMIL / DemInf。FIRST 的獨到之處是<b>用「力」這個物理訊號來定義哪些資料重要</b>,而不是用價值函數或影響函數。</p>
+        <p data-lang="en">A third related line is <mark class="m-method" data-t="METHOD/IDEA">dataset reweighting</mark>: AWR/CRR/AWAC in RL, Re-Mix / DataMIL / DemInf in imitation. FIRST's twist is using <b>a physical signal—force—to define which data matter</b>, rather than a value or influence function.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的精神是<b>「用便宜的資料驅動方法,把貴的硬體能力補回來」</b>。它不追求更炫的感測器或更大的模型,而是觀察到:(a) 馬達電流本來就有,只差把「自由空間該出多少力」學出來就能算出接觸力;(b) 策略失敗集中在接觸前後,所以「往哪裡多丟資料」比「用什麼架構」更關鍵。兩個觀察都務實而可直接落地。</p>
+          <p data-lang="en" style="margin-top:6px">The spirit is <b>"recover expensive hardware capability with a cheap data-driven method."</b> It chases neither fancier sensors nor bigger models, but observes: (a) motor current is already available—just learn "how much force free-space motion needs" and subtract it; (b) policy failures cluster around contact, so "where to add data" matters more than "which architecture." Both observations are pragmatic and immediately deployable.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不只是「又一個力估測器」,而是底下這幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not "yet another force estimator" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">學「自由空間該出多少力」,而非直接學接觸力。</b> 把難題(估外力,需要成對接觸標註)換成<mark class="m-result" data-t="RESULT/EVIDENCE">易題</mark>(在無接觸資料上做自監督回歸,標籤天生就是量測力矩),再靠殘差得到外力——聰明地繞開資料標註瓶頸。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Learn "how much force free-space needs," not contact force directly.</b> It converts a hard problem (estimating external force, needing paired contact labels) into an <mark class="m-result" data-t="RESULT/EVIDENCE">easy</mark> one (self-supervised regression on contact-free data, where the label <em>is</em> the measured torque), then recovers force by residual—neatly sidestepping the labeling bottleneck.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">時序歷史 > 瞬時剛體動力學。</b> 用 LSTM 吃 50 步歷史,能捕捉<mark class="m-assume" data-t="ASSUMPTION/CLAIM">遲滯、摩擦記憶、控制器追蹤行為</mark>等「瞬時剛體模型表達不了」的效應——這正是解析法脆弱、學習法勝出的地方。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Temporal history &gt; instantaneous rigid-body dynamics.</b> An LSTM over a 50-step history captures <mark class="m-assume" data-t="ASSUMPTION/CLAIM">hysteresis, frictional memory, controller tracking</mark>—effects an instantaneous rigid-body model cannot express. That is exactly where analytic methods are brittle and learning wins.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">重加權「抽樣分布」比重加權「loss」更穩。</b> FIRST 只改每個 batch 抽到各相位的機率,不動回歸目標;實驗顯示這比 weighted regression <mark class="m-result" data-t="RESULT/EVIDENCE">更穩、更好</mark>(LEGO 0.573 vs 0.345)。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Reweighting the <em>sampling distribution</em> beats reweighting the <em>loss</em>.</b> FIRST only changes each batch's per-phase draw probability, leaving the regression objective intact; this is <mark class="m-result" data-t="RESULT/EVIDENCE">more stable and better</mark> than weighted regression (LEGO 0.573 vs 0.345).</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">失敗集中在「接觸前」,不是「接觸中」。</b> 消融顯示<mark class="m-result" data-t="RESULT/EVIDENCE">只上採樣 pre-contact 反而最好</mark>(平均 0.818),優於只上採樣 contact(0.670)——因為對齊(alignment)才是勝負手,提供了力感知資料重加權的實證準則。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Failures cluster <em>before</em> contact, not <em>during</em> it.</b> Ablations show <mark class="m-result" data-t="RESULT/EVIDENCE">up-sampling only pre-contact is best</mark> (avg 0.818), beating contact-only (0.670)—because alignment is the crux, giving an empirical guideline for force-aware reweighting.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">FACTR 2: Learning External Force Sensing for Commodity Robot Arms</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Oh*, Liu*, Tao*, Han, Shaw, Funabashi, Salakhutdinov, Pathak</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Carnegie Mellon University · Waseda University</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2026 · arXiv:2606.12406 (cs.RO)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Robot Manipulation</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>jasonjzliu.com/factr2</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「力覺 = 需要昂貴硬體」重新定義成「<b>力覺 = 一點資料 + 一個小模型</b>」。任何有馬達電流回報的機械臂,花 10 分鐘收無接觸資料、1 分鐘訓練,就能得到接近專用感測器的外力訊號,並直接用來做力回饋 teleop 與更強的策略學習。</span>
+        <span data-lang="en">Reframes "force sensing = expensive hardware" as "<b>force sensing = a little data + a small model</b>." Any arm reporting motor current can, with 10 min of contact-free data and 1 min of training, obtain a near-sensor-quality force signal—usable directly for force-feedback teleop and stronger policy learning.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">NEXT (LSTM)</span><span class="chip">FIRST (re-sampling)</span>
+          <span class="chip">External joint torque</span><span class="chip">Free-space inv. dynamics</span>
+          <span class="chip">Flow-matching / ACT</span><span class="chip">Bilateral teleop</span>
+        </div>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">硬體規模</span><span data-lang="en">Hardware scope</span></div>
+        <span data-lang="zh">評測橫跨 <b>Piper($2,500)</b> 到 <b>Franka($30,000)</b>,以及 YAM、Nero、LEAP Hand v2。用 Franka 內建力矩感測器當作接觸時的 ground truth。</span>
+        <span data-lang="en">Spans <b>Piper ($2,500)</b> to <b>Franka ($30,000)</b>, plus YAM, Nero, and LEAP Hand v2. Franka's built-in torque sensors serve as ground truth during contact.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">專用 F/T 感測器</span><span data-lang="en">Dedicated F/T sensors</span></b><br>(ATI, Bota)</td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">貴且笨重</mark>,靠多個應變規 + 精密機構;裝在末端有時比機械臂本身還貴。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Expensive and bulky</mark>—many strain gauges on precision structures; end-effector mounts can cost more than the arm itself.</span></td></tr>
+          <tr><td><b><span data-lang="zh">低成本觸覺感測</span><span data-lang="en">Low-cost tactile</span></b><br>(CoinFT, ReSkin)</td><td><span data-lang="zh">材料軟,<mark class="m-problem" data-t="PROBLEM/GAP">承受不了末端常見的大力</mark>;適用範圍受限。</span><span data-lang="en">Soft materials <mark class="m-problem" data-t="PROBLEM/GAP">can't withstand the larger forces</mark> often seen at the end effector; limited applicability.</span></td></tr>
+          <tr><td><b><span data-lang="zh">解析動力學 + 系統辨識</span><span data-lang="en">Analytic dynamics + sys-ID</span></b><br>(FILIC, 動量觀測器)</td><td><span data-lang="zh">需大量手工建模;<mark class="m-problem" data-t="PROBLEM/GAP">對死區、torque ripple、遲滯等非線性很脆弱</mark>;殘差混入未建模效應。</span><span data-lang="en">Heavy manual modeling; <mark class="m-problem" data-t="PROBLEM/GAP">brittle to nonlinearities</mark> (deadzones, torque ripple, hysteresis); residual mixes in unmodeled effects.</span></td></tr>
+          <tr><td><b><span data-lang="zh">力感知模仿學習</span><span data-lang="en">Force-aware imitation</span></b><br>(TA-VLA, FACTR)</td><td><span data-lang="zh">多半<mark class="m-problem" data-t="PROBLEM/GAP">預設你已有力訊號</mark>,或把力當額外輸入;沒回答「沒感測器的臂怎麼辦」與「該多學哪些資料」。</span><span data-lang="en">Mostly <mark class="m-problem" data-t="PROBLEM/GAP">assume you already have a force signal</mark>, or use force as extra input; they don't answer "what about sensor-less arms" or "which data to emphasize."</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">兩個核心問題:<b>(1) 能否在「沒有力感測器、也不做系統辨識」的廉價臂上,估出堪用的外部力矩?(2) 拿到力訊號後,怎麼用它讓策略學得更好?</b></p>
+        <p data-lang="en" style="margin-top:14px">Two core questions: <b>(1) On a low-cost arm with no force sensor and no system-ID, can we estimate usable external torque? (2) Once we have the force signal, how do we use it to learn better policies?</b></p>
+      </div>
+
+      <figure class="fig"><img src="figs/Oh2026/fig3_tasks.png" alt="Figure 3 five tasks">
+        <figcaption data-lang="zh"><b>Fig.3</b> 用來評測的五個長程、接觸密集任務。<b>要注意</b>:每個任務都由多個階段組成,且大量步驟需要<b>精準對齊</b>或<b>細膩的力敏調整</b>(如 LEGO 疊接、皮帶繞輪、插銷、鎖蓋)。這正是「視覺看不出、非得靠力」的場景。</figcaption>
+        <figcaption data-lang="en"><b>Fig.3</b> The five long-horizon, contact-rich tasks used for evaluation. <b>Notice</b>: each has multiple stages, many needing <b>precise alignment</b> or <b>fine force-sensitive adjustment</b> (LEGO stacking, belt-on-pulley, peg insertion, cap screwing). These are exactly the "vision-can't-tell, force-required" regimes.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,FACTR 2 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how FACTR 2 fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">FACTR 2 如何補上</span><span data-lang="en">How FACTR 2 fills it</span></th></tr>
+          <tr>
+            <td><b>FILIC</b> / DO<br><small><span data-lang="zh">解析殘差</span><span data-lang="en">analytic residual</span></small></td>
+            <td><span data-lang="zh">需準確動力學參數;<mark class="m-problem" data-t="PROBLEM/GAP">接觸時誤差大</mark>(FILIC 4.4 Nm)。</span><span data-lang="en">Needs accurate dynamics params; <mark class="m-problem" data-t="PROBLEM/GAP">large error under contact</mark> (FILIC 4.4 Nm).</span></td>
+            <td><span data-lang="zh">NEXT <mark class="m-method" data-t="METHOD/IDEA">從資料學自由空間力矩</mark>,免系統辨識;接觸誤差降到 0.547 Nm。</span><span data-lang="en">NEXT <mark class="m-method" data-t="METHOD/IDEA">learns free-space torque from data</mark>, no sys-ID; contact error drops to 0.547 Nm.</span></td>
+          </tr>
+          <tr>
+            <td><b>TA-VLA</b><br><small><span data-lang="zh">用原始電流</span><span data-lang="en">raw current</span></small></td>
+            <td><span data-lang="zh">原始電流混雜自由空間+接觸,<mark class="m-problem" data-t="PROBLEM/GAP">訊號不乾淨</mark>。</span><span data-lang="en">Raw current mixes free-space + contact—<mark class="m-problem" data-t="PROBLEM/GAP">a noisy signal</mark>.</span></td>
+            <td><span data-lang="zh">NEXT 先<mark class="m-method" data-t="METHOD/IDEA">減掉學到的自由空間動力學</mark>,給策略更乾淨的接觸表徵(見 Tab.10)。</span><span data-lang="en">NEXT <mark class="m-method" data-t="METHOD/IDEA">subtracts learned free-space dynamics</mark> first, giving the policy a cleaner contact representation (Tab.10).</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">標準行為克隆</span><span data-lang="en">Standard BC</span></b></td>
+            <td><span data-lang="zh">均勻抽樣,<mark class="m-problem" data-t="PROBLEM/GAP">接觸片段被自由移動稀釋</mark>。</span><span data-lang="en">Uniform sampling <mark class="m-problem" data-t="PROBLEM/GAP">dilutes contact segments</mark> among free motion.</span></td>
+            <td><span data-lang="zh">FIRST 用力訊號分相位,<mark class="m-method" data-t="METHOD/IDEA">上採樣接觸前/中片段</mark>,對準最易失敗處。</span><span data-lang="en">FIRST segments by force and <mark class="m-method" data-t="METHOD/IDEA">up-samples pre-/in-contact</mark> segments, targeting the failure-prone parts.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這篇把一個「感測硬體問題」拆成兩個<b>純軟體/資料</b>問題,而且各自都用「最省」的手段解決(自監督小 LSTM + 只改抽樣機率)。這種<b>低門檻、可直接複製到任何機械臂</b>的定位,是它相較於「買更好感測器」或「訓練更大策略」路線的差異化賣點。</p>
+          <p data-lang="en" style="margin-top:6px">Note it splits a "sensing-hardware problem" into two <b>pure software/data</b> problems, each solved by the leanest means (a self-supervised small LSTM + only changing sampling probabilities). This <b>low-barrier, drop-in-on-any-arm</b> positioning is its differentiator versus "buy a better sensor" or "train a bigger policy."</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 NEXT 讀成「重新發明力感測器」。它估的是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">外部關節力矩(joint-space torque)</mark>,不是六軸末端力/力矩向量,也不做接觸點定位。它的目標是「夠好、夠便宜、堪用於 teleop 與策略」,而非在計量精度上取代 ATI/Bota。</span>
+        <span data-lang="en">Don't read NEXT as "reinventing the force sensor." It estimates <mark class="m-assume" data-t="ASSUMPTION/CLAIM">external <em>joint-space</em> torque</mark>, not a 6-axis end-effector wrench, and does no contact localization. Its goal is "good enough, cheap enough, usable for teleop and policies"—not to replace ATI/Bota on metrological accuracy.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">絕大多數學界與新創的低成本雙臂平台(Piper、YAM、GELLO 類)都沒力感測。若能免硬體地補上力覺,等於為<b>整個低成本機器人學習生態</b>解鎖接觸密集任務。</span>
+        <span data-lang="en">Most academic and startup low-cost bimanual rigs (Piper, YAM, GELLO-style) have no force sensing. Adding force without hardware unlocks contact-rich tasks for the <b>entire low-cost robot-learning ecosystem</b>.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">機器人專屬</span><span data-lang="en">robot-specific</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">GT 是否公平</span><span data-lang="en">GT fairness</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <figure class="fig"><img src="figs/Oh2026/fig1_overview.png" alt="Figure 1 overview">
+        <figcaption data-lang="zh"><b>Fig.1</b> 系統總覽。<b>(a) NEXT</b>:只用 10 分鐘無接觸資料、1 分鐘訓練,在<b>任何</b>機械臂上估高品質關節力矩,支援廉價臂的力回饋 teleop(Piper、YAM、Nero)。<b>(b) FIRST</b>:用學到的外力把示範切成 free / pre-contact / contact 三相位,訓練時<b>上採樣接觸相關片段</b>。<b>要注意</b>綠勾點:免專用力感測、免系統辨識。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> System overview. <b>(a) NEXT</b> estimates high-quality joint torque on <b>any</b> arm from 10 min of contact-free data (1 min training), enabling force-feedback teleop on low-cost arms (Piper, YAM, Nero). <b>(b) FIRST</b> uses the learned force to segment demos into free / pre-contact / contact, then <b>up-samples contact-relevant segments</b> in training. <b>Notice</b> the green checks: no dedicated force sensor, no system-ID.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">背景:為什麼解析法會失敗</span><span data-lang="en">Background: why the analytic approach fails</span></h3>
+        <p data-lang="zh">外部關節力矩 \(\tau_{\text{ext}}\) 是「物理接觸引起的」關節力矩,不含自由空間運動所需的力。經典做法從馬達電流(\(\tau_m=K I_m\),\(K\) 為力矩常數)減掉模型算的自由空間力矩:</p>
+        <p data-lang="en">External joint torque \(\tau_{\text{ext}}\) is the interaction-induced joint torque, excluding what free-space motion needs. The classic recipe subtracts a model-computed free-space torque from motor torque (\(\tau_m=K I_m\), with torque constant \(K\)):</p>
+        <div class="eq">$$\tau_{\text{ext}}=\tau_m-\tau_f,\qquad \tau_f=M(q)\ddot q+C(q,\dot q)\dot q+g(q)+\tau_{\text{other}}$$</div>
+        <p data-lang="zh">問題在於:準確辨識質量矩陣 \(M\)、科氏項 \(C\)、重力 \(g\) 很難;而且殘差 \(\tau_m-\tau_f\) <mark class="m-problem" data-t="PROBLEM/GAP">不只含接觸力,還混入非線性摩擦、stiction、backlash、遲滯、torque ripple、死區</mark>——這些多半是<b>歷史相依、只從瞬時狀態部分可觀測</b>的,是解析法脆弱的根源。</p>
+        <p data-lang="en">The trouble: identifying \(M\), \(C\), \(g\) accurately is hard; and the residual \(\tau_m-\tau_f\) <mark class="m-problem" data-t="PROBLEM/GAP">captures not only contact but nonlinear friction, stiction, backlash, hysteresis, torque ripple, deadzones</mark>—mostly <b>history-dependent, only partially observable from instantaneous state</b>, the root of analytic brittleness.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">NEXT:學自由空間逆動力學</span><span data-lang="en">NEXT: learn free-space inverse dynamics</span></h3>
+        <p data-lang="zh">關鍵轉念:<b>不算 \(\tau_f\),而是直接學它</b>。訓練一個 LSTM \(f_\theta\) 預測「無接觸時會觀察到的馬達力矩」,外力就是殘差:</p>
+        <p data-lang="en">Key pivot: <b>don't compute \(\tau_f\)—learn it</b>. Train an LSTM \(f_\theta\) to predict "the motor torque you'd observe with no contact"; external torque is the residual:</p>
+        <div class="eq">$$\hat\tau_f=f_\theta(x),\qquad \hat\tau_{\text{ext}}=\tau_m-\hat\tau_f$$</div>
+        <p data-lang="zh">輸入 \(x\) 是一段<mark class="m-method" data-t="METHOD/IDEA">本體感覺歷史</mark>:</p>
+        <p data-lang="en">The input \(x\) is a <mark class="m-method" data-t="METHOD/IDEA">proprioceptive history</mark>:</p>
+        <div class="eq">$$x_i=\big[\,q_{i-H:i},\ \dot q_{i-H:i},\ \Delta q_{d,\,i-H:i}\,\big]$$</div>
+        <p data-lang="zh">其中 \(q\) 是關節位置、\(\dot q\) 速度、\(\Delta q_d=q_d-q\) 是「命令目標 − 當前位置」的追蹤誤差。<b>訓練資料全是無接觸軌跡</b>,所以量測到的馬達力矩<b>就等於</b>自由空間力矩,可直接當監督標籤 → 這是自監督、免人工標註的巧妙之處。損失是 L2 回歸:</p>
+        <p data-lang="en">Here \(q\) is joint position, \(\dot q\) velocity, and \(\Delta q_d=q_d-q\) the tracking error ("commanded target − current position"). <b>All training data are contact-free</b>, so the measured motor torque <b>equals</b> the free-space torque and serves directly as the label—the self-supervised, label-free trick. The loss is L2 regression:</p>
+        <div class="eq">$$\mathcal{L}(\theta)=\frac{1}{N}\sum_{i=1}^{N}\big\|f_\theta(x_i)-\tau_{m,i}\big\|_2^2$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">為何用 LSTM + 歷史?因為它能捕捉遲滯、致動器動態、摩擦記憶、控制器追蹤等瞬時剛體模型抓不到的效應。實作採<b>無狀態滑動窗</b>(每個序列重置 hidden state,避免長軌跡漂移)。最終設定:2 層 LSTM(hidden 128)+ 2 層 MLP head,\(H=50\),輸入 \((q,\dot q,\Delta q_d)\)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Why LSTM + history? It captures hysteresis, actuator dynamics, frictional memory, and controller tracking that instantaneous rigid-body models miss. Implemented as a <b>stateless sliding window</b> (hidden state reset per sequence to avoid long-trajectory drift). Final config: 2-layer LSTM (hidden 128) + 2-layer MLP head, \(H=50\), input \((q,\dot q,\Delta q_d)\).</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Oh2026/fig5_estimation.png" alt="Figure 5 estimation" style="max-width:520px">
+        <figcaption data-lang="zh"><b>Fig.5</b> 力估測品質(\(\|\tau_{\text{ext}}\|\),Nm)。<b>左·自由空間</b>:真值應為 0;NEXT(紫)<b>比 Franka 原廠感測器(藍)還乾淨、更貼近 0</b>,FILIC/DO 會漂走。<b>右·接觸(推桌與泡棉)</b>:NEXT 幾乎貼合外部感測器,FILIC/DO 明顯偏離。<b>要注意</b>接觸轉換瞬間 baseline 的偏差最大。</figcaption>
+        <figcaption data-lang="en"><b>Fig.5</b> Estimation quality (\(\|\tau_{\text{ext}}\|\), Nm). <b>Left · free space</b>: truth is 0; NEXT (purple) is <b>cleaner and closer to 0 than even Franka's factory sensor (blue)</b>, while FILIC/DO drift. <b>Right · contact (pushing table &amp; foam)</b>: NEXT tracks the external sensor almost exactly; FILIC/DO deviate. <b>Notice</b> baselines deviate most at contact transitions.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">FIRST:用力把示範切相位 + 上採樣</span><span data-lang="en">FIRST: segment demos by force + up-sample</span></h3>
+        <p data-lang="zh">策略在時刻 \(t\) 看觀察 \(o_t=(I^{1:M}_t,\,q_t,\,\hat\tau_{\text{ext},t})\)(\(M\) 台相機、關節位置、以及 NEXT 估的外力),預測未來動作段 \(\hat a_{t:t+k}\sim\pi_\theta(\cdot\mid o_t)\)。策略用<mark class="m-method" data-t="METHOD/IDEA">flow-matching</mark> 訓練(條件速度場 \(v_\theta\),把噪聲 \(x_0\) 流到專家動作 \(x_1\)):</p>
+        <p data-lang="en">At time \(t\) the policy sees \(o_t=(I^{1:M}_t,\,q_t,\,\hat\tau_{\text{ext},t})\) (\(M\) cameras, joint position, and NEXT's force) and predicts an action chunk \(\hat a_{t:t+k}\sim\pi_\theta(\cdot\mid o_t)\). It is trained by <mark class="m-method" data-t="METHOD/IDEA">flow-matching</mark> (a conditional velocity field \(v_\theta\) flowing noise \(x_0\) to expert action \(x_1\)):</p>
+        <div class="eq">$$\mathcal{L}_{\text{FM}}(\theta)=\mathbb{E}\Big[\big\|v_\theta(x_\alpha,\alpha,o_t)-(x_1-x_0)\big\|_2^2\Big],\quad x_\alpha=(1-\alpha)x_0+\alpha x_1$$</div>
+        <p data-lang="zh"><b>切相位</b>:用純量接觸分數 \(f_t=\|\hat\tau_{\text{ext},t}\|_1\) 加<mark class="m-method" data-t="METHOD/IDEA">遲滯門檻</mark>——\(f_t\ge T_{\text{high}}\) 開、\(f_t\le T_{\text{low}}\) 關,否則維持前值,得到二值接觸指示 \(c_t\)。接觸起始 \(T_{\text{onset}}=\{t\mid c_{t-1}=0,c_t=1\}\)。給定控制頻率 \(F\),相位標籤:</p>
+        <p data-lang="en"><b>Segmenting</b>: a scalar contact score \(f_t=\|\hat\tau_{\text{ext},t}\|_1\) with <mark class="m-method" data-t="METHOD/IDEA">hysteresis thresholding</mark>—on at \(f_t\ge T_{\text{high}}\), off at \(f_t\le T_{\text{low}}\), else hold—gives a binary indicator \(c_t\). Contact onsets \(T_{\text{onset}}=\{t\mid c_{t-1}=0,c_t=1\}\). Given control frequency \(F\), the phase label is:</p>
+        <div class="eq">$$s_t=\begin{cases}\text{Contact}, & c_t=1,\\[2pt]\text{Pre-Contact}, & \exists\,t_{\text{onset}}:\ t_{\text{onset}}-F\le t<t_{\text{onset}},\\[2pt]\text{Free Space}, & \text{otherwise.}\end{cases}$$</div>
+        <p data-lang="zh">亦即接觸前<b>一秒</b>(\(F\) 步)標為 pre-contact。<b>上採樣</b>:給三相位權重 \(w_F,w_{PC},w_C\)(且 \(w_{PC},w_C>w_F\)),抽樣機率 \(p_t=w(s_t)/\sum_j w(s_j)\)。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">只改抽樣分布,回歸目標與架構完全不動</mark>。多數任務用 \(w_F{:}w_{PC}{:}w_C=1{:}5{:}1\),Cap Screwing 用 \(1{:}3{:}3\)。</p>
+        <p data-lang="en">I.e. the <b>one second</b> (\(F\) steps) before contact is pre-contact. <b>Up-sampling</b>: assign phase weights \(w_F,w_{PC},w_C\) (with \(w_{PC},w_C>w_F\)); sample with probability \(p_t=w(s_t)/\sum_j w(s_j)\). <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Only the sampling distribution changes; the regression objective and architecture are untouched</mark>. Most tasks use \(w_F{:}w_{PC}{:}w_C=1{:}5{:}1\); Cap Screwing uses \(1{:}3{:}3\).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\tau_m=K I_m\)</td><td><span data-lang="zh">量測馬達力矩:電流 \(I_m\) × 力矩常數 \(K\)。低成本臂通常都回報電流。</span><span data-lang="en">Measured motor torque: current \(I_m\) × torque constant \(K\). Low-cost arms usually report current.</span></td></tr>
+          <tr><td>\(\hat\tau_f\)</td><td><span data-lang="zh">LSTM 預測的<b>自由空間</b>(無接觸)力矩。</span><span data-lang="en">The LSTM-predicted <b>free-space</b> (contact-free) torque.</span></td></tr>
+          <tr><td>\(\hat\tau_{\text{ext}}\)</td><td><span data-lang="zh">估到的外部力矩 = \(\tau_m-\hat\tau_f\)。FIRST 與 teleop 都用它。</span><span data-lang="en">Estimated external torque = \(\tau_m-\hat\tau_f\). Used by both FIRST and teleop.</span></td></tr>
+          <tr><td>\(\Delta q_d\)</td><td><span data-lang="zh">追蹤誤差(命令目標 − 當前位置),反映控制器出力與致動器響應。</span><span data-lang="en">Tracking error (commanded − current); reflects controller effort and actuator response.</span></td></tr>
+          <tr><td>\(f_t=\|\hat\tau_{\text{ext},t}\|_1\)</td><td><span data-lang="zh">純量接觸分數,遲滯門檻用它判斷是否接觸。</span><span data-lang="en">Scalar contact score; hysteresis thresholds decide contact from it.</span></td></tr>
+          <tr><td>\(w_{PC},w_C,w_F\)</td><td><span data-lang="zh">pre-contact / contact / free 的抽樣權重,決定各相位在 batch 中出現頻率。</span><span data-lang="en">Sampling weights for pre-contact / contact / free; set each phase's batch frequency.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">力回饋 teleop(NEXT 的第一個應用)</span><span data-lang="en">Force-feedback teleop (NEXT's first use)</span></h3>
+        <p data-lang="zh">用 NEXT 估的 \(\tau_{\text{ext}}\) 直接驅動<mark class="m-method" data-t="METHOD/IDEA">雙邊 teleop</mark> 的力回饋控制律(沿用 FACTR):</p>
+        <p data-lang="en">NEXT's \(\tau_{\text{ext}}\) drives the <mark class="m-method" data-t="METHOD/IDEA">bilateral-teleop</mark> force-feedback law (from FACTR):</p>
+        <div class="eq">$$\tau_{\text{feedback}}=K_{f,p}\,\tau_{\text{ext}}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">把 follower 臂感到的外力放大係數 \(K_{f,p}\) 後回饋給 leader 臂,操作者就能「感覺到」接觸——原本只有裝了力感測器的貴臂才做得到。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Scale the follower's sensed force by \(K_{f,p}\) and feed it to the leader, so the operator "feels" contact—previously only possible on expensive sensorized arms.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh"><b>NEXT</b>:讓模型背下「這隻手臂空揮時各關節該出多少力」,實測減掉它,多出來的就是被東西頂到的力。<b>FIRST</b>:既然知道哪些片段有接觸(尤其接觸<b>前</b>的對齊),就在訓練時多丟這些片段給策略看。</span>
+        <span data-lang="en"><b>NEXT</b>: have the model memorize "how much torque each joint needs to swing in free air," subtract it from the measurement, and whatever's left is the push from an object. <b>FIRST</b>: since we know which segments touch (especially the <b>pre-</b>contact alignment), show the policy more of those during training.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何是「自由空間」而非「接觸」?</span><span data-lang="en">Why "free-space," not "contact"?</span></span>
+        <span data-lang="zh">直接學接觸力需要<mark class="m-problem" data-t="PROBLEM/GAP">成對接觸標註</mark>(要有真值力感測器);但學自由空間力矩只需<b>無接觸資料</b>,標籤就是量測值本身。難題被巧妙換成免標註的易題。</span>
+        <span data-lang="en">Learning contact force needs <mark class="m-problem" data-t="PROBLEM/GAP">paired contact labels</mark> (a ground-truth sensor); learning free-space torque needs only <b>contact-free data</b>, where the label is the measurement itself. A hard problem swapped for a label-free easy one.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">絕對力矩尺度取決於<mark class="m-assume" data-t="ASSUMPTION/CLAIM">力矩常數 \(K\)</mark>(廠商給或由電流-力矩曲線推)。\(K\) 不準時絕對尺度需校正——但作者指出對 teleop(力常被縮放)與策略(輸入會正規化)影響不大。</span>
+        <span data-lang="en">Absolute torque scale hinges on the <mark class="m-assume" data-t="ASSUMPTION/CLAIM">torque constant \(K\)</mark> (vendor-given or from a current-torque curve). If \(K\) is off, absolute scale needs calibration—but the authors note this barely affects teleop (forces are often scaled) or policies (inputs are normalized).</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">訓練規模</span><span data-lang="en">Training scale</span></span>
+        <span data-lang="zh">NEXT:AdamW,<b>1 分鐘 / RTX 3090</b>,100 Hz 資料,推論 1.76 ms/次(可 568 Hz)。策略:DINOv3-Base 影像編碼、動作段 30、每任務 250 示範、20 rollouts、A6000 訓 12–24 小時。</span>
+        <span data-lang="en">NEXT: AdamW, <b>1 min on an RTX 3090</b>, 100 Hz data, 1.76 ms/inference (up to 568 Hz). Policy: DINOv3-Base image encoder, action chunk 30, 250 demos/task, 20 rollouts, 12–24 h on an A6000.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">力估測精度(Tab.1,Franka,L1 誤差 ↓,單位 Nm)</span><span data-lang="en">Force-estimation accuracy (Tab.1, Franka, L1 error ↓, Nm)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">運動類型</span><span data-lang="en">Motion</span></th><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th>L1 (Nm) ↓</th></tr>
+          <tr><td rowspan="4"><b>Contact</b></td><td>External Sensor (GT)</td><td>0.000</td></tr>
+          <tr><td>FILIC</td><td class="bad">4.395</td></tr>
+          <tr><td>Disturbance Observer</td><td>1.471</td></tr>
+          <tr><td class="win">NEXT (Ours)</td><td class="win">0.547</td></tr>
+          <tr><td rowspan="4"><b>Free Space</b></td><td>Free Space (GT)</td><td>0.000</td></tr>
+          <tr><td>FILIC</td><td class="bad">2.460</td></tr>
+          <tr><td>External Sensor<span data-lang="zh">(當基線)</span><span data-lang="en"> (as baseline)</span></td><td>0.449</td></tr>
+          <tr><td class="win">NEXT (Ours)</td><td class="win">0.414</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">接觸時 NEXT 0.547 Nm，<mark class="m-result" data-t="RESULT/EVIDENCE">比 FILIC 低 87.6%、比 DO 低 62.8%</mark>。自由空間時 NEXT 0.414 Nm，<mark class="m-result" data-t="RESULT/EVIDENCE">甚至勝過 Franka 原廠感測器的 0.449</mark>——因為它直接從該硬體的資料學到硬體特有效應。Piper 上自由空間誤差僅 <b>0.018 Nm</b>(Tab.5)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Under contact, NEXT is 0.547 Nm—<mark class="m-result" data-t="RESULT/EVIDENCE">87.6% below FILIC and 62.8% below the DO</mark>. In free space, NEXT's 0.414 Nm <mark class="m-result" data-t="RESULT/EVIDENCE">even beats Franka's factory sensor at 0.449</mark>, because it learns hardware-specific effects from that hardware's own data. On the Piper, free-space error is just <b>0.018 Nm</b> (Tab.5).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">策略學習主結果(Fig.6,五任務任務進度)</span><span data-lang="en">Policy-learning main result (Fig.6, task progress on five tasks)</span></h3>
+        <figure class="fig" style="margin-top:4px"><img src="figs/Oh2026/fig6_taskprogress.png" alt="Figure 6 task progress">
+          <figcaption data-lang="zh"><b>Fig.6</b> flow-matching 策略在五個接觸密集任務的任務進度。<b>要注意</b>:FIRST(紫)<b>在全部五個任務上都最高</b>,對長程多階段任務(NIST Belt)差距最明顯;誤差線大代表接觸任務本身變異高。ACT 策略也有相同趨勢(Appendix)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.6</b> Task progress of the flow-matching policy across five contact-rich tasks. <b>Notice</b>: FIRST (purple) is <b>highest on all five</b>, with the largest gap on the long-horizon NIST Belt; wide error bars reflect the high variance of contact tasks. ACT shows the same trend (Appendix).</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:4px">FIRST 相比先前力感知策略<mark class="m-result" data-t="RESULT/EVIDENCE">平均任務進度提升 &gt;17%</mark>。Fig.7(相位別驗證損失)進一步解釋:baseline 在 pre-contact / contact 的損失較高,FIRST 上採樣後<mark class="m-result" data-t="RESULT/EVIDENCE">把這兩相位的損失壓低、拉近 free motion</mark>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:4px">FIRST lifts average task progress by <mark class="m-result" data-t="RESULT/EVIDENCE">&gt;17%</mark> over prior force-aware policies. Fig.7 (phase-wise validation loss) explains why: baselines have higher loss on pre-/in-contact; after up-sampling, FIRST <mark class="m-result" data-t="RESULT/EVIDENCE">drives those losses down toward the free-motion loss</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵消融 A:該上採樣哪個相位?(Tab.2,任務進度 ↑)</span><span data-lang="en">Ablation A: which phase to up-sample? (Tab.2, task progress ↑)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">任務</span><span data-lang="en">Task</span></th><th>C</th><th>PC</th><th>PC+C</th></tr>
+          <tr><td>LEGO Assembly</td><td>0.697</td><td class="win">0.913</td><td>0.875</td></tr>
+          <tr><td>NIST Belt</td><td>0.494</td><td class="win">0.767</td><td>0.649</td></tr>
+          <tr><td>NIST Insertion</td><td>0.800</td><td class="win">0.933</td><td class="win">0.933</td></tr>
+          <tr><td>Tool Clean Up</td><td>0.650</td><td class="win">0.805</td><td>0.775</td></tr>
+          <tr><td>Cap Screwing</td><td>0.707</td><td>0.673</td><td class="win">0.825</td></tr>
+          <tr><td><b>Average</b></td><td>0.670</td><td class="win">0.818</td><td>0.811</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><mark class="m-result" data-t="RESULT/EVIDENCE">只上採樣 pre-contact(PC)平均最好(0.818)</mark>,證明「接觸<b>前</b>的對齊」才是勝負手;只上採樣 contact(0.670)幫助最小。唯一例外是 Cap Screwing——持續接觸重要,故 PC+C 最佳。上採樣倍率 \(m\) 在 <b>5 左右最佳</b>,過大反而退化(Fig.12)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><mark class="m-result" data-t="RESULT/EVIDENCE">Up-sampling pre-contact (PC) alone is best on average (0.818)</mark>, showing pre-contact <b>alignment</b> is the crux; contact-only (0.670) helps least. The lone exception is Cap Screwing—sustained contact matters, so PC+C wins. The up-sampling factor \(m\) peaks <b>around 5</b>; larger values degrade (Fig.12).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵消融 B/C:訊號與機制的選擇</span><span data-lang="en">Ablation B/C: choosing the signal and the mechanism</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">比較</span><span data-lang="en">Comparison</span></th><th><span data-lang="zh">關鍵數字</span><span data-lang="en">Key numbers</span></th><th><span data-lang="zh">結論</span><span data-lang="en">Conclusion</span></th></tr>
+          <tr><td><b><span data-lang="zh">原始電流 vs \(\tau_{\text{ext}}\)</span><span data-lang="en">Raw current vs \(\tau_{\text{ext}}\)</span></b><br><small>(Tab.10, ACT)</small></td><td>NIST Insertion 0.220→0.431→<b class="ok">0.567</b><br>Cap Screwing 0.440→0.440→<b class="ok">0.525</b></td><td><span data-lang="zh">原始電流只在 Insertion 有幫助;<mark class="m-result" data-t="RESULT/EVIDENCE">NEXT 的 \(\tau_{\text{ext}}\) 兩任務都最好</mark>——減掉自由空間動力學給出更乾淨的接觸表徵。</span><span data-lang="en">Raw current helps only Insertion; <mark class="m-result" data-t="RESULT/EVIDENCE">NEXT's \(\tau_{\text{ext}}\) is best on both</mark>—subtracting free-space dynamics yields a cleaner contact signal.</span></td></tr>
+          <tr><td><b><span data-lang="zh">上採樣 vs 加權回歸</span><span data-lang="en">Up-sample vs weighted regression</span></b><br><small>(Tab.11, LEGO, ACT)</small></td><td>None 0.453<br>Weighted-Reg (PC) 0.345<br><b class="ok">FIRST (PC) 0.573</b></td><td><span data-lang="zh">加權回歸<mark class="m-problem" data-t="PROBLEM/GAP">反而變差</mark>(改 loss 使優化不穩);<mark class="m-result" data-t="RESULT/EVIDENCE">FIRST 只改抽樣分布更穩更好</mark>。</span><span data-lang="en">Weighted regression <mark class="m-problem" data-t="PROBLEM/GAP">actually hurts</mark> (reshaping the loss destabilizes optimization); <mark class="m-result" data-t="RESULT/EVIDENCE">FIRST's sampling-only change is more stable and better</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">NEXT 架構</span><span data-lang="en">NEXT architecture</span></b><br><small>(Tab.4)</small></td><td>LSTM &gt; GRU &gt; MLP;<br>H=50 &gt; H=10</td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">LSTM 在接觸與自由空間都最好</mark>;歷史越長越準(尤其 LSTM),印證時序記憶的重要。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">LSTM is best in both contact and free space</mark>; longer history helps (esp. LSTM), confirming temporal memory matters.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">力回饋 teleop 使用者研究(Fig.4,20 位受試)</span><span data-lang="en">Force-feedback teleop user study (Fig.4, 20 participants)</span></h3>
+        <p data-lang="zh">在 Franka 擦拭任務上比較 5 種回饋:無回饋、DO、位置-位置(PP)、FACTR Teleop(用原廠力矩感測器)、Ours(用 NEXT)。結果:<mark class="m-result" data-t="RESULT/EVIDENCE">NEXT 的易用度評分優於所有 baseline,且施加的關節力矩更低(代表更省力、更有力覺)</mark>,並<mark class="m-result" data-t="RESULT/EVIDENCE">媲美用專用感測器的 FACTR Teleop</mark>。在無感測器的 Piper 上,NEXT 也勝過 baseline(Fig.9)。</p>
+        <p data-lang="en">On a Franka wiping task, five feedback conditions are compared: none, DO, position-position (PP), FACTR Teleop (using factory torque sensors), and Ours (using NEXT). Result: <mark class="m-result" data-t="RESULT/EVIDENCE">NEXT rates easier to use than all baselines and requires lower applied joint torque (less exertion, more force awareness)</mark>, and is <mark class="m-result" data-t="RESULT/EVIDENCE">comparable to sensorized FACTR Teleop</mark>. On the sensor-less Piper, NEXT also beats baselines (Fig.9).</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">NEXT 的力估測<b>接近甚至超越專用感測器</b>(Franka 自由空間 0.414 &lt; 0.449);FIRST 讓策略在五個接觸任務<b>全面領先</b>且平均進度 +17%。兩者都用「最省」的手段達成。</span>
+        <span data-lang="en">NEXT's force estimates <b>approach or beat a dedicated sensor</b> (Franka free-space 0.414 &lt; 0.449); FIRST leads on <b>all five</b> contact tasks with +17% average progress. Both achieved with the leanest means.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">最漂亮的一個數字</span><span data-lang="en">The prettiest number</span></span>
+        <span data-lang="zh">自由空間下 NEXT(0.414 Nm)比 Franka <b>原廠</b>外力估測(0.449 Nm)更乾淨——一個 1 分鐘訓練的小 LSTM,在某個指標上勝過一台 3 萬美元機械臂的內建方案。</span>
+        <span data-lang="en">In free space, NEXT (0.414 Nm) is cleaner than Franka's <b>factory</b> external-torque estimate (0.449 Nm)—a 1-minute-trained tiny LSTM beating a $30k arm's built-in solution on one metric.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">接觸時的「真值」來自 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Franka 自己的原廠估測</mark>,而非獨立第三方感測器;所以「接觸 0.547 Nm」是<b>對齊 Franka 的估測</b>,不是對齊物理真值。這點會影響對精度的解讀。</span>
+        <span data-lang="en">The contact "ground truth" is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Franka's own factory estimate</mark>, not an independent third-party sensor; so "contact 0.547 Nm" is <b>agreement with Franka's estimate</b>, not with physical truth. This colors how to read the accuracy.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">baseline 公平?</span><span data-lang="en">fair baselines?</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">門檻調參</span><span data-lang="en">threshold tuning</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>接觸真值本身有循環風險</b>:接觸時的 ground truth 用的是 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Franka 內建的外力估測</mark>,它本身也是估計、也有偏差。因此「NEXT 接觸誤差 0.547 Nm」衡量的是<b>與 Franka 估測的一致性</b>,不是與真實接觸力的一致性;若 Franka 估測有系統偏差,這個比較就會失真。理想上應該用一個獨立、經校正的六軸力感測器當真值。</li>
+          <li data-lang="en"><b>The contact ground truth is itself estimated</b>: contact GT uses <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Franka's built-in external-torque estimate</mark>, which is itself an estimate with its own bias. So "NEXT contact error 0.547 Nm" measures <b>agreement with Franka's estimate</b>, not with the true contact force; if Franka's estimate is systematically biased, the comparison distorts. Ideally an independent, calibrated 6-axis sensor would serve as GT.</li>
+          <li data-lang="zh"><b>機器人專屬、需逐臂重訓</b>(作者坦承):NEXT 學的是「這隻臂的自由空間動力學」,換一隻臂、換負載、甚至同型號不同個體(磨損、溫度)都可能要重收資料重訓。論文沒量化「跨個體 / 隨時間漂移」的退化程度。</li>
+          <li data-lang="en"><b>Robot-specific, needs per-arm retraining</b> (authors acknowledge): NEXT learns "this arm's free-space dynamics"; a different arm, payload, or even another unit of the same model (wear, temperature) may require re-collecting and retraining. The paper doesn't quantify cross-unit or temporal-drift degradation.</li>
+          <li data-lang="zh"><b>只做關節空間力矩,不做末端 wrench / 接觸定位</b>:對很多需要方向性力控(如沿某軸推)的任務,關節力矩不如六軸末端力/力矩直接。這限制了它能取代專用感測器的場景範圍。</li>
+          <li data-lang="en"><b>Joint-space torque only—no end-effector wrench or contact localization</b>: for tasks needing directional force control (e.g. push along an axis), joint torque is less direct than a 6-axis wrench. This bounds where it can truly replace a dedicated sensor.</li>
+          <li data-lang="zh"><b>FIRST 有隱藏的調參自由度</b>:遲滯門檻 \(T_{\text{high}},T_{\text{low}}\)、pre-contact 窗長(1 秒)、以及<b>每個任務不同的上採樣比例</b>(1:5:1 vs 1:3:3)都是超參。這些看似「用力自動分相位」,但門檻與比例其實需要按任務挑選,削弱了「全自動」的敘事,也帶來過擬合到特定任務的疑慮。</li>
+          <li data-lang="en"><b>FIRST hides tuning knobs</b>: the hysteresis thresholds \(T_{\text{high}},T_{\text{low}}\), the pre-contact window (1 s), and a <b>per-task up-sampling ratio</b> (1:5:1 vs 1:3:3) are all hyperparameters. This looks like "force auto-segments phases," but thresholds and ratios are in fact task-selected, weakening the "fully automatic" narrative and raising per-task overfitting concerns.</li>
+          <li data-lang="zh"><b>樣本規模與變異</b>:每任務僅 20 rollouts,且 Fig.6 誤差線相當大。多個相鄰方法(如 FACTR vs FIRST)在某些任務上的差距可能落在變異範圍內;缺乏統計顯著性檢定。</li>
+          <li data-lang="en"><b>Sample size and variance</b>: only 20 rollouts per task, with sizable Fig.6 error bars. Gaps between adjacent methods (e.g. FACTR vs FIRST) on some tasks may fall within noise; no statistical-significance testing is reported.</li>
+          <li data-lang="zh"><b>對「力矩常數 \(K\)」的依賴被輕描淡寫</b>:雖說 teleop/策略可容忍 \(K\) 不準,但這暗示絕對尺度不可靠——對需要「按到特定牛頓數就停」的任務(如鎖蓋防過鎖),尺度誤差可能實際影響行為。</li>
+          <li data-lang="en"><b>Dependence on torque constant \(K\) is downplayed</b>: while teleop/policies tolerate an inexact \(K\), this implies the absolute scale is unreliable—for tasks needing "stop at a specific Newton level" (e.g. avoid over-screwing), scale error could actually affect behavior.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>跨臂遷移的代價</b>:NEXT 需逐臂重訓;那麼「10 分鐘資料 + 1 分鐘訓練」是否對每隻新臂、每次換負載都要重來?跨同型個體、跨溫度、跨磨損的退化有多大?</li>
+          <li data-lang="en"><b>Cross-arm transfer cost</b>: NEXT retrains per arm—so must the "10 min + 1 min" be redone for every new arm and every payload change? How large is degradation across same-model units, temperature, and wear?</li>
+          <li data-lang="zh"><b>baseline 是否被公平對待</b>:FILIC/DO 用的動力學參數(Franka 來自文獻辨識、Piper 來自廠商 URDF)是否已盡力校準?若給對手同等的「逐臂資料驅動校準」,差距會縮小多少?</li>
+          <li data-lang="en"><b>Are baselines treated fairly?</b>: are FILIC/DO's dynamics params (Franka from literature sys-ID, Piper from the vendor URDF) as well-calibrated as possible? Given the same "per-arm data-driven calibration," how much would the gap shrink?</li>
+          <li data-lang="zh"><b>真值的獨立性</b>:能否用一個獨立校正的六軸 F/T 感測器(而非 Franka 自己的估測)當接觸真值,重測 NEXT 的絕對精度?</li>
+          <li data-lang="en"><b>Independence of GT</b>: could an independently calibrated 6-axis F/T sensor (not Franka's own estimate) serve as contact GT to re-measure NEXT's absolute accuracy?</li>
+          <li data-lang="zh"><b>FIRST 的自動化程度</b>:遲滯門檻與上採樣比例目前按任務挑;有沒有辦法從資料自動決定(如用接觸分數分布)?否則「新任務要調多少參」會限制實用性。</li>
+          <li data-lang="en"><b>How automatic is FIRST?</b>: thresholds and ratios are currently task-picked; can they be set automatically from data (e.g. the contact-score distribution)? Otherwise "how much to tune per new task" limits practicality.</li>
+          <li data-lang="zh"><b>為何 pre-contact 比 contact 重要?</b>這個發現很有價值但也反直覺——是因為對齊誤差會被後續接觸放大,還是因為 contact 片段的動作本身較容易學?能否用因果分析(而非只有 attention 診斷)佐證?</li>
+          <li data-lang="en"><b>Why does pre-contact beat contact?</b> A valuable but counter-intuitive finding—is it because alignment error is amplified by subsequent contact, or because in-contact actions are inherently easier to learn? Can causal analysis (beyond attention diagnostics) support it?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把「NEXT 比 Franka 感測器更準」讀成「不需要力感測器了」。正確理解:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">在自由空間、以關節力矩、以 Franka 自己估測為基準</mark>下 NEXT 更乾淨。它證明的是「廉價臂也能有堪用力覺」,不是「專用六軸感測器已無價值」。</span>
+        <span data-lang="en">Reading "NEXT beats Franka's sensor" as "force sensors are unnecessary." The right reading: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">in free space, in joint torque, against Franka's own estimate</mark>, NEXT is cleaner. It shows "low-cost arms can have usable force sensing," not "dedicated 6-axis sensors are worthless."</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">實驗設計相當紮實:橫跨 Piper→Franka 多平台、有使用者研究、有豐富消融(架構、輸入、歷史長度、相位選擇、上採樣倍率、加權回歸對照、原始電流對照)。Limitations 也誠實點出機器人專屬與 \(K\) 依賴。這是一篇工程可信度高的論文。</span>
+        <span data-lang="en">The experiments are solid: multi-platform (Piper→Franka), a user study, and rich ablations (architecture, inputs, history length, phase choice, up-sampling magnitude, weighted-regression control, raw-current control). Limitations honestly flag robot-specificity and \(K\) dependence. Engineering-credible work.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「把難題換成免標註的易題」是可複製的招式</b>:與其直接學你要的量(需成對標註),不如學它的「補集」(在容易取得的資料上自監督),再靠物理關係反推。NEXT 學自由空間力矩、用殘差得外力,就是範例——這招可遷移到其他「殘差即訊號」的估測問題。</li>
+          <li data-lang="en"><b>"Turn a hard problem into a label-free easy one" is a reusable move</b>: rather than learning the target directly (needing paired labels), learn its "complement" self-supervised on easy-to-collect data, then recover the target via a physical relation. NEXT (learn free-space torque, get force by residual) is the exemplar—transferable to other "residual-is-the-signal" estimation problems.</li>
+          <li data-lang="zh"><b>資料重加權時,優先改「抽樣分布」而非「loss 權重」</b>:FIRST 的 Tab.11 給了實證——動 loss 會使優化不穩、易過擬合高權重片段;動抽樣頻率保留原目標、更穩。做模仿學習資料策展時值得預設採用。</li>
+          <li data-lang="en"><b>When reweighting data, prefer changing the <em>sampling distribution</em> over <em>loss weights</em></b>: FIRST's Tab.11 gives evidence—reshaping the loss destabilizes optimization and overfits high-weight segments; reshaping sampling frequency keeps the objective and is more stable. A good default for imitation-learning data curation.</li>
+          <li data-lang="zh"><b>「失敗集中在接觸前的對齊」是可帶走的先驗</b>:做接觸密集操作時,把資源(資料、獎勵、標註)優先投在 pre-contact 對齊階段,可能比堆在 contact 階段更划算——這是一條可直接套用的經驗準則。</li>
+          <li data-lang="en"><b>"Failures cluster in pre-contact alignment" is a portable prior</b>: for contact-rich manipulation, investing resources (data, reward, labels) in the pre-contact alignment phase may pay off more than piling them on the contact phase—a directly applicable rule of thumb.</li>
+          <li data-lang="zh"><b>低成本平台可以先補「感知」再談「策略」</b>:若你在 Piper/YAM 這類無感測臂上做操作學習,NEXT 提供了一個近乎零成本的力覺補丁,值得在收示範前先建起來(連 teleop 手感也一起改善)。</li>
+          <li data-lang="en"><b>On low-cost rigs, retrofit "sensing" before "policy"</b>: if you do manipulation learning on sensor-less arms (Piper/YAM), NEXT is a near-zero-cost force-sensing patch worth setting up before collecting demos (it also improves teleop feel).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「無力感測器的臂也能估外力」</span><span data-lang="en">"sensor-less arms can estimate external force"</span></td><td><span data-lang="zh">作為資料驅動、免系統辨識的代表方法(NEXT,含 Franka/Piper 精度數字)。</span><span data-lang="en">A flagship data-driven, sys-ID-free method (NEXT, with Franka/Piper accuracy numbers).</span></td></tr>
+          <tr><td><span data-lang="zh">「力感知資料重加權應偏重 pre-contact」</span><span data-lang="en">"force-aware reweighting should favor pre-contact"</span></td><td><span data-lang="zh">引 FIRST 的相位選擇消融(PC 0.818 &gt; C 0.670)。</span><span data-lang="en">Cite FIRST's phase-choice ablation (PC 0.818 &gt; C 0.670).</span></td></tr>
+          <tr><td><span data-lang="zh">「改抽樣分布 &gt; 改 loss 權重」</span><span data-lang="en">"reshape sampling &gt; reshape the loss"</span></td><td><span data-lang="zh">引 Tab.11(FIRST vs weighted regression)。</span><span data-lang="en">Cite Tab.11 (FIRST vs weighted regression).</span></td></tr>
+          <tr><td><span data-lang="zh">「學到的 \(\tau_{\text{ext}}\) 比原始電流更好用」</span><span data-lang="en">"learned \(\tau_{\text{ext}}\) beats raw current"</span></td><td><span data-lang="zh">引 Tab.10 與 attention 分析。</span><span data-lang="en">Cite Tab.10 and the attention analysis.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">FACTR 2 用兩個務實的資料驅動元件——<b>NEXT</b>(自監督學自由空間動力學,靠殘差估外力)與 <b>FIRST</b>(用力把示範切相位、上採樣接觸前後)——把「原本要昂貴力感測器」的接觸密集操作能力,以近乎零硬體成本補到任何有電流回報的機械臂上,並帶來力回饋 teleop 與 &gt;17% 的策略進步。它的貢獻不在炫技,而在<b>可直接落地的簡潔性</b>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">FACTR 2 uses two pragmatic data-driven pieces—<b>NEXT</b> (self-supervised free-space dynamics, force by residual) and <b>FIRST</b> (force-based phase segmentation + up-sampling around contact)—to retrofit contact-rich capability that "used to need an expensive force sensor" onto any current-reporting arm at near-zero hardware cost, yielding force-feedback teleop and &gt;17% policy gains. Its contribution is not flash but <b>drop-in simplicity</b>.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">FACTR (RSS'25)</span>
+          <span class="chip">TA-VLA / ForceVLA</span>
+          <span class="chip">GELLO teleop</span>
+          <span class="chip">Re-Mix / DataMIL</span>
+          <span class="chip">Flow matching / MDT</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">一句話定位</span><span data-lang="en">One-line placement</span></span>
+        <span data-lang="zh">如果 VGGT 是「用大模型取代幾何優化」,FACTR 2 就是反向的小而美:<b>用一個 1 分鐘訓練的小 LSTM,取代昂貴的力感測硬體</b>。兩者都在說「資料 + 學習可以換掉某個貴東西」,只是這裡換掉的是硬體。</span>
+        <span data-lang="en">If VGGT is "a big model replaces geometric optimization," FACTR 2 is the small-and-elegant inverse: <b>a 1-minute-trained tiny LSTM replaces expensive force-sensing hardware</b>. Both say "data + learning can swap out something costly"—here, the costly thing is hardware.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Oh, Liu, Tao et al. 2026 (FACTR 2) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'FACTR 2 reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

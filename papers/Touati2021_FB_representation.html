@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>FB Representation — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Learning One Representation to Optimize All Rewards","authors":"Ahmed Touati, Yann Ollivier","year":"2021","venue":"NeurIPS","tags":["Unsupervised RL","Zero-shot RL","Successor Measure","Representation Learning"],"tldr":"提出 Forward-Backward 表徵:無監督學一次,事後任給 reward 都能不重訓、不規劃即時得到近似最優策略。","tldr_en":"Introduces the Forward-Backward representation: train unsupervised once, then for any reward specified later, get a near-optimal policy instantly—no retraining, no planning."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .mid{color:var(--c-assume); font-weight:700}
+  .win{background:rgba(58,165,100,.10); font-weight:600}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{font-size:16px; width:84px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.05em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .figrow{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:880px){.figrow{grid-template-columns:1fr}}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">提出 <b>Forward-Backward (FB) representation</b>:在「無獎勵」探索階段先學出兩個表徵 F、B,事後不論給定<b>任何</b> reward,都能<b>不重新訓練、不做規劃</b>,直接用一條公式算出近似最優策略。等於把「環境裡所有規劃問題的解答」壓縮進一個可學習的物件裡。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Introduces the <b>Forward-Backward (FB) representation</b>: during a reward-free exploration phase, learn two representations F and B, so that for <b>any</b> reward specified later you get a near-optimal policy from a single formula—<b>no retraining, no planning</b>. In effect it compresses "the solutions to all planning problems in the environment" into one learnable object.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 能不能先不看獎勵地探索環境,學一個<mark class="m-problem" data-t="PROBLEM/GAP">緊湊物件</mark>,事後任給 reward 就立刻吐出最優策略?</li>
+          <li data-lang="en"><b>Problem</b> — Can we explore an environment reward-free, learn one <mark class="m-problem" data-t="PROBLEM/GAP">compact object</mark>, and then instantly produce an optimal policy for any reward given afterward?</li>
+          <li data-lang="zh"><b>方法</b> — 利用「Q 值對 reward 是線性的」這個代數事實,把 successor measure 做<mark class="m-method" data-t="METHOD/IDEA">低秩分解 \(M^\pi \approx F^\top B\)</mark>;reward 一到,投影成 \(z_R=\mathbb{E}[r\,B]\),策略就是 \(\arg\max_a F(s,a,z_R)^\top z_R\)。</li>
+          <li data-lang="en"><b>Method</b> — Exploit the algebraic fact that Q is linear in reward, and <mark class="m-method" data-t="METHOD/IDEA">low-rank factorize the successor measure \(M^\pi \approx F^\top B\)</mark>; once a reward arrives, project it to \(z_R=\mathbb{E}[r\,B]\) and the policy is \(\arg\max_a F(s,a,z_R)^\top z_R\).</li>
+          <li data-lang="zh"><b>結果</b> — 在迷宮、機械臂、像素版小精靈上,跟 goal-oriented 的 DQN/HER <mark class="m-result" data-t="RESULT/EVIDENCE">打平甚至更快</mark>,還能即時做到 HER 做不到的任務(避開禁區、就近選目標)。</li>
+          <li data-lang="en"><b>Results</b> — On mazes, a robot arm, and pixel-based Ms. Pacman, it <mark class="m-result" data-t="RESULT/EVIDENCE">matches or beats</mark> goal-oriented DQN/HER, and also solves—in real time—tasks HER cannot (avoiding forbidden regions, reaching the nearest of several goals).</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">這篇處理的是一種特殊的<mark class="m-method" data-t="METHOD/IDEA">unsupervised reinforcement learning</mark>:給定一個馬可夫決策過程(MDP)但<mark class="m-problem" data-t="PROBLEM/GAP">沒有任何 reward 訊號</mark>,問能否學並儲存一個緊湊物件,使得對<mark class="m-assume" data-t="ASSUMPTION/CLAIM">事後才指定的任何 reward</mark>,只需極少額外計算就給出最優策略。</p>
+        <p data-lang="en">This tackles a special kind of <mark class="m-method" data-t="METHOD/IDEA">unsupervised reinforcement learning</mark>: given a Markov decision process (MDP) but <mark class="m-problem" data-t="PROBLEM/GAP">no reward signal</mark>, can we learn and store a compact object that, for <mark class="m-assume" data-t="ASSUMPTION/CLAIM">any reward specified later</mark>, yields the optimal policy with minimal extra computation?</p>
+        <p data-lang="zh">作者沿用了 <mark class="m-method" data-t="METHOD/IDEA">[BBQ+18] 的策略參數化 \(\pi_z(s)=\arg\max_a F(s,a,z)^\top z\)</mark>,但把核心表徵從「successor features」換成<mark class="m-method" data-t="METHOD/IDEA">successor states 的占據機率(occupancy)</mark>,並借用 [BTO21] 的 successor-state 學習理論。</p>
+        <p data-lang="en">The authors reuse <mark class="m-method" data-t="METHOD/IDEA">[BBQ+18]'s policy parameterization \(\pi_z(s)=\arg\max_a F(s,a,z)^\top z\)</mark>, but swap the core representation from "successor features" to <mark class="m-method" data-t="METHOD/IDEA">successor-state occupancy</mark>, building on the successor-state learning of [BTO21].</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這是「<b>先建地圖、再隨點隨走</b>」的思路。傳統 RL 是「給目標→學一個策略」,換目標要重學;這篇想要的是「先把環境的<b>動態結構</b>學成一張通用地圖,任何目標都從地圖上即時導航」。關鍵賭注:環境的動態(transition)其實比某個特定 reward 的解更值得、也更可能被一次學好。</p>
+          <p data-lang="en" style="margin-top:6px">It's a "<b>build the map first, then navigate to any point on demand</b>" idea. Classic RL is "give a goal → learn one policy," and changing goals means relearning. Here the aim is "learn the environment's <b>dynamics</b> into a universal map, then navigate to any goal in real time." The bet: the environment's transition structure is both more worthwhile and more learnable-in-one-shot than the solution to any single reward.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇真正值得帶走的不是某個演算法,而是底下這幾個觀念——它們可以遷移到很多「事後才定義任務」的問題。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away isn't one algorithm but these ideas—transferable to many "task-defined-after-the-fact" problems.</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">獎勵與動態可以解耦。</b> 因為 \(Q^\pi_r=M^\pi r\),最難、最長程的部分 \(M^\pi\)(環境怎麼動)<b>完全與 reward 無關</b>;reward 只進入最後一次線性內積。所以「理解世界」能一次學好,「任務」事後再讀出。<mark class="m-method" data-t="METHOD/IDEA">這是全篇的地基。</mark></li>
+          <li data-lang="en"><b style="color:var(--c-method)">Reward and dynamics decouple.</b> Since \(Q^\pi_r=M^\pi r\), the hardest, longest-range part \(M^\pi\) (how the world moves) is <b>completely reward-independent</b>; reward enters only in a final linear inner product. So "understanding the world" can be learned once, and "the task" read out afterward. <mark class="m-method" data-t="METHOD/IDEA">This is the foundation of the whole paper.</mark></li>
+          <li data-lang="zh"><b style="color:var(--c-method)">低秩分解把「所有最優策略」線性化。</b> 強制 \(M^{\pi_z}=F_z^\top B\),等於要求表徵 \(B\) 把最優策略攤平成一個 \(d\) 維線性空間;於是任何 reward 都能用投影 \(z_R=\mathbb{E}[r\,B]\) 取得座標、再 \(\arg\max\) 得到最優策略。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Low-rank factorization linearizes "all optimal policies."</b> Forcing \(M^{\pi_z}=F_z^\top B\) asks representation \(B\) to flatten optimal policies into a \(d\)-dim linear space; any reward then gets coordinates by projection \(z_R=\mathbb{E}[r\,B]\), and an \(\arg\max\) gives the optimal policy.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">一個「不用想像狀態」的世界模型。</b> \(F^\top B\) 逼近的是長期占據機率(occupancy),<b>不是逐步 rollout</b>——因此繞開了 model-based 最痛的「合成軌跡誤差會隨步數累積」問題。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">A world model that never "imagines states."</b> \(F^\top B\) approximates long-term occupancy, <b>not step-by-step rollouts</b>—sidestepping model-based RL's worst pain, the compounding error of synthesized trajectories.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">低秩 = 內建「長程優先」的歸納偏置。</b> rank-\(d\) 近似偏好 \(P_\pi\) 的大特徵值(低頻、空間平滑、長程)結構。在沒有 reward 先驗時,這其實是個<mark class="m-assume" data-t="ASSUMPTION/CLAIM">合理的先驗</mark>,也呼應神經科學對 successor representation 的觀察 [SBG17]。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Low rank = a built-in "long-range first" prior.</b> The rank-\(d\) approximation favors large eigenvalues of \(P_\pi\) (low-frequency, spatially smooth, long-range). Absent a reward prior, this is a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">reasonable prior</mark>, echoing neuroscience views of the successor representation [SBG17].</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">可控 agent 的雛形。</b> 把「探索」與「達成任意目標」分離:先無監督探索建表徵,之後任意任務即時求解。這正是「先理解世界、再聽令行事」的 controllable-agent 範式。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">A prototype controllable agent.</b> It separates "exploration" from "achieving any goal": explore unsupervised to build representations, then solve any task instantly. This is the "understand the world first, then take orders" controllable-agent paradigm.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Learning One Representation to Optimize All Rewards</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Ahmed Touati · Yann Ollivier</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Mila / U. Montreal · Meta&nbsp;AI&nbsp;(FAIR)&nbsp;Paris</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2021 · NeurIPS(arXiv:2103.07945v3)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.LG · Unsupervised / Zero-shot RL</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>github.com/ahmed-touati/controllable_agent</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">這篇是後來一整條「<b>zero-shot RL</b>」研究線的奠基之作:一次無監督訓練,事後面對新任務不需再學。讀懂 FB,就讀懂了這條線的起點。</span>
+        <span data-lang="en">A foundational work for the whole "<b>zero-shot RL</b>" line: train unsupervised once, face new tasks later with no further learning. Understanding FB means understanding where that line begins.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Successor Measure</span><span class="chip">Occupancy Map</span>
+          <span class="chip">TD Learning</span><span class="chip">Low-rank Factorization</span>
+          <span class="chip">Goal-oriented RL</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b>Goal-oriented RL</b><br>(HER <span data-lang="zh">等</span><span data-lang="en">etc.</span>)</td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">必須事先指定一組任務/目標</mark>;無法即時適應新 reward,例如目標的加權組合、dense reward、或「避開某些狀態」。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Must specify a set of tasks/goals in advance</mark>; cannot adapt in real time to new rewards—e.g. weighted goal combinations, dense rewards, or "avoid certain states."</span></td></tr>
+          <tr><td><b>Model-based RL</b><br>(<span data-lang="zh">學世界模型</span><span data-lang="en">world models</span>)</td><td><span data-lang="zh">每來一個新 reward <mark class="m-problem" data-t="PROBLEM/GAP">仍要重新規劃(planning)</mark>;而且長時間尺度下<mark class="m-problem" data-t="PROBLEM/GAP">合成準確的狀態軌跡很困難</mark>。</span><span data-lang="en">Every new reward <mark class="m-problem" data-t="PROBLEM/GAP">still requires planning</mark>; and over long horizons, <mark class="m-problem" data-t="PROBLEM/GAP">synthesizing accurate state trajectories is hard</mark>.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心矛盾:我們想要一個<b>事後可任意指定 reward</b> 的 agent,但現有方法不是「事先綁死任務」,就是「事後仍要昂貴計算」。</p>
+        <p data-lang="en" style="margin-top:14px">The core tension: we want an agent whose <b>reward can be set arbitrarily afterward</b>, but existing methods either "bind the task in advance" or "still pay expensive computation afterward."</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,FB 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how FB fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">FB 如何補上</span><span data-lang="en">How FB fills it</span></th></tr>
+          <tr>
+            <td><b>USFA</b> [BBQ+18]<br><small>successor features</small></td>
+            <td><span data-lang="zh">需<mark class="m-problem" data-t="PROBLEM/GAP">使用者事先提供特徵 φ</mark>;只能解「對 φ 線性」的 reward;goal-reaching 需無限多 feature。</span><span data-lang="en">Needs <mark class="m-problem" data-t="PROBLEM/GAP">user-provided features φ in advance</mark>; only solves rewards linear in φ; goal-reaching needs infinitely many features.</span></td>
+            <td><span data-lang="zh">改用 <mark class="m-method" data-t="METHOD/IDEA">successor states(占據機率)</mark>,<b>不需任何使用者輸入</b>,可解非線性 reward 與 goal-reaching。</span><span data-lang="en">Uses <mark class="m-method" data-t="METHOD/IDEA">successor states (occupancy)</mark> instead, <b>no user input</b>, handles nonlinear rewards and goal-reaching.</span></td>
+          </tr>
+          <tr>
+            <td><b>HER</b> [ACR+17]</td>
+            <td><span data-lang="zh">要<mark class="m-problem" data-t="PROBLEM/GAP">事先指定 goal 家族</mark>;無法事後指定 reward。</span><span data-lang="en">Must <mark class="m-problem" data-t="PROBLEM/GAP">specify a goal family in advance</mark>; cannot set reward afterward.</span></td>
+            <td><span data-lang="zh">事後任意 reward 都用 <mark class="m-method" data-t="METHOD/IDEA">\(z_R=\mathbb{E}[r\,B]\)</mark> 即時求解。</span><span data-lang="en">Any reward, afterward, solved instantly via <mark class="m-method" data-t="METHOD/IDEA">\(z_R=\mathbb{E}[r\,B]\)</mark>.</span></td>
+          </tr>
+          <tr>
+            <td><b>Model-based</b></td>
+            <td><span data-lang="zh">需規劃 + 合成狀態軌跡。</span><span data-lang="en">Needs planning + synthesized state trajectories.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">零規劃、不合成狀態</mark>,直接一條公式給策略。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Zero planning, no state synthesis</mark>—a single formula gives the policy.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這三個 baseline 各自的「半套解法」:USFA 解決了「跨 reward 泛化」但要人給特徵;HER 解決了「sparse reward 樣本效率」但要事先定目標。FB 的賣點是把這兩塊缺口<b>一次補上</b>——代價是要學「兩個」表徵(多了一個 backward 表徵 B),以及承擔低秩近似的資訊損失(見 05)。</p>
+          <p data-lang="en" style="margin-top:6px">Note each baseline's "half solution": USFA solves cross-reward generalization but needs hand-given features; HER solves sparse-reward sample efficiency but needs goals defined up front. FB's pitch is filling both gaps <b>at once</b>—at the cost of learning <b>two</b> representations (the extra backward representation B) and bearing the information loss of low-rank approximation (see 05).</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 FB 想成「免費的午餐」。它<b>沒有解決 exploration</b>——整套方法<mark class="m-assume" data-t="ASSUMPTION/CLAIM">假設你已經有一個好的探索策略</mark>來餵 replay buffer。它解決的是「探索之後,如何一次學會應付所有 reward」。</span>
+        <span data-lang="en">Don't treat FB as a free lunch. It <b>does not solve exploration</b>—the whole method <mark class="m-assume" data-t="ASSUMPTION/CLAIM">assumes you already have a good exploration strategy</mark> to fill the replay buffer. What it solves is "after exploration, how to learn to handle all rewards at once."</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何重要</span><span data-lang="en">Why it matters</span></span>
+        <span data-lang="zh">在真實場景裡,reward 常常<b>事後才定義、甚至會變</b>(機器人換任務、推薦系統換目標)。「重訓一個策略」很貴。能<b>即時換 reward</b> 的 agent,實用價值極高。</span>
+        <span data-lang="en">In the real world rewards are often <b>defined late, and change</b> (a robot switching tasks, a recommender switching objectives). Retraining a policy is expensive. An agent that can <b>swap rewards instantly</b> is highly valuable.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看作者怎麼回應這些缺口?</span><span data-lang="en">See how the authors respond</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">公平性</span><span data-lang="en">fairness</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">維度 d</span><span data-lang="en">dim d</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">基石:successor measure 與「Q 對 reward 線性」</span><span data-lang="en">Foundation: successor measure &amp; "Q is linear in reward"</span></h3>
+        <p data-lang="zh">先定義 <b>successor measure</b> \(M^\pi\)——跟著策略 \(\pi\) 走,折扣後落在每個狀態-動作集合 \(X\) 的期望(折扣)次數:</p>
+        <p data-lang="en">First define the <b>successor measure</b> \(M^\pi\)—the expected discounted time spent in each state-action set \(X\) when following policy \(\pi\):</p>
+        <div class="eq">$$M^\pi(s_0,a_0,X)=\sum_{t\ge 0}\gamma^{\,t}\,\Pr\big((s_t,a_t)\in X \mid s_0,a_0,\pi\big)$$</div>
+        <p data-lang="zh">關鍵代數事實:<mark class="m-method" data-t="METHOD/IDEA">任何策略的 Q 函數,對 reward 都是線性的</mark>。把 \(M^\pi\)、\(r\) 視為(以狀態-動作為索引的)矩陣與向量:</p>
+        <p data-lang="en">The key algebraic fact: <mark class="m-method" data-t="METHOD/IDEA">any policy's Q-function is linear in the reward</mark>. Treating \(M^\pi\) and \(r\) as a matrix and vector indexed by state-actions:</p>
+        <div class="eq">$$Q^\pi_r(s,a)=\sum_{s',a'} M^\pi(s,a,s',a')\,r(s',a')=(M^\pi r)(s,a)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">這就是全篇的支點:困難、長程的部分 \(M^\pi\) <b>完全與 reward 無關</b>,reward 只在最後做一次線性內積。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">This is the fulcrum: the hard, long-range part \(M^\pi\) is <b>entirely reward-independent</b>; reward enters only via a final linear inner product.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">核心招式:低秩分解 \(M^{\pi_z}=F_z^\top B\)</span><span data-lang="en">Core move: low-rank factorization \(M^{\pi_z}=F_z^\top B\)</span></h3>
+        <p data-lang="zh">引入一族由 \(z\in\mathbb{R}^d\) 參數化的策略 \(\pi_z\),並尋找表徵使 successor measure 對每個 \(z\) 都能分解。一旦成立,Q 也跟著分解:</p>
+        <p data-lang="en">Introduce a family of policies \(\pi_z\) parameterized by \(z\in\mathbb{R}^d\), and seek representations that factorize the successor measure for every \(z\). Once they hold, Q factorizes too:</p>
+        <div class="eq">$$M^{\pi_z}=F_z^\top B\quad\Longrightarrow\quad Q^{\pi_z}_r=F_z^\top B\,r$$</div>
+        <p data-lang="zh">把策略定義為 <mark class="m-method" data-t="METHOD/IDEA">\(\pi_z(s):=\arg\max_a F(s,a,z)^\top z\)</mark>,並對給定 reward 設 <mark class="m-method" data-t="METHOD/IDEA">\(z_R:=Br=\mathbb{E}_{(s,a)\sim\rho}[\,r(s,a)\,B(s,a)\,]\)</mark>。代入可得 \(Q^{\pi_{z_R}}_r=F_{z_R}^\top z_R\)。</p>
+        <p data-lang="en">Define the policy as <mark class="m-method" data-t="METHOD/IDEA">\(\pi_z(s):=\arg\max_a F(s,a,z)^\top z\)</mark>, and for a given reward set <mark class="m-method" data-t="METHOD/IDEA">\(z_R:=Br=\mathbb{E}_{(s,a)\sim\rho}[\,r(s,a)\,B(s,a)\,]\)</mark>. Substituting gives \(Q^{\pi_{z_R}}_r=F_{z_R}^\top z_R\).</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">於是 \(\pi_{z_R}\) 恰好是它<b>自己 Q 函數的 greedy policy</b>——也就是 reward \(r\) 的<mark class="m-result" data-t="RESULT/EVIDENCE">最優策略</mark>。條件「\(\pi_z=\arg\max F_z^\top z\) 且 \(F_z^\top B=M^{\pi_z}\)」是個<mark class="m-method" data-t="METHOD/IDEA">完全無監督的 fixed-point</mark>:F、B 定義了 \(\pi_z\),\(\pi_z\) 又決定了要逼近的 \(M^{\pi_z}\)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">So \(\pi_{z_R}\) is exactly the <b>greedy policy of its own Q-function</b>—hence the <mark class="m-result" data-t="RESULT/EVIDENCE">optimal policy</mark> for reward \(r\). The condition "\(\pi_z=\arg\max F_z^\top z\) and \(F_z^\top B=M^{\pi_z}\)" is a <mark class="m-method" data-t="METHOD/IDEA">fully unsupervised fixed point</mark>: F, B define \(\pi_z\), and \(\pi_z\) in turn determines the \(M^{\pi_z}\) to be approximated.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">FB representation 的正式定義(Def. 1)</span><span data-lang="en">The formal FB-representation definition (Def. 1)</span></h3>
+        <p data-lang="zh">給定資料分佈 \(\rho\)。一對函數 \(F:S\times A\times Z\to Z\)、\(B:S\times A\to Z\) 與策略族 \((\pi_z)\),若對所有 \(z\) 與狀態-動作都滿足下列兩條件,即稱為 FB 表徵:</p>
+        <p data-lang="en">Given a data distribution \(\rho\). A pair \(F:S\times A\times Z\to Z\), \(B:S\times A\to Z\) with a policy family \((\pi_z)\) is an FB representation if, for all \(z\) and state-actions, both conditions hold:</p>
+        <div class="eq">$$\pi_z(s)=\arg\max_a F(s,a,z)^\top z$$ $$M^{\pi_z}(s_0,a_0,\mathrm{d}s,\mathrm{d}a)=F(s_0,a_0,z)^\top B(s,a)\,\rho(\mathrm{d}s,\mathrm{d}a)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><b>Thm 2</b>:任意有界 reward,取 \(z_R=\int r(s,a)\,B(s,a)\,\rho(\mathrm{d}s,\mathrm{d}a)\),則 \(\pi_{z_R}\) 最優,且最優價值 \(Q^\star(s,a)=F(s,a,z_R)^\top z_R\)。特例:單一目標 \((s,a)\) 時 \(z_R=B(s,a)\)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><b>Thm 2</b>: for any bounded reward, taking \(z_R=\int r(s,a)\,B(s,a)\,\rho(\mathrm{d}s,\mathrm{d}a)\) makes \(\pi_{z_R}\) optimal, with optimal value \(Q^\star(s,a)=F(s,a,z_R)^\top z_R\). Special case: a single goal \((s,a)\) gives \(z_R=B(s,a)\).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">怎麼學 F、B:successor measure 的 TD</span><span data-lang="en">How to learn F, B: TD on the successor measure</span></h3>
+        <p data-lang="zh">用參數模型逼近密度 \(m^{\pi_z}_\theta:=F_\theta(s_0,a_0,z)^\top B_\theta(s',a')\approx M^{\pi_z}/\rho\)。\(M^\pi\) 本身滿足一條 Bellman 方程(把抵達自身當「即時項」、未來折扣遞迴):</p>
+        <p data-lang="en">Approximate the density \(m^{\pi_z}_\theta:=F_\theta(s_0,a_0,z)^\top B_\theta(s',a')\approx M^{\pi_z}/\rho\) with a parametric model. \(M^\pi\) itself obeys a Bellman equation (reaching itself as the "immediate" term, future discounted recursively):</p>
+        <div class="eq">$$M^\pi(s_0,a_0,\cdot)=\mathbf{1}_{(s_0,a_0)=(\cdot)}+\gamma\,\mathbb{E}_{s_1\sim P(\cdot\mid s_0,a_0)}\,M^\pi\big(s_1,\pi(s_1),\cdot\big)$$</div>
+        <p data-lang="zh">借 [BTO21] 的 TD 更新(<mark class="m-method" data-t="METHOD/IDEA">不需 sparse reward,連續空間照樣可用</mark>):取一筆轉移 \((s_0,a_0,s_1)\)、\(a_1\sim\pi(s_1)\),以及<b>獨立</b>取樣的 \((s',a')\),更新 \(\theta\leftarrow\theta+\eta\,\delta\theta\):</p>
+        <p data-lang="en">Borrow [BTO21]'s TD update (<mark class="m-method" data-t="METHOD/IDEA">no sparse reward needed, works in continuous spaces</mark>): take a transition \((s_0,a_0,s_1)\), \(a_1\sim\pi(s_1)\), and an <b>independently</b> sampled \((s',a')\), then update \(\theta\leftarrow\theta+\eta\,\delta\theta\):</p>
+        <div class="eq">$$\delta\theta=\partial_\theta m_\theta(s_0,a_0,s_0,a_0)+\partial_\theta m_\theta(s_0,a_0,s',a')\big(\gamma\,m_\theta(s_1,a_1,s',a')-m_\theta(s_0,a_0,s',a')\big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><b>實作細節:</b>每步隨機抽一個 \(z\sim\) rescaled Gaussian(抽再多也不耗訓練樣本);用 target network(Polyak 平均,如 DDPG)穩定右側;訓練時把硬性 greedy 換成 <mark class="m-method" data-t="METHOD/IDEA">\(\pi_z=\mathrm{softmax}\big(F(s,a,z)^\top z/\tau\big)\)</mark>;並對 \(B\) 加正規化以解 \(F,B\) 之間的不可辨識性。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><b>Implementation:</b> each step samples a \(z\sim\) rescaled Gaussian (sampling more costs no training data); a target network (Polyak averaging, à la DDPG) stabilizes the right-hand side; during training the hard greedy is replaced by <mark class="m-method" data-t="METHOD/IDEA">\(\pi_z=\mathrm{softmax}\big(F(s,a,z)^\top z/\tau\big)\)</mark>; and \(B\) is normalized to resolve the \(F,B\) unidentifiability.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">三階段使用流程</span><span data-lang="en">Three-phase usage</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">PHASE 1 · <span data-lang="zh">無監督</span><span data-lang="en">unsupervised</span></span><b><span data-lang="zh">學 F、B</span><span data-lang="en">learn F, B</span></b><small><span data-lang="zh">無 reward,off-policy 從轉移資料用上面的 TD 學。探索用 \(\pi_z\) 配隨機 \(z\),或直接吃既有離線資料集。</span><span data-lang="en">Reward-free, off-policy TD on transitions. Explore with \(\pi_z\) for random \(z\), or just use an existing offline dataset.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">PHASE 2 · <span data-lang="zh">reward 估計</span><span data-lang="en">reward est.</span></span><b><span data-lang="zh">算 \(z_R\)</span><span data-lang="en">compute \(z_R\)</span></b><small><span data-lang="zh">reward 一到,投影成 d 維座標 \(z_R=\mathbb{E}[\,r(s,a)\,B(s,a)\,]\)。</span><span data-lang="en">Once a reward arrives, project to the d-dim coordinate \(z_R=\mathbb{E}[\,r(s,a)\,B(s,a)\,]\).</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">PHASE 3 · <span data-lang="zh">利用</span><span data-lang="en">exploit</span></span><b><span data-lang="zh">下策略</span><span data-lang="en">act</span></b><small><span data-lang="zh">\(\pi_{z_R}(s)=\arg\max_a F(s,a,z_R)^\top z_R\)。<b>零規劃、即時</b>,實驗中甚至不需 fine-tune。</span><span data-lang="en">\(\pi_{z_R}(s)=\arg\max_a F(s,a,z_R)^\top z_R\). <b>Zero planning, instant</b>—no fine-tuning needed in their experiments.</span></small></div>
+        </div>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">reward 的三種指定方式(都不必重新訓練)</span><span data-lang="en">Three ways to specify a reward (none needs retraining)</span></span>
+          <table style="margin-top:8px">
+            <tr><th><span data-lang="zh">情境</span><span data-lang="en">Scenario</span></th><th><span data-lang="zh">怎麼設 \(z_R\)</span><span data-lang="en">How to set \(z_R\)</span></th></tr>
+            <tr><td><span data-lang="zh">已知目標狀態 \((s,a)\)</span><span data-lang="en">Known goal state \((s,a)\)</span></td><td>\(z_R=B(s,a)\)</td></tr>
+            <tr><td><span data-lang="zh">到達 \(g_0\) 並避開禁區 \(g_1,\dots,g_k\)</span><span data-lang="en">Reach \(g_0\), avoid forbidden \(g_1,\dots,g_k\)</span></td><td>\(z_R=B(g_0)-\lambda\sum_{i} B(g_i)\)</td></tr>
+            <tr><td><span data-lang="zh">黑箱 / 取樣式 reward</span><span data-lang="en">Black-box / sampled reward</span></td><td><span data-lang="zh">跑探索策略,對訪到的狀態平均 \(r(s,a)\,B(s,a)\)</span><span data-lang="en">Run exploration, average \(r(s,a)\,B(s,a)\) over visited states</span></td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(F\)</td><td><span data-lang="zh">一個狀態-動作的「<b>未來</b>」表徵(從這裡出發會走向哪些未來)。</span><span data-lang="en">A state-action's "<b>future</b>" representation (which futures you head toward from here).</span></td></tr>
+          <tr><td>\(B\)</td><td><span data-lang="zh">「<b>如何抵達</b>」某狀態的表徵。\(F^\top B\) 大 \(\Rightarrow\) 第二個狀態容易從第一個到達。</span><span data-lang="en">A representation of "<b>how to reach</b>" a state. Large \(F^\top B\) \(\Rightarrow\) the second state is easily reached from the first.</span></td></tr>
+          <tr><td>\(M^\pi\)</td><td><span data-lang="zh">successor measure:跟著 \(\pi\) 走,折扣後在各 \((s,a)\) 停留的期望時間。<span class="add">像一張「未來足跡熱度圖」</span></span><span data-lang="en">Successor measure: discounted expected time spent at each \((s,a)\) following \(\pi\). <span class="add">like a "future-footprint heatmap"</span></span></td></tr>
+          <tr><td>\(z\)</td><td><span data-lang="zh">表徵空間 \(\mathbb{R}^d\) 裡的一個向量,既當策略的參數,也當 reward 的「座標」。</span><span data-lang="en">A vector in representation space \(\mathbb{R}^d\), serving both as the policy's parameter and the reward's "coordinate."</span></td></tr>
+          <tr><td>\(z_R\)</td><td><span data-lang="zh">把 reward 投影到 \(\mathbb{R}^d\) 後的壓縮座標 \(=\mathbb{E}[r\,B]\)。</span><span data-lang="en">The reward's compressed coordinate after projecting to \(\mathbb{R}^d\), \(=\mathbb{E}[r\,B]\).</span></td></tr>
+          <tr><td>\(d\)</td><td><span data-lang="zh">表徵維度,控制「能同時解多少種 reward」。<span class="add">d 越大越精確但越貴</span></span><span data-lang="en">Representation dimension—controls "how many reward types can be solved well." <span class="add">larger d = more accurate but costlier</span></span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh"><b>F 學「未來」,B 學「如何到達」。</b>把兩者內積,就近似還原了「跟著某策略走、長期會碰到誰」——而這恰恰是一個不用合成狀態的環境模型。</span>
+        <span data-lang="en"><b>F learns "the future," B learns "how to reach."</b> Their inner product approximately reconstructs "who you'll meet long-term following a policy"—exactly a world model that synthesizes no states.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">理論保證</span><span data-lang="en">Guarantees</span></span>
+        <p data-lang="zh" style="margin:4px 0"><b>Thm 2</b>:FB 訓練完美 ⇒ 對所有 reward <mark class="m-result" data-t="RESULT/EVIDENCE">可證明最優</mark>。</p>
+        <p data-lang="en" style="margin:4px 0"><b>Thm 2</b>: perfect FB training ⇒ <mark class="m-result" data-t="RESULT/EVIDENCE">provably optimal</mark> for all rewards.</p>
+        <p data-lang="zh" style="margin:4px 0"><b>Thm 8–9</b>:訓練不完美時,次優程度 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">正比於 FB 近似誤差</mark>(誤差 \(\varepsilon\Rightarrow\) 策略為 \(3\varepsilon\|r\|_\infty/(1-\gamma)\)-最優)。</p>
+        <p data-lang="en" style="margin:4px 0"><b>Thm 8–9</b>: with imperfect training, sub-optimality is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">proportional to the FB approximation error</mark> (error \(\varepsilon\Rightarrow\) the policy is \(3\varepsilon\|r\|_\infty/(1-\gamma)\)-optimal).</p>
+        <p data-lang="zh" style="margin:4px 0"><b>Prop 6</b>:有限空間中,只要 \(d>|S|\times|A|\) 就能精確分解。</p>
+        <p data-lang="en" style="margin:4px 0"><b>Prop 6</b>: in finite spaces, \(d>|S|\times|A|\) suffices for an exact factorization.</p>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">TD 學的是一個 fixed point,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">loss 本身不可觀測</mark>(跟一般 TD 一樣)。所以「訓練 loss 下降」不能直接拿來判斷收斂品質。</span>
+        <span data-lang="en">TD seeks a fixed point, and <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the loss itself is not observable</mark> (as with TD in general). So "training loss going down" can't directly judge convergence quality.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果 — 對比 goal-oriented baseline(成功率)</span><span data-lang="en">Main results — vs goal-oriented baselines (success rate)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">環境</span><span data-lang="en">Environment</span></th><th><span data-lang="zh">狀態空間</span><span data-lang="en">State space</span></th><th><span data-lang="zh">FB 表現</span><span data-lang="en">FB result</span></th><th><span data-lang="zh">對照</span><span data-lang="en">Comparison</span></th></tr>
+          <tr><td>Discrete Maze<br><small><span data-lang="zh">四房間 gridworld</span><span data-lang="en">four-room gridworld</span></small></td><td>one-hot</td><td class="win"><span data-lang="zh">d=75 接近最優</span><span data-lang="en">d=75 near-optimal</span></td><td><span class="bad">d=25 <span data-lang="zh">退化</span><span data-lang="en">degrades</span></span><span data-lang="zh">:低秩平滑使 agent 常停在目標<b>旁邊</b></span><span data-lang="en">: low-rank smoothing makes the agent stop <b>next to</b> the goal</span></td></tr>
+          <tr><td>Continuous Maze</td><td><span data-lang="zh">(x,y) 連續</span><span data-lang="en">(x,y) continuous</span></td><td class="win ok">✓ <span data-lang="zh">達標</span><span data-lang="en">solved</span></td><td>—</td></tr>
+          <tr><td>FetchReach<br><small><span data-lang="zh">模擬機械臂</span><span data-lang="en">simulated robot arm</span></small></td><td><span data-lang="zh">10 維</span><span data-lang="en">10-dim</span></td><td class="win"><span data-lang="zh">d 夠大時打平 DQN</span><span data-lang="en">matches DQN at large d</span></td><td><span data-lang="zh">表現隨 d 單調上升</span><span data-lang="en">performance rises monotonically with d</span></td></tr>
+          <tr><td>Ms. Pacman<br><small><span data-lang="zh">像素 84×84×4</span><span data-lang="en">pixels 84×84×4</span></small></td><td><span data-lang="zh">影像</span><span data-lang="en">images</span></td><td class="win ok"><span data-lang="zh">比 DQN+HER <b>更快</b></span><span data-lang="en"><b>faster</b> than DQN+HER</span></td><td><span class="bad">DQN <span data-lang="zh">完全失敗</span><span data-lang="en">totally fails</span></span><span data-lang="zh">,要加 HER 才動;FB 用 d≈100 即可</span><span data-lang="en">; needs HER to work at all; FB needs only d≈100</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:10px">所有環境跑 800 epochs × 3 seeds。<mark class="m-result" data-t="RESULT/EVIDENCE">樣本效率沒有比 goal-oriented baseline 差</mark>,Pacman 上甚至更好。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:10px">All environments run 800 epochs × 3 seeds. <mark class="m-result" data-t="RESULT/EVIDENCE">Sample efficiency is no worse than the goal-oriented baselines</mark>, and better on Pacman.</p>
+        <div class="figrow">
+          <figure class="fig"><img src="figs/Touati2021/fig1_fetchreach.png" alt="Figure 1">
+            <figcaption data-lang="zh"><b>Fig.1 FetchReach</b> — 左:成功率學習曲線(FB-25 / FB-50 / DQN);右:800 epoch 後的平均成功率。FB 表現隨維度 d 上升,夠大時逼近 DQN。</figcaption>
+            <figcaption data-lang="en"><b>Fig.1 FetchReach</b> — Left: success-rate learning curves (FB-25 / FB-50 / DQN); right: average success after 800 epochs. FB improves with dimension d, approaching DQN when large enough.</figcaption></figure>
+          <figure class="fig"><img src="figs/Touati2021/fig2_pacman.png" alt="Figure 2">
+            <figcaption data-lang="zh"><b>Fig.2 Ms. Pacman(像素)</b> — DQN 不加 HER 幾乎是平的(學不起來);FB 比 DQN+HER 更快收斂,且 d 越大越好。</figcaption>
+            <figcaption data-lang="en"><b>Fig.2 Ms. Pacman (pixels)</b> — DQN without HER is nearly flat (fails to learn); FB converges faster than DQN+HER, improving with larger d.</figcaption></figure>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">維度 d 的影響(等同 ablation)</span><span data-lang="en">Effect of dimension d (an ablation)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">設定</span><span data-lang="en">Setting</span></th><th><span data-lang="zh">現象</span><span data-lang="en">Phenomenon</span></th><th><span data-lang="zh">代表什麼</span><span data-lang="en">What it means</span></th></tr>
+          <tr><td><span data-lang="zh">d 太小 (=25)</span><span data-lang="en">d too small (=25)</span></td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">reward / Q 值空間模糊化</mark>,停在目標旁</span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">reward / Q-value blurring</mark>, stops beside the goal</span></td><td><span data-lang="zh">低秩近似偏好「長程、低頻」結構,犧牲了精確定位</span><span data-lang="en">low-rank approximation favors "long-range, low-frequency" structure, sacrificing precise localization</span></td></tr>
+          <tr><td><span data-lang="zh">d 中等 (=75)</span><span data-lang="en">d medium (=75)</span></td><td><span data-lang="zh">離散迷宮正常運作</span><span data-lang="en">discrete maze works fine</span></td><td><span data-lang="zh">多數導航任務的甜蜜點</span><span data-lang="en">a sweet spot for most navigation tasks</span></td></tr>
+          <tr><td>d≈100</td><td><span data-lang="zh">能處理像素級 Pacman 的巨大狀態空間</span><span data-lang="en">handles pixel-Pacman's huge state space</span></td><td><span data-lang="zh">d 與環境複雜度、而非狀態數,掛鉤</span><span data-lang="en">d scales with environment complexity, not state count</span></td></tr>
+        </table>
+        <figure class="fig"><img src="figs/Touati2021/fig3_heatmap.png" alt="Figure 3" style="max-width:460px">
+          <figcaption data-lang="zh"><b>Fig.3</b> Q 值地形圖 \(\max_a F(s,a,z_R)^\top z_R\)(\(z_R=B(\text{目標})\))。<b>左 d=25</b> 明顯模糊、<b>右 d=75</b> 銳利——直接看見低秩近似造成的「空間平滑」效應。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Q-value landscape \(\max_a F(s,a,z_R)^\top z_R\) (\(z_R=B(\text{goal})\)). <b>Left d=25</b> is clearly blurred, <b>right d=75</b> is sharp—directly showing the "spatial smoothing" from low-rank approximation.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">質性結果 — goal-oriented 模型「事後做不到」的任務</span><span data-lang="en">Qualitative — tasks goal-oriented models can't do afterward</span></h3>
+        <p data-lang="zh">以下全部<mark class="m-result" data-t="RESULT/EVIDENCE">即時計算、零再訓練</mark>,只靠改變 \(z_R\):</p>
+        <p data-lang="en">All of the following are <mark class="m-result" data-t="RESULT/EVIDENCE">computed in real time, zero retraining</mark>, just by changing \(z_R\):</p>
+        <ul style="margin:0;padding-left:18px">
+          <li data-lang="zh"><b>避開禁區</b>:\(z_R=B(g_0)-\lambda\sum_i B(g_i)\),成功繞過禁止區域抵達目標。</li>
+          <li data-lang="en"><b>Avoid forbidden regions</b>: \(z_R=B(g_0)-\lambda\sum_i B(g_i)\) successfully detours around forbidden areas to the goal.</li>
+          <li data-lang="zh"><b>就近選目標</b>:\(z_R=B(g_0)+B(g_1)\),agent 走向<b>較近</b>那個(注意:最優 Q <b>不是</b>兩個 Q 的線性組合,所以這非平凡)。</li>
+          <li data-lang="en"><b>Reach the nearest goal</b>: \(z_R=B(g_0)+B(g_1)\), the agent heads to the <b>closer</b> one (note: the optimal Q is <b>not</b> a linear combination of the two Qs, so this is non-trivial).</li>
+          <li data-lang="zh"><b>小近 vs 大遠 reward</b>:正確權衡距離與報酬。</li>
+          <li data-lang="en"><b>Small-near vs large-far reward</b>: correctly trades off distance against reward.</li>
+        </ul>
+        <figure class="fig"><img src="figs/Touati2021/fig4_contour.png" alt="Figure 4" style="max-width:460px">
+          <figcaption data-lang="zh"><b>Fig.4</b> 連續迷宮的 Q 值等高線。<b>左</b>:避開禁區任務,禁區形成「山谷」(低值);<b>右</b>:就近選兩目標之一,兩目標各成一個「吸引盆地」。皆為事後改 \(z_R\) 即時產生。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Q-value contours on the continuous maze. <b>Left</b>: the avoid-forbidden task—forbidden zones form "valleys" (low value); <b>right</b>: nearest-of-two-goals—each goal becomes a "basin of attraction." Both produced instantly by changing \(z_R\).</figcaption></figure>
+        <div class="divzh"><span class="lab mono"><span data-lang="zh">表徵視覺化</span><span data-lang="en">Representation visualization</span></span>
+          <p data-lang="zh" style="margin-top:6px">把 F、B embedding 用 t-SNE 投到 2D(Continuous Maze):<mark class="m-result" data-t="RESULT/EVIDENCE">牆會顯示成「凹陷」</mark>,凹陷大小對應「繞過這道牆要幾步」——說明表徵真的學到了環境的幾何與動態。</p>
+          <p data-lang="en" style="margin-top:6px">Projecting the F, B embeddings to 2D via t-SNE (Continuous Maze): <mark class="m-result" data-t="RESULT/EVIDENCE">walls appear as "dents"</mark>, whose size matches "how many steps to get around the wall"—evidence the representations truly capture the environment's geometry and dynamics.</p>
+          <figure class="fig"><img src="figs/Touati2021/fig7_tsne.png" alt="Figure 7">
+            <figcaption data-lang="zh"><b>Fig.7</b> FB embedding 的 t-SNE。<b>左</b>:待映射的狀態;<b>中</b>:F embedding;<b>右</b>:B embedding。牆呈大凹陷,小凹陷對應跨越牆所需步數——表徵把「幾何距離」變成了「動態可達性」。</figcaption>
+            <figcaption data-lang="en"><b>Fig.7</b> t-SNE of the FB embeddings. <b>Left</b>: states to map; <b>middle</b>: F embedding; <b>right</b>: B embedding. Walls form large dents, smaller dents the steps needed to cross them—the representation turns "geometric distance" into "dynamic reachability."</figcaption></figure>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">實驗<b>證明了</b>:「一個無監督表徵、事後解所有 reward」在中小型多樣環境中<b>可行,且不輸專用方法</b>;還能做專用方法做不到的組合式任務。</span>
+        <span data-lang="en">Experiments <b>show</b>: "one unsupervised representation that solves all rewards afterward" is <b>feasible and no worse than specialized methods</b> in small-to-medium diverse environments—and also does compositional tasks specialized methods can't.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒證明的部分</span><span data-lang="en">What's not shown</span></div>
+        <span data-lang="zh">實驗環境偏中小型、且多為<mark class="m-limit" data-t="LIMITATION/FUTURE">導航 / 位置類任務</mark>。連 Pacman 的 goal 也只用 (x,y) 座標當 feature,而非完整畫面語意。<b>大規模、非導航 reward</b> 的表現仍是開放問題。</span>
+        <span data-lang="en">Environments are small-to-medium and mostly <mark class="m-limit" data-t="LIMITATION/FUTURE">navigation / position tasks</mark>. Even Pacman's goals use only (x,y) coordinates as features, not full-frame semantics. Performance on <b>large-scale, non-navigation rewards</b> remains open.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 cherry-pick?</span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">baseline 夠強?</span><span data-lang="en">strong baseline?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>資訊損失是結構性的</b>:reward 被壓成 d 維 \(z_R=\mathbb{E}[r\,B]\),<mark class="m-limit" data-t="LIMITATION/FUTURE">任何與 \(B\) 不相關的 reward 一律被當成 0</mark>。理論上要精確需 \(d>|S||A|\),連續空間只能靠「加大 \(d\)」逼近——那「\(d\) 要多大才夠」缺乏實務指引。</li>
+          <li data-lang="en"><b>Information loss is structural</b>: reward is compressed into d-dim \(z_R=\mathbb{E}[r\,B]\), and <mark class="m-limit" data-t="LIMITATION/FUTURE">any reward uncorrelated with \(B\) is treated as 0</mark>. Exactness in theory needs \(d>|S||A|\); continuous spaces only approximate by "growing \(d\)"—and "how large \(d\) must be" lacks practical guidance.</li>
+          <li data-lang="zh"><b>環境選擇可能對 FB 有利</b>:低秩近似天生偏好<mark class="m-assume" data-t="ASSUMPTION/CLAIM">長程、空間平滑(低頻)的 reward</mark>。實驗清一色是導航/位置任務,正好落在 FB 的舒適圈;對「局部、高頻、語意」reward 的弱點沒有被壓力測試。</li>
+          <li data-lang="en"><b>Environment choice may favor FB</b>: low-rank approximation inherently prefers <mark class="m-assume" data-t="ASSUMPTION/CLAIM">long-range, spatially smooth (low-frequency) rewards</mark>. The experiments are uniformly navigation/position tasks—squarely in FB's comfort zone; its weakness on "local, high-frequency, semantic" rewards is never stress-tested.</li>
+          <li data-lang="zh"><b>variance 隱患被輕輕帶過</b>:作者自承大環境中「取樣兩個獨立 (s,a) 多半不相關」會使 variance 爆掉,但說「實驗中沒遇到」——很可能<mark class="m-limit" data-t="LIMITATION/FUTURE">只是因為環境還不夠大</mark>。</li>
+          <li data-lang="en"><b>The variance risk is brushed off</b>: the authors admit that in large environments "two independently sampled (s,a) are mostly unrelated," blowing up variance, but say "we didn't hit it"—likely <mark class="m-limit" data-t="LIMITATION/FUTURE">just because the environments aren't large enough</mark>.</li>
+          <li data-lang="zh"><b>exploration 被排除在外</b>:整套方法的品質上限,其實由「餵進來的探索資料好不好」決定,而這篇<mark class="m-assume" data-t="ASSUMPTION/CLAIM">直接假設有好的探索</mark>。</li>
+          <li data-lang="en"><b>Exploration is excluded</b>: the method's quality ceiling is actually set by "how good the exploration data is," yet the paper <mark class="m-assume" data-t="ASSUMPTION/CLAIM">simply assumes good exploration</mark>.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>公平性</b>:FB 學了「所有 reward」,baseline 只學「指定 goal」。在固定計算預算下比成功率,對 baseline 公平嗎?</li>
+          <li data-lang="en"><b>Fairness</b>: FB learns "all rewards," the baselines only "a specified goal." Under a fixed compute budget, is comparing success rates fair to the baselines?</li>
+          <li data-lang="zh"><b>cherry-pick?</b>:若拿一個刻意「高頻、非平滑」的 reward(如棋盤格獎勵),FB 會不會大幅落後?</li>
+          <li data-lang="en"><b>cherry-pick?</b>: with a deliberately "high-frequency, non-smooth" reward (e.g. a checkerboard reward), would FB fall far behind?</li>
+          <li data-lang="zh"><b>維度 d</b>:除了「越大越好」,有沒有原則性的方法<b>事先</b>決定 d?d 與環境的什麼量(譜?內在維度?)掛鉤?</li>
+          <li data-lang="en"><b>Dimension d</b>: beyond "bigger is better," is there a principled way to choose d <b>in advance</b>? What environment quantity (spectrum? intrinsic dimension?) does d track?</li>
+          <li data-lang="zh"><b>baseline 強度</b>:2021 年的對照是 DQN/HER。對上更現代的 offline RL 或 contrastive 表徵法,FB 還站得住嗎?</li>
+          <li data-lang="en"><b>Baseline strength</b>: the 2021 comparison is DQN/HER. Against more modern offline RL or contrastive representation methods, does FB still hold up?</li>
+          <li data-lang="zh"><b>B 的可解釋性</b>:作者說 F、B「可能有更廣的用途」,但除了 t-SNE 看牆,有沒有定量證據說明這些表徵可遷移?</li>
+          <li data-lang="en"><b>Interpretability of B</b>: the authors say F, B "may have broader uses," but beyond t-SNE showing walls, is there quantitative evidence these representations transfer?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把這篇讀成「<b>解決了通用 RL</b>」。它真正的主張很克制:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">在<b>已有好探索</b>的前提下</mark>,提供一個能事後應付任意 reward 的近似最優解。它是「規劃的替代品」,不是「探索的替代品」。</span>
+        <span data-lang="en">Reading it as "<b>solving general RL</b>." Its actual claim is modest: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">given good exploration already</mark>, it provides a near-optimal solution for any reward afterward. It's a substitute for <b>planning</b>, not for <b>exploration</b>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">作者誠實之處</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">值得肯定:Limitations 一節寫得相當坦白,主動點名 exploration、資訊損失、平滑偏差、variance 四個弱點——讀理論 paper 時,這種自我揭露區段往往是最值得精讀的。</span>
+        <span data-lang="en">To their credit, the Limitations section is candid, naming four weaknesses—exploration, information loss, smoothing bias, variance. In theory papers such self-disclosure sections are often the most worth reading closely.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「Q 對 reward 線性 → 低秩分解 successor measure」</b>是一個可遷移的工具觀點。任何「想一次學好、事後再投影任務」的問題,都可借這個框架思考。</li>
+          <li data-lang="en"><b>"Q is linear in reward → low-rank factorize the successor measure"</b> is a transferable tool. Any "learn once, project the task afterward" problem can be framed this way.</li>
+          <li data-lang="zh"><b>\(z_R=\mathbb{E}[r\,B]\) 的「reward 投影」</b>是極優雅的 zero-shot transfer 機制——值得借用到推薦、控制等「任務事後才定」的場景。</li>
+          <li data-lang="en"><b>The "reward projection" \(z_R=\mathbb{E}[r\,B]\)</b> is an elegant zero-shot transfer mechanism—worth borrowing for recommendation, control, and other "task-defined-late" settings.</li>
+          <li data-lang="zh"><b>追蹤這條研究線</b>:FB 是後續 zero-shot RL / unsupervised RL benchmark 的起點,作者(Touati）後續工作把它推到更大規模,值得順藤摸瓜。</li>
+          <li data-lang="en"><b>Follow this research line</b>: FB is the starting point for later zero-shot / unsupervised RL benchmarks; Touati's follow-up work scales it up—worth tracing forward.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「unsupervised / zero-shot RL 是可行的」</span><span data-lang="en">"unsupervised / zero-shot RL is feasible"</span></td><td><span data-lang="zh">作為「事後任意 reward、零規劃」的代表性正面證據。</span><span data-lang="en">A flagship positive example of "any reward afterward, zero planning."</span></td></tr>
+          <tr><td><span data-lang="zh">「successor <b>states</b> 優於 successor <b>features</b>」</span><span data-lang="en">"successor <b>states</b> beat successor <b>features</b>"</span></td><td><span data-lang="zh">對比 [BBQ+18],說明不需使用者特徵、可解非線性 reward。</span><span data-lang="en">Contrast with [BBQ+18]: no user features, handles nonlinear rewards.</span></td></tr>
+          <tr><td><span data-lang="zh">「低秩表徵會偏好長程/低頻結構」</span><span data-lang="en">"low-rank representations favor long-range/low-frequency structure"</span></td><td><span data-lang="zh">引用其 d 過小導致空間模糊的觀察(Fig. 3)。</span><span data-lang="en">Cite the observation that too-small d causes spatial blurring (Fig. 3).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">FB representation 把「一個 reward-free MDP 的所有最優策略」壓縮成一對可學習表徵——用一次無監督訓練,換來對任意事後 reward 的即時近似最優解。它沒解決探索,但在「探索之後」重新定義了「規劃」的代價:<b>趨近於零</b>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">The FB representation compresses "all optimal policies of a reward-free MDP" into a pair of learnable representations—trading one unsupervised training run for instant, near-optimal solutions to any reward specified later. It doesn't solve exploration, but it redefines the cost of "planning" after exploration: <b>nearly zero</b>.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">[BTO21] Successor states</span>
+          <span class="chip">[BBQ+18] USFA</span>
+          <span class="chip">[ACR+17] HER</span>
+          <span class="chip">[Day93] Successor Representation</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Touati &amp; Ollivier 2021 · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'FB representation reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>
