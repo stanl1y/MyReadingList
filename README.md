@@ -36,6 +36,9 @@ extracts text, and renders + crops figures; the guide is written to a 6-tab bili
 template; an index builder regenerates the clustered homepage from each guide's embedded
 `paper-meta` tag (clusters & lineages are curated in the builder's config).
 
+The full generator — scripts + spec — is versioned in **[`tools/`](tools/)**, so you can
+clone this repo and regenerate or extend the library yourself. See [`tools/README.md`](tools/README.md).
+
 ## Local viewing
 
 ```bash
