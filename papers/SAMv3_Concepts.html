@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>SAM 3 — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"SAM 3: Segment Anything with Concepts","authors":"Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoubhik Debnath, Ronghang Hu, et al. (Meta Superintelligence Labs)","year":"2025","venue":"arXiv:2511.16719","tags":["Segment Anything","Promptable Concept Segmentation","Open-Vocabulary Segmentation","Video Object Tracking","DETR","Data Engine"],"tldr":"SAM 3 把 SAM 系列從「幾何提示分割單一物件」推進到「用概念(名詞片語/影像範例)一次找出、分割並追蹤影像與影片中所有符合的實例」;靠一個共享 backbone 的 detector+tracker、解耦辨識與定位的 presence head,以及產出 4M 概念標註的資料引擎,在影像與影片 PCS 上比既有系統精度翻倍。","tldr_en":"SAM 3 extends the SAM series from geometry-prompted single-object masks to Promptable Concept Segmentation: given a short noun phrase and/or image exemplars, it detects, segments and tracks ALL matching instances in images and videos. A shared-backbone detector+tracker, a presence head that decouples recognition from localization, and a data engine yielding 4M unique concept labels let it roughly double prior systems on image and video PCS."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:118px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.05em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">SAM 3 提出新任務 <b>Promptable Concept Segmentation(PCS)</b>:給一個<b>概念提示</b>——簡短名詞片語(如「yellow school bus」)、影像範例(image exemplar),或兩者混用——模型就<mark class="m-method" data-t="METHOD/IDEA">一次找出、分割並追蹤</mark>影像或影片中<b>所有</b>符合的物件實例(並在影片中保持身分)。它用一個<b>共享 backbone 的 detector + tracker</b>,加上把「辨識 vs 定位」解耦的 <b>presence head</b>,再靠產出 <mark class="m-result" data-t="RESULT/EVIDENCE">4M 唯一概念標註</mark>的資料引擎,在影像與影片 PCS 上<mark class="m-result" data-t="RESULT/EVIDENCE">把既有系統的精度翻倍</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">SAM 3 introduces <b>Promptable Concept Segmentation (PCS)</b>: given a <b>concept prompt</b>—a short noun phrase (e.g., "yellow school bus"), image exemplars, or both—the model <mark class="m-method" data-t="METHOD/IDEA">detects, segments and tracks</mark> <b>all</b> matching object instances in an image or video (preserving identities across frames). With a <b>shared-backbone detector + tracker</b>, a <b>presence head</b> that decouples recognition from localization, and a data engine producing <mark class="m-result" data-t="RESULT/EVIDENCE">4M unique concept labels</mark>, it <mark class="m-result" data-t="RESULT/EVIDENCE">roughly doubles the accuracy of existing systems</mark> on image and video PCS.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/SAMv3/fig1_teaser_pcs.png" alt="Figure 1 teaser">
+        <figcaption data-lang="zh"><b>Fig.1</b> 左:延續 SAM 2 的 <b>PVS</b>(用點/框「點一下」分割<b>單一</b>物件,影像與影片皆可)。右:新增的 <b>PCS</b>——用名詞片語(「a striped cat」「a round cell」)、或正/負影像範例框,一次分割<b>所有</b>符合的實例。注意:一個提示 → 多個實例,是 SAM 3 與 SAM 1/2 最關鍵的差別。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> Left: SAM 2's <b>PVS</b> ("click" a point/box to segment a <b>single</b> object, in images and videos). Right: the new <b>PCS</b>—a noun phrase ("a striped cat", "a round cell") or positive/negative image-exemplar boxes segment <b>all</b> matching instances at once. One prompt → many instances is the key departure from SAM 1/2.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — SAM / SAM 2 的可提示分割是 <mark class="m-problem" data-t="PROBLEM/GAP">一個幾何提示只吐一個物件(PVS)</mark>,無法回答「把畫面裡<b>所有</b>的貓都框出來」這種概念層級的需求;而開放詞彙偵測器又缺乏 SAM 的高品質互動式遮罩與影片追蹤。</li>
+          <li data-lang="en"><b>Problem</b> — SAM / SAM 2 promptable segmentation yields <mark class="m-problem" data-t="PROBLEM/GAP">one object per geometric prompt (PVS)</mark>; it cannot answer concept-level requests like "segment <b>all</b> cats in the scene." Open-vocabulary detectors, in turn, lack SAM's high-quality interactive masks and video tracking.</li>
+          <li data-lang="zh"><b>方法</b> — 定義 <mark class="m-method" data-t="METHOD/IDEA">PCS 任務</mark>;架構是共享 <b>Perception Encoder</b> 的 <b>DETR-based detector</b> + <b>SAM 2 式 tracker</b>;關鍵是 <mark class="m-method" data-t="METHOD/IDEA">presence head</mark> 把「概念在不在(what)」與「物件在哪(where)」解耦。</li>
+          <li data-lang="en"><b>Method</b> — Define the <mark class="m-method" data-t="METHOD/IDEA">PCS task</mark>; architecture is a <b>DETR-based detector</b> + a <b>SAM 2-style tracker</b> sharing a <b>Perception Encoder</b>; the key trick is a <mark class="m-method" data-t="METHOD/IDEA">presence head</mark> decoupling "is the concept present (what)" from "where is each object (where)."</li>
+          <li data-lang="zh"><b>資料</b> — human + AI + model in-the-loop 的<mark class="m-method" data-t="METHOD/IDEA">資料引擎</mark>,用微調過的 MLLM 當「AI 標註/驗證者」把吞吐量翻倍,產出 <b>4M 唯一片語、52M 遮罩</b>的高品質資料與 <b>SA-Co</b> benchmark(概念量 &gt;50×)。</li>
+          <li data-lang="en"><b>Data</b> — A human + AI + model in-the-loop <mark class="m-method" data-t="METHOD/IDEA">data engine</mark> uses fine-tuned MLLMs as "AI annotators/verifiers" to double throughput, yielding high-quality data with <b>4M unique phrases, 52M masks</b> and the <b>SA-Co</b> benchmark (&gt;50× more concepts).</li>
+          <li data-lang="zh"><b>結果</b> — 影像/影片 PCS <mark class="m-result" data-t="RESULT/EVIDENCE">比最強 baseline 至少翻倍</mark>(SA-Co/Gold cgF1 54.1 vs OWLv2⋆ 24.6);LVIS 零樣本 mask AP 48.8(前最佳 38.5);同時<b>不犧牲、還提升</b> SAM 2 的 PVS/VOS 能力。</li>
+          <li data-lang="en"><b>Results</b> — Image/video PCS <mark class="m-result" data-t="RESULT/EVIDENCE">at least doubles the strongest baseline</mark> (SA-Co/Gold cgF1 54.1 vs OWLv2⋆ 24.6); LVIS zero-shot mask AP 48.8 (prev. best 38.5); while <b>retaining and even improving</b> SAM 2's PVS/VOS.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡:從 SAM 到 SAM 3</span><span data-lang="en">Field context: from SAM to SAM 3</span></h3>
+        <p data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">SAM(2023)</mark> 開創「可提示分割」:用點/框/遮罩互動式地切出物件。<mark class="m-method" data-t="METHOD/IDEA">SAM 2(2024)</mark> 把它延伸到影片(memory bank + 追蹤),但兩者都是 <b>PVS</b>——<mark class="m-problem" data-t="PROBLEM/GAP">一次一個物件、由幾何位置定義</mark>。它們無法「用一個語意概念,找出畫面裡所有符合的實例」。</p>
+        <p data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">SAM (2023)</mark> pioneered "promptable segmentation": cut out an object interactively with points/boxes/masks. <mark class="m-method" data-t="METHOD/IDEA">SAM 2 (2024)</mark> extended this to video (memory bank + tracking), but both do <b>PVS</b>—<mark class="m-problem" data-t="PROBLEM/GAP">one object at a time, defined by geometry</mark>. Neither can "use a semantic concept to find every matching instance in the scene."</p>
+        <p data-lang="zh">另一條線是<mark class="m-method" data-t="METHOD/IDEA">開放詞彙偵測/分割</mark>(OWLv2、GroundingDINO、LLMDet、T-Rex2、DINO-X、APE):能吃文字或影像範例,但常缺乏高品質實例遮罩、互動式修正與影片身分追蹤,且在困難、長尾概念上精度大幅下滑。SAM 3 把這兩條線<b>合流</b>:概念提示的開放詞彙能力 × SAM 的高品質互動遮罩與追蹤。</p>
+        <p data-lang="en">A separate line is <mark class="m-method" data-t="METHOD/IDEA">open-vocabulary detection/segmentation</mark> (OWLv2, GroundingDINO, LLMDet, T-Rex2, DINO-X, APE): they take text or image exemplars but often lack high-quality instance masks, interactive refinement, and video identity tracking, and degrade sharply on hard, long-tail concepts. SAM 3 <b>merges</b> the two: open-vocabulary concept prompting × SAM's high-quality interactive masks and tracking.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">SAM 系列的每一步都是「<b>擴大可提示的介面</b>」:SAM 加空間提示、SAM 2 加時間(影片),SAM 3 加<b>語意/概念</b>提示。真正的護城河一如既往是<b>資料引擎</b>——這篇的核心創新有一半不在模型,而在「如何用 AI 當標註者,便宜地造出 4M 概念的高品質資料」。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">Every SAM step <b>widens the promptable interface</b>: SAM added spatial prompts, SAM 2 added time (video), SAM 3 adds <b>semantic/concept</b> prompts. The real moat is, as always, the <b>data engine</b>—arguably half the contribution is not in the model but in "how to use AI as annotators to cheaply build high-quality data for 4M concepts." <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的,不只是「又一個 SAM」,而是下面幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not "yet another SAM" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">辨識與定位應該解耦。</b> 逼每個 object query 同時做「這是不是目標概念(需要全圖語境)」與「物件邊界在哪(本質是局部)」會互相打架。用一個<mark class="m-method" data-t="METHOD/IDEA">全域 presence token 專責 what</mark>,object query 只管 where,最終分數相乘——這是本文最漂亮的一招。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Recognition and localization should be decoupled.</b> Forcing each object query to both "decide if this is the concept (needs global context)" and "find the boundary (inherently local)" makes them fight. A <mark class="m-method" data-t="METHOD/IDEA">global presence token owns the "what"</mark> while queries own the "where," and scores multiply—the paper's most elegant move.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">偵測與追蹤也要解耦。</b> Detector 必須<b>身分無關</b>(找出所有實例),tracker 卻要<b>分辨身分</b>;硬塞進同一組 query 會衝突。SAM 3 讓兩者共享 backbone 但各自獨立,再用 match-and-update 縫合。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Detection and tracking must also be decoupled.</b> A detector should be <b>identity-agnostic</b> (find all instances), a tracker must <b>separate identities</b>; cramming both into one query set conflicts. SAM 3 shares a backbone but keeps them separate, stitched by match-and-update.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">Hard negatives 是開放詞彙的命脈。</b> 光給正例,模型學不會「說不」。系統性餵入對抗性 hard-negative 名詞片語,把<mark class="m-result" data-t="RESULT/EVIDENCE">影像級辨識 IL_MCC 從 0.44 拉到 0.68</mark>——校準(calibration)比 AP 更接近真實可用性。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Hard negatives are the lifeblood of open vocabulary.</b> With positives only, a model never learns to "say no." Systematically feeding adversarial hard-negative noun phrases lifts <mark class="m-result" data-t="RESULT/EVIDENCE">image-level recognition IL_MCC from 0.44 to 0.68</mark>—calibration matters more than AP for real usability.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">AI 標註者可以逼近人類。</b> 把驗證(mask/exhaustivity)交給微調過的 MLLM,吞吐量翻倍,還能<mark class="m-result" data-t="RESULT/EVIDENCE">補上 SAM 3 與人類差距的一半</mark>;合成資料的 scaling 行為甚至接近人工資料——這重塑了「大規模高品質分割資料」的成本結構。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">AI annotators can approach humans.</b> Delegating verification (mask/exhaustivity) to fine-tuned MLLMs doubles throughput and <mark class="m-result" data-t="RESULT/EVIDENCE">closes half the gap to human</mark>; synthetic data even scales like human-annotated data—reshaping the cost structure of large, high-quality segmentation data.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">SAM 3: Segment Anything with Concepts</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Carion, Gustafson, Y.-T. Hu, Debnath, R. Hu, Suris, Ryali, … (leads: Dollár, Ravi, Saenko, Zhang, Feichtenhofer)</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Meta Superintelligence Labs</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2025 · arXiv:2511.16719</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.CV · Promptable Segmentation</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>github.com/facebookresearch/sam3</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把 SAM 的介面從「<b>點這個物件</b>」升級成「<b>找出所有這種概念的物件</b>」,並附上一個比既有大 &gt;50× 概念數的公開 benchmark(SA-Co)。對標註、機器人、AR、內容生產,這是「圈選單體」到「語意批次選取」的質變。</span>
+        <span data-lang="en">Upgrades SAM's interface from "<b>segment this object</b>" to "<b>find every object of this concept</b>," with a public benchmark (SA-Co) &gt;50× larger in concept count. For annotation, robotics, AR and content creation, it's the leap from "lasso one thing" to "semantic batch select."</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">PCS</span><span class="chip">Presence head</span>
+          <span class="chip">Noun-phrase prompt</span><span class="chip">Image exemplar</span>
+          <span class="chip">DETR detector</span><span class="chip">SAM 2 tracker</span>
+          <span class="chip">Perception Encoder</span><span class="chip">Data engine</span>
+        </div>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">是模型還是資料贏?</span><span data-lang="en">model or data?</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">概念泛化</span><span data-lang="en">concept OOD</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b>SAM / SAM 2</b><br><small><span data-lang="zh">可提示視覺分割 (PVS)</span><span data-lang="en">Promptable Visual Seg</span></small></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">一個幾何提示 → 一個物件</mark>。要框出「所有貓」得逐一點擊;提示是空間位置,不是語意概念。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">One geometric prompt → one object</mark>. Segmenting "all cats" means clicking each one; the prompt is a location, not a concept.</span></td></tr>
+          <tr><td><b><span data-lang="zh">開放詞彙偵測器</span><span data-lang="en">Open-vocab detectors</span></b><br><small>OWLv2 · gDINO · LLMDet</small></td><td><span data-lang="zh">能吃文字,但<mark class="m-problem" data-t="PROBLEM/GAP">遮罩品質、校準、長尾概念、影片身分追蹤都弱</mark>;在困難概念上 AP 崩到個位數。</span><span data-lang="en">Take text, but <mark class="m-problem" data-t="PROBLEM/GAP">weak on mask quality, calibration, long-tail concepts, and video identity</mark>; AP collapses to single digits on hard concepts.</span></td></tr>
+          <tr><td><b><span data-lang="zh">影像範例偵測器</span><span data-lang="en">Exemplar detectors</span></b><br><small>T-Rex2 · DINOv</small></td><td><span data-lang="zh">用範例框指定類別很實用,但<mark class="m-problem" data-t="PROBLEM/GAP">範例難以傳達抽象概念</mark>,且不支援文字/互動混合。</span><span data-lang="en">Exemplar boxes are handy, but <mark class="m-problem" data-t="PROBLEM/GAP">exemplars poorly convey abstract concepts</mark>, and don't mix with text/interactivity.</span></td></tr>
+          <tr><td><b>MLLM</b><br><small>Gemini · Molmo</small></td><td><span data-lang="zh">會講話、能推理,但<mark class="m-problem" data-t="PROBLEM/GAP">產不出高品質實例遮罩</mark>,難以窮舉「所有實例」。</span><span data-lang="en">Converse and reason, but <mark class="m-problem" data-t="PROBLEM/GAP">can't produce high-quality instance masks</mark> or exhaustively enumerate all instances.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「能不能有一個模型,吃簡短概念(文字或範例),就在影像與影片中窮舉出所有符合的高品質實例遮罩,還能互動修正?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"Can one model take a short concept (text or exemplar) and exhaustively produce high-quality instance masks for every match, in images and videos, with interactive refinement?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,SAM 3 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how SAM 3 fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">SAM 3 如何補上</span><span data-lang="en">How SAM 3 fills it</span></th></tr>
+          <tr>
+            <td><b>SAM 2</b></td>
+            <td><span data-lang="zh">只有 PVS,<mark class="m-problem" data-t="PROBLEM/GAP">無語意概念、單物件</mark>。</span><span data-lang="en">PVS only, <mark class="m-problem" data-t="PROBLEM/GAP">no concepts, single object</mark>.</span></td>
+            <td><span data-lang="zh">新增 <mark class="m-method" data-t="METHOD/IDEA">PCS</mark>(文字+範例→所有實例),同時<b>保留並強化</b> PVS/VOS。</span><span data-lang="en">Adds <mark class="m-method" data-t="METHOD/IDEA">PCS</mark> (text+exemplar→all instances) while <b>keeping and boosting</b> PVS/VOS.</span></td>
+          </tr>
+          <tr>
+            <td><b>OWLv2 / gDINO</b></td>
+            <td><span data-lang="zh">辨識與定位耦合,<mark class="m-problem" data-t="PROBLEM/GAP">開放詞彙下校準差、遮罩粗</mark>。</span><span data-lang="en">Coupled recognition/localization; <mark class="m-problem" data-t="PROBLEM/GAP">poor calibration, coarse masks</mark> open-vocab.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">presence head 解耦</mark> + hard negatives，並用 MaskFormer 頭出精細遮罩。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Presence-head decoupling</mark> + hard negatives; fine masks via a MaskFormer head.</span></td>
+          </tr>
+          <tr>
+            <td><b>T-Rex2</b></td>
+            <td><span data-lang="zh">範例好用但<mark class="m-problem" data-t="PROBLEM/GAP">不能與文字/互動結合</mark>。</span><span data-lang="en">Exemplars useful but <mark class="m-problem" data-t="PROBLEM/GAP">don't combine with text/interaction</mark>.</span></td>
+            <td><span data-lang="zh">文字、範例、點擊<mark class="m-method" data-t="METHOD/IDEA">可自由混合並互動精修</mark>(T+I 最佳)。</span><span data-lang="en">Text, exemplars, clicks <mark class="m-method" data-t="METHOD/IDEA">freely mixed and interactively refined</mark> (T+I best).</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">既有 OV 資料集</span><span data-lang="en">Existing OV datasets</span></b></td>
+            <td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">概念數少、無 hard negative、缺影片</mark>。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Few concepts, no hard negatives, little video</mark>.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">SA-Co</mark>:4M 訓練片語、benchmark 207K 概念(&gt;50×),內建 hard negatives 與影片。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">SA-Co</mark>: 4M training phrases, 207K-concept benchmark (&gt;50×), with built-in hard negatives and video.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意痛點分兩層:<b>能力層</b>(單物件 → 概念、無追蹤 → 追蹤)與<b>資料層</b>(概念稀少、缺 hard negative)。SAM 3 的賭注是「<b>一個統一模型 + 一個能自我進化的資料引擎</b>」兩邊一起解——模型讓資料引擎更好,資料引擎又回頭訓練更強的模型,形成飛輪。</p>
+          <p data-lang="en" style="margin-top:6px">Note two layers of pain: a <b>capability</b> layer (single→concept, no-tracking→tracking) and a <b>data</b> layer (scarce concepts, no hard negatives). SAM 3's bet is to solve both with "<b>one unified model + a self-improving data engine</b>": the model makes the engine better, and the engine trains a stronger model—a flywheel.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 PCS 讀成「什麼句子都能問」。SAM 3 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">刻意把概念限制在簡短名詞片語</mark>(名詞 + 少量修飾),<b>不</b>處理長 referring expression 或需要推理的查詢。要那種能力,得外接 MLLM(見 SAM 3 Agent)。</span>
+        <span data-lang="en">Don't read PCS as "ask anything." SAM 3 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">deliberately restricts concepts to short noun phrases</mark> (a noun + a few modifiers); it does <b>not</b> handle long referring expressions or reasoning queries. For those, bolt on an MLLM (see SAM 3 Agent).</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何本質困難</span><span data-lang="en">Why it's hard</span></span>
+        <span data-lang="zh">開放詞彙概念天生<b>歧義</b>:一詞多義(mouse=滑鼠/老鼠)、主觀形容(cozy)、邊界模糊(mirror 含不含框?)。SAM 3 用「每個 NP 收 3 位標註者、允許多重正解」的 oracle 評分來面對這件事。</span>
+        <span data-lang="en">Open-vocabulary concepts are inherently <b>ambiguous</b>: polysemy (mouse=device/animal), subjective descriptors (cozy), fuzzy boundaries (does "mirror" include the frame?). SAM 3 confronts this with an oracle protocol—3 annotators per NP, multiple valid interpretations allowed.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">比較公平性</span><span data-lang="en">fair baselines</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">距離人類還多遠</span><span data-lang="en">human gap</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">任務定義:Promptable Concept Segmentation</span><span data-lang="en">Task: Promptable Concept Segmentation</span></h3>
+        <p data-lang="zh">給一張影像或短影片(\(\le 30\) 秒)與一個<b>概念提示</b> \(P\)——簡短名詞片語、影像範例框(正/負),或兩者混用——PCS 要求<mark class="m-method" data-t="METHOD/IDEA">偵測、分割並追蹤所有符合 \(P\) 的實例</mark>,並在影片各幀間保持每個實例的唯一身分。名詞片語對整段全域有效;影像範例可逐幀加上,用來迭代修正。</p>
+        <p data-lang="en">Given an image or short video (\(\le 30\)s) and a <b>concept prompt</b> \(P\)—a short noun phrase, image-exemplar boxes (positive/negative), or both—PCS requires <mark class="m-method" data-t="METHOD/IDEA">detecting, segmenting and tracking every instance matching \(P\)</mark>, keeping a unique identity per instance across frames. Noun phrases are global to the whole clip; exemplars can be added per frame to iteratively refine.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">SAM 3 是 <b>SAM 2 的泛化</b>:同時支援 PCS 與原本的 PVS(點/框/遮罩→單物件),兩種模式可在同一模型內切換。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">SAM 3 is a <b>generalization of SAM 2</b>: it supports both PCS and the original PVS (points/boxes/masks → single object), switchable within one model.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">架構:共享 backbone 的 detector + tracker</span><span data-lang="en">Architecture: a shared-backbone detector + tracker</span></h3>
+        <figure class="fig"><img src="figs/SAMv3/fig4_architecture.png" alt="Figure 4 architecture">
+          <figcaption data-lang="zh"><b>Fig.4</b> 架構總覽(綠=來自 Perception Encoder、藍=沿用 SAM 2、黃=SAM 3 新增)。文字「a penguin」與影像/範例經 <b>PE</b> 編碼;<b>Detector</b> 在當前幀找出所有實例遮罩;<b>Tracker</b> 從前一幀傳播 masklet;兩者輸出經 <b>match-and-update</b> 合併,並寫入 <b>Memory Bank</b> 供後續幀使用。detector 與 tracker <b>共享 PE backbone 但職責分離</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Architecture (green=from Perception Encoder, blue=inherited from SAM 2, yellow=new in SAM 3). Text "a penguin" and image/exemplars are encoded by <b>PE</b>; the <b>Detector</b> finds all instance masks in the current frame; the <b>Tracker</b> propagates masklets from the previous frame; outputs are fused by <b>match-and-update</b> and written to a <b>Memory Bank</b> for later frames. Detector and tracker <b>share the PE backbone but keep separate roles</b>.</figcaption></figure>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>Perception Encoder (PE) backbone</b>:對齊的視覺-語言編碼器(對比式,5.4B 圖文對訓練),提供影像與文字 token。detector 與 tracker 共用它,每幀只跑一次。</li>
+          <li data-lang="en"><b>Perception Encoder (PE) backbone</b>: an aligned vision-language encoder (contrastive, 5.4B image-text pairs) providing image and text tokens. Shared by detector and tracker; run once per frame.</li>
+          <li data-lang="zh"><b>Detector(DETR-based)</b>:fusion encoder 讓影像 embedding <b>cross-attend 到 prompt token</b>(文字 + 範例);再由 DETR decoder 的 object query cross-attend 回條件化影像特徵。每層預測 <b>match/不 match 的二元 logit</b> + box 增量。遮罩頭沿用 MaskFormer,另有語意分割頭。</li>
+          <li data-lang="en"><b>Detector (DETR-based)</b>: a fusion encoder makes image embeddings <b>cross-attend to prompt tokens</b> (text + exemplars); a DETR decoder's object queries cross-attend back to conditioned image features. Each layer predicts a <b>binary match/no-match logit</b> + a box delta. Mask head from MaskFormer, plus a semantic-segmentation head.</li>
+          <li data-lang="zh"><b>Tracker(SAM 2 式)</b>:沿用 SAM 2 的 encoder-decoder + prompt encoder + memory encoder + memory bank;detector 訓練完後<b>凍結 PE、再訓 tracker</b>。每個物件用一條 masklet 逐幀傳播,每幀出 3 個候選遮罩取最高信心。</li>
+          <li data-lang="en"><b>Tracker (SAM 2-style)</b>: reuses SAM 2's encoder-decoder + prompt encoder + memory encoder + memory bank; after training the detector, <b>freeze PE and train the tracker</b>. Each object propagates as a masklet frame-by-frame, predicting 3 candidate masks per frame and taking the most confident.</li>
+        </ul>
+        <p data-lang="zh" style="margin-top:8px;font-size:14px;color:var(--muted)">總參數 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">約 848M</mark>(視覺 ~450M + 文字 ~300M + detector/tracker ~100M)——相對「基礎模型」其實不算巨大。<span class="add">[導讀補充] 對照 VGGT 的 1.2B,SAM 3 的規模適中,勝負更多來自資料與設計。</span></p>
+        <p data-lang="en" style="margin-top:8px;font-size:14px;color:var(--muted)">Total ~<mark class="m-assume" data-t="ASSUMPTION/CLAIM">848M params</mark> (vision ~450M + text ~300M + detector/tracker ~100M)—modest for a "foundation model." <span class="add">[guide note] Vs VGGT's 1.2B, SAM 3 is mid-sized; the win comes more from data and design.</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵一招:Presence Token(辨識 / 定位解耦)</span><span data-lang="en">The key trick: the Presence Token (recognition / localization decoupling)</span></h3>
+        <p data-lang="zh">問題:讓每個 object query 同時做「<b>這是不是目標概念</b>(what,需全圖語境)」與「<b>物件邊界在哪</b>(where,本質局部)」,兩個目標會互相拖累。</p>
+        <p data-lang="en">Problem: making each object query do both "<b>is this the concept</b> (what, needs global context)" and "<b>where is the boundary</b> (where, inherently local)" makes the two objectives drag on each other.</p>
+        <p data-lang="zh">解法:引入一個<b>全域 presence token</b>,只負責預測「概念(名詞片語)是否出現在此圖/幀」\(p(\text{NP present})\)。每個 query \(q_i\) 則只需解<b>條件式定位</b>問題。最終分數是兩者相乘:</p>
+        <p data-lang="en">Fix: a <b>global presence token</b> solely predicts "does the concept (noun phrase) appear in this image/frame," \(p(\text{NP present})\). Each query \(q_i\) then only solves a <b>conditional localization</b> problem. The final score is their product:</p>
+        <div class="eq">$$ s_i \;=\; \underbrace{p\big(q_i \text{ matches} \mid \text{NP present}\big)}_{\text{localization · per-query}} \;\times\; \underbrace{p\big(\text{NP present in input}\big)}_{\text{recognition · presence token}} $$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">直覺:把「有沒有」和「在哪裡」拆給兩個專責單元,各自把自己那件事做好,再相乘做決策。這在<b>搭配 hard negatives</b> 訓練時特別有效——presence token 專心學會對不存在的概念「說不」,而不干擾定位。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Intuition: split "whether" from "where" into two specialists, each doing its own job, then multiply to decide. This shines <b>with hard-negative training</b>—the presence token learns to "say no" to absent concepts without disturbing localization.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">影片:偵測 + 追蹤 + 時間消歧</span><span data-lang="en">Video: detect + track + temporal disambiguation</span></h3>
+        <p data-lang="zh">每一幀 \(t\):detector 找出新物件 \(\mathcal{O}_t\),tracker 把上一幀的 masklet 傳播到當前位置 \(\hat{\mathcal{M}}_t\),再用 IoU matching 把兩者縫合:</p>
+        <p data-lang="en">Each frame \(t\): the detector finds new objects \(\mathcal{O}_t\); the tracker propagates last frame's masklets to \(\hat{\mathcal{M}}_t\); an IoU matching stitches them:</p>
+        <div class="eq">$$ \hat{\mathcal{M}}_t = \text{propagate}(\mathcal{M}_{t-1}),\quad \mathcal{O}_t = \text{detect}(I_t, P),\quad \mathcal{M}_t = \text{match\_and\_update}\big(\hat{\mathcal{M}}_t, \mathcal{O}_t\big) $$</div>
+        <p data-lang="zh">未被配對的新偵測會<b>生成新 masklet</b>。擁擠場景的合併歧義,用兩招處理:<b>(1) masklet 偵測分數</b>——若一條 masklet 在時間窗內很少被偵測配上,就<mark class="m-method" data-t="METHOD/IDEA">抑制它</mark>;<b>(2) 週期性 re-prompt</b>——定期用高信心偵測遮罩取代 tracker 自己的預測,讓 memory bank 保持可靠參考,對抗遮擋與干擾物。</p>
+        <p data-lang="en">Unmatched new detections <b>spawn new masklets</b>. Merge ambiguity in crowded scenes is handled two ways: <b>(1) a masklet detection score</b>—if a masklet is rarely matched to a detection within a temporal window, <mark class="m-method" data-t="METHOD/IDEA">suppress it</mark>; <b>(2) periodic re-prompting</b>—periodically replace the tracker's own predictions with high-confidence detection masks, keeping the memory bank reliable against occlusions and distractors.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">為何分工?<b>detector 必須身分無關</b>(把所有實例都找出來),<b>tracker 的天職卻是分辨身分</b>。硬塞進同一組 query 會產生任務衝突,所以 SAM 3 讓兩者解耦、再用上面的 match-and-update 縫合。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Why split? A <b>detector must be identity-agnostic</b> (surface all instances), while a <b>tracker's job is to separate identities</b>. Cramming both into one query set conflicts, so SAM 3 decouples them and stitches with match-and-update.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">資料引擎:human + AI + model 飛輪</span><span data-lang="en">Data engine: a human + AI + model flywheel</span></h3>
+        <figure class="fig"><img src="figs/SAMv3/fig5_data_engine.png" alt="Figure 5 data engine">
+          <figcaption data-lang="zh"><b>Fig.5</b> 資料引擎:媒體(用 ontology 挖掘)→ AI 提名詞片語 → SAM 3 提候選遮罩 → <b>AI/人類驗證者</b>做 Mask Verification 與 Exhaustivity Verification;<b>pass</b> 直接成標註,<b>fail</b> 送人工 Correct 修正。關鍵:把驗證交給微調過的 MLLM(AI 驗證者),讓人力集中在最難的失敗案例,吞吐量翻倍。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> Data engine: media (mined via an ontology) → AI proposes noun phrases → SAM 3 proposes candidate masks → <b>AI/human verifiers</b> do Mask Verification and Exhaustivity Verification; <b>pass</b> becomes labels, <b>fail</b> goes to human Correction. Key: delegating verification to fine-tuned MLLMs ("AI verifiers") focuses humans on the hardest failures and doubles throughput.</figcaption></figure>
+        <p data-lang="zh">四個階段層層加碼:<b>Phase 1</b>(純人工驗證,4.3M 圖-片語)→ <b>Phase 2</b>(微調 Llama 3.2 當 AI 驗證者做 MV/EV,吞吐 ~2×;NP 提名加入 hard negatives,+122M)→ <b>Phase 3</b>(擴到 15 個 domain、22.4M 節點的 SA-Co ontology 挖長尾概念,+19.5M)→ <b>Phase 4</b>(擴到影片,52.5K 影片、467K masklet)。</p>
+        <p data-lang="en">Four escalating phases: <b>Phase 1</b> (human-only verification, 4.3M image-phrase) → <b>Phase 2</b> (fine-tune Llama 3.2 as AI verifiers for MV/EV, ~2× throughput; NP proposal adds hard negatives, +122M) → <b>Phase 3</b> (15 domains, mine long-tail concepts from a 22.4M-node SA-Co ontology, +19.5M) → <b>Phase 4</b> (extend to video, 52.5K videos, 467K masklets).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">評測指標:classification-gated F1 (cgF1)</span><span data-lang="en">Metric: classification-gated F1 (cgF1)</span></h3>
+        <p data-lang="zh">PCS 天然拆成<b>定位</b>與<b>分類</b>兩子任務。定位用正例的 micro F1(pmF1);分類用影像級 Matthews 相關係數 \(\text{IL\_MCC}\in[-1,1]\)(「概念在不在?」不管遮罩好壞)。主指標把兩者相乘:</p>
+        <p data-lang="en">PCS naturally splits into <b>localization</b> and <b>classification</b>. Localization uses positive micro F1 (pmF1); classification uses image-level Matthews correlation \(\text{IL\_MCC}\in[-1,1]\) ("is the concept present?", ignoring mask quality). The headline metric multiplies them:</p>
+        <div class="eq">$$ \text{cgF1} \;=\; 100 \times \text{pmF1} \times \text{IL\_MCC} $$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">只評估<b>信心 &gt; 0.5</b> 的預測,強制模型<b>校準良好</b>——這比純 AP 更貼近真實下游可用性(AP 不管校準)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Only predictions with <b>confidence &gt; 0.5</b> are scored, forcing <b>good calibration</b>—closer to real downstream usability than raw AP (which ignores calibration).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(P\)</td><td><span data-lang="zh">概念提示:名詞片語、影像範例(正/負框),或兩者混用。</span><span data-lang="en">Concept prompt: a noun phrase, image exemplars (pos/neg boxes), or both.</span></td></tr>
+          <tr><td>\(p(\text{NP present})\)</td><td><span data-lang="zh">presence token 的輸出:概念是否出現在此圖/幀(辨識)。</span><span data-lang="en">Presence-token output: whether the concept appears in this image/frame (recognition).</span></td></tr>
+          <tr><td>\(q_i,\; s_i\)</td><td><span data-lang="zh">第 \(i\) 個 object query 與其最終分數(= 定位分 × presence 分)。</span><span data-lang="en">The \(i\)-th object query and its final score (= localization × presence).</span></td></tr>
+          <tr><td>\(\mathcal{O}_t\)</td><td><span data-lang="zh">第 \(t\) 幀 detector 找到的物件遮罩集合。</span><span data-lang="en">Object masks found by the detector on frame \(t\).</span></td></tr>
+          <tr><td>\(\mathcal{M}_t,\;\hat{\mathcal{M}}_t\)</td><td><span data-lang="zh">第 \(t\) 幀的 masklet 集合;\(\hat{\mathcal{M}}_t\) 是從上一幀傳播來的預測。</span><span data-lang="en">Masklets on frame \(t\); \(\hat{\mathcal{M}}_t\) is the propagation from the previous frame.</span></td></tr>
+          <tr><td>cgF1 / pmF1 / IL_MCC</td><td><span data-lang="zh">主指標 / 定位 F1 / 影像級分類相關係數。</span><span data-lang="en">Headline metric / localization F1 / image-level classification correlation.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">一個 DETR 偵測器把「概念」翻成「找出所有這種東西」,一個 presence token 專門判斷「有沒有」,一個 SAM 2 追蹤器把它們串成影片身分;而幕後真正的引擎,是用 AI 當標註者不斷造資料。</span>
+        <span data-lang="en">A DETR detector turns a "concept" into "find all of these," a presence token judges "whether it's there at all," and a SAM 2 tracker threads them into video identities—while the real engine behind it all is AI-as-annotator forging data.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何要 presence token?</span><span data-lang="en">Why a presence token?</span></span>
+        <span data-lang="zh">開放詞彙偵測的最大痛點是「<b>亂報</b>」——對不存在的概念也硬給框。把「有沒有」交給一個看全圖語境的專責 token,object query 就能安心只做定位。消融顯示它主要拉高 <mark class="m-result" data-t="RESULT/EVIDENCE">IL_MCC(分類/校準)</mark>。</span>
+        <span data-lang="en">The biggest pain in open-vocab detection is <b>false firing</b>—boxing concepts that aren't there. Handing "whether" to a global-context token lets object queries focus on localizing. Ablations show it mainly lifts <mark class="m-result" data-t="RESULT/EVIDENCE">IL_MCC (classification/calibration)</mark>.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">影片端每個物件用<mark class="m-assume" data-t="ASSUMPTION/CLAIM">一條獨立 masklet</mark>傳播,<b>沒有跨物件的共享上下文</b>——所以延遲隨物件數<b>線性成長</b>,擁擠多物件場景的消歧只能靠事後 matching。這是架構的隱含限制。</span>
+        <span data-lang="en">In video each object propagates as an <mark class="m-assume" data-t="ASSUMPTION/CLAIM">independent masklet</mark> with <b>no shared cross-object context</b>—so latency grows <b>linearly</b> with object count, and crowded multi-object disambiguation relies on post-hoc matching. An implicit architectural limit.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">影像 PCS(文字提示)— 頭條結果</span><span data-lang="en">Image PCS (text prompt) — headline results</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th>SA-Co/Gold<br>cgF1 ↑</th><th>LVIS<br><span data-lang="zh">mask AP ↑</span><span data-lang="en">mask AP ↑</span></th><th>COCO<br>box AP ↑</th></tr>
+          <tr><td><span data-lang="zh">人類</span><span data-lang="en">Human</span></td><td>72.8</td><td>—</td><td>—</td></tr>
+          <tr><td>OWLv2⋆</td><td>24.6</td><td>—</td><td>46.1</td></tr>
+          <tr><td>LLMDet-L</td><td>6.5</td><td>—</td><td>55.6</td></tr>
+          <tr><td>DINO-X</td><td>—</td><td>38.5</td><td>56.0</td></tr>
+          <tr><td>Gemini 2.5</td><td>13.0</td><td>—</td><td>—</td></tr>
+          <tr><td class="win">SAM 3</td><td class="win">54.1</td><td class="win">48.8</td><td class="win">56.4</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">在開放詞彙的 SA-Co/Gold 上,SAM 3 cgF1 <mark class="m-result" data-t="RESULT/EVIDENCE">54.1,是最強 baseline OWLv2⋆(24.6)的 2.2×</mark>,達人類表現的 74%;LVIS 零樣本 mask AP <mark class="m-result" data-t="RESULT/EVIDENCE">48.8,遠超前最佳 38.5</mark>;連封閉集 COCO box 也刷新。其他 SA-Co split 的領先幅度更大。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">On open-vocab SA-Co/Gold, SAM 3 cgF1 is <mark class="m-result" data-t="RESULT/EVIDENCE">54.1—2.2× the strongest baseline OWLv2⋆ (24.6)</mark>, reaching 74% of human; LVIS zero-shot mask AP is <mark class="m-result" data-t="RESULT/EVIDENCE">48.8, far above the prior best 38.5</mark>; it even sets SOTA on closed-set COCO boxes. Leads are larger on the other SA-Co splits.</p>
+        <figure class="fig"><img src="figs/SAMv3/fig2_vs_owlv2.png" alt="Figure 2 SAM 3 vs OWLv2">
+          <figcaption data-lang="zh"><b>Fig.2</b> SAM 3(中)vs OWLv2(下)在 SA-Co 上的質性比較,涵蓋長尾概念(cheesecloth、Adirondack chair、colander、dangle earring)。注意 SAM 3 的遮罩更貼、更少亂報;OWLv2 常把整個容器或錯物件也塗上(如把 colander 連盤子一起框)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> Qualitative SAM 3 (middle) vs OWLv2 (bottom) on SA-Co, across long-tail concepts (cheesecloth, Adirondack chair, colander, dangle earring). SAM 3's masks fit tighter with fewer false firings; OWLv2 often paints the whole container or wrong object (e.g., masking the plate along with the colander).</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">影片 PCS、PVS、範例與 Agent</span><span data-lang="en">Video PCS, PVS, exemplars &amp; Agent</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">任務 / 資料集</span><span data-lang="en">Task / dataset</span></th><th>SAM 3</th><th><span data-lang="zh">對照</span><span data-lang="en">Baselines</span></th></tr>
+          <tr><td><span data-lang="zh">影片 PCS / SA-Co/VEval-SA-V (pHOTA↑)</span><span data-lang="en">Video PCS / SA-Co/VEval-SA-V (pHOTA↑)</span></td><td class="win">58.0<br><small><span data-lang="zh">(人類 70.5 的 82%)</span><span data-lang="en">(82% of human 70.5)</span></small></td><td>T-by-D 55.7 · GLEE 11.8</td></tr>
+          <tr><td><span data-lang="zh">1 個影像範例 / COCO (AP+)</span><span data-lang="en">1 exemplar / COCO (AP+)</span></td><td class="win">78.1<br><small>T+I</small></td><td>T-Rex2 58.5<br><small>(+18.3 on T alone)</small></td></tr>
+          <tr><td>VOS / MOSEv2 (J&amp;F↑)</td><td class="win">60.3</td><td>SeC 53.8 · SAM 2.1 47.9</td></tr>
+          <tr><td><span data-lang="zh">互動影像分割 / SA-37 (5-click mIoU)</span><span data-lang="en">Interactive seg / SA-37 (5-click mIoU)</span></td><td class="win">85.1</td><td>SAM 2.1 L 84.3</td></tr>
+          <tr><td><span data-lang="zh">物件計數 / CountBench (Acc↑)</span><span data-lang="en">Counting / CountBench (Acc↑)</span></td><td class="win">93.8</td><td>Gemini 2.5 Pro 92.4</td></tr>
+          <tr><td>SAM 3 Agent / ReasonSeg (gIoU↑)</td><td class="win">77.0<br><small><span data-lang="zh">(+Gemini 2.5 Pro, 零樣本)</span><span data-lang="en">(+Gemini 2.5 Pro, zero-shot)</span></small></td><td><span data-lang="zh">前 SOTA 65.0</span><span data-lang="en">prev SOTA 65.0</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">影片 PCS 大勝 tracking-by-detection 與 GLEE;範例 (T+I) 大幅超越 T-Rex2;<mark class="m-result" data-t="RESULT/EVIDENCE">在 VOS/互動分割上還贏過 SAM 2</mark>(MOSEv2 +6.5);外接 MLLM 的 SAM 3 Agent 在<b>沒訓練任何 referring/推理資料</b>下零樣本刷新 ReasonSeg。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Video PCS beats tracking-by-detection and GLEE; exemplars (T+I) far exceed T-Rex2; <mark class="m-result" data-t="RESULT/EVIDENCE">it even beats SAM 2 on VOS/interactive seg</mark> (MOSEv2 +6.5); and the MLLM-wrapped SAM 3 Agent sets zero-shot ReasonSeg SOTA <b>without training on any referring/reasoning data</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融:每個設計值多少?</span><span data-lang="en">Ablations: what each design is worth</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">拿掉/改變</span><span data-lang="en">Change</span></th><th>cgF1</th><th>IL_MCC</th><th><span data-lang="zh">學到什麼</span><span data-lang="en">What it shows</span></th></tr>
+          <tr><td><span data-lang="zh">無 presence head</span><span data-lang="en">no presence head</span></td><td>50.7</td><td>0.77</td><td rowspan="2"><span data-lang="zh">presence head <mark class="m-result" data-t="RESULT/EVIDENCE">+1.5 cgF1、+0.05 IL_MCC</mark>,主要提升辨識/校準</span><span data-lang="en">presence head <mark class="m-result" data-t="RESULT/EVIDENCE">+1.5 cgF1, +0.05 IL_MCC</mark>, mainly recognition/calibration</span></td></tr>
+          <tr><td class="win"><span data-lang="zh">有 presence head</span><span data-lang="en">with presence head</span></td><td class="win">52.2</td><td class="win">0.82</td></tr>
+          <tr><td><span data-lang="zh">0 個 hard negative / 圖</span><span data-lang="en">0 hard negatives/img</span></td><td class="bad">28.3</td><td class="bad">0.44</td><td rowspan="2"><span data-lang="zh">hard negatives 把 <mark class="m-result" data-t="RESULT/EVIDENCE">IL_MCC 0.44→0.68</mark>:學會「說不」</span><span data-lang="en">hard negatives lift <mark class="m-result" data-t="RESULT/EVIDENCE">IL_MCC 0.44→0.68</mark>: learning to "say no"</span></td></tr>
+          <tr><td class="win"><span data-lang="zh">30 個 hard negative / 圖</span><span data-lang="en">30 hard negatives/img</span></td><td class="win">43.0</td><td class="win">0.68</td></tr>
+          <tr><td><span data-lang="zh">只有 EXT 外部資料</span><span data-lang="en">EXT only</span></td><td class="bad">23.7</td><td>0.46</td><td rowspan="3"><span data-lang="zh">SYN +8.8、HQ 再 +14.6 cgF1:<mark class="m-result" data-t="RESULT/EVIDENCE">自建高品質資料才是主升力</mark></span><span data-lang="en">SYN +8.8, HQ +14.6 more: <mark class="m-result" data-t="RESULT/EVIDENCE">the self-built HQ data is the main lift</mark></span></td></tr>
+          <tr><td>EXT + SYN</td><td>32.8</td><td>0.57</td></tr>
+          <tr><td class="win">EXT + SYN + HQ</td><td class="win">47.4</td><td class="win">0.74</td></tr>
+          <tr><td>SAM 3 <span data-lang="zh">(基準)</span><span data-lang="en">(base)</span></td><td>54.0</td><td>0.82</td><td rowspan="2"><span data-lang="zh">AI 驗證者 <mark class="m-result" data-t="RESULT/EVIDENCE">補上到人類差距的一半</mark>(→62.3;人類 72.8)</span><span data-lang="en">AI verifiers <mark class="m-result" data-t="RESULT/EVIDENCE">close half the gap to human</mark> (→62.3; human 72.8)</span></td></tr>
+          <tr><td class="win">+ EV/MV AI <span data-lang="zh">驗證者</span><span data-lang="en">verifiers</span></td><td class="win">62.3</td><td class="win">0.87</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted);margin-top:8px"><span class="add">[導讀補充]</span> 注意 presence head 讓 pmF1(定位)略降(65.4→63.4),卻大幅拉高 IL_MCC——這正說明它是把「辨識」的擔子從 query 卸下,是<b>刻意的取捨</b>而非全面提升。各消融表數字來自不同的較短訓練 run,不可跨表直接比較。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted);margin-top:8px"><span class="add">[guide note]</span> Note the presence head slightly lowers pmF1 (localization, 65.4→63.4) while sharply raising IL_MCC—exactly the sign it offloads "recognition" from the queries: a <b>deliberate trade</b>, not a free lunch. Ablation tables come from different, shorter runs and aren't directly comparable across tables.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">影像與影片 PCS <b>比既有系統翻倍</b>,同時<b>不犧牲反而提升</b> SAM 2 的 PVS/VOS;外接 MLLM 還能零樣本做到 referring/推理分割。「概念級 + 高品質遮罩 + 追蹤」三合一是它最強的論述。</span>
+        <span data-lang="en"><b>Doubles</b> prior systems on image/video PCS while <b>retaining and even improving</b> SAM 2's PVS/VOS; wrapped with an MLLM it does zero-shot referring/reasoning segmentation. "Concept-level + high-quality masks + tracking" in one is its strongest claim.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">速度</span><span data-lang="en">Speed</span></span>
+        <span data-lang="zh">H200 上單張影像含 100+ 物件僅 <b>30ms</b>;影片延遲隨物件數線性成長,約 <b>5 個並行物件</b>可近即時。30fps 實時需多 GPU(64 物件需 8× H200)。</span>
+        <span data-lang="en">On H200, a single image with 100+ objects takes just <b>30ms</b>; video latency scales linearly with object count, sustaining near real-time for ~<b>5 concurrent objects</b>. 30fps needs multi-GPU (64 objects → 8× H200).</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">頭條的「翻倍」是相對<b>開放詞彙 baseline</b>;但距離<b>人類</b>仍有明顯差距(Gold 54.1 vs 72.8)。<mark class="m-limit" data-t="LIMITATION/FUTURE">長尾/跨域概念的零樣本泛化</mark>才是真正的天花板。</span>
+        <span data-lang="en">The "2×" headline is vs <b>open-vocab baselines</b>; the gap to <b>humans</b> stays large (Gold 54.1 vs 72.8). <mark class="m-limit" data-t="LIMITATION/FUTURE">Zero-shot generalization to long-tail/cross-domain concepts</mark> is the real ceiling.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">模型 vs 資料</span><span data-lang="en">model vs data</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">cgF1 指標</span><span data-lang="en">cgF1 metric</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>是模型贏,還是資料贏?</b> 頭條增益與其說來自 presence head(消融只 +1.5 cgF1),不如說來自<mark class="m-assume" data-t="ASSUMPTION/CLAIM">4M 概念的自建高品質資料</mark>(HQ 單獨 +14.6 cgF1)與 hard negatives。這使「架構貢獻」與「資料規模貢獻」難以拆分,學術界也<b>難以在同等資料下複現或公平對比</b>。</li>
+          <li data-lang="en"><b>Is it the model or the data?</b> The headline gain owes less to the presence head (only +1.5 cgF1 in ablation) than to <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the self-built 4M-concept HQ data</mark> (+14.6 cgF1 alone) and hard negatives. This entangles "architecture" vs "data scale," and makes it <b>hard for academia to reproduce or compare fairly</b> at equal data.</li>
+          <li data-lang="zh"><b>baseline 的資料不對等。</b> OWLv2/gDINO/T-Rex2 並非在 SA-Co 這種規模與分布上訓練;在 SA-Co/Gold 上「翻倍」有部分是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">主場優勢</mark>(SAM 3 的訓練分布與 benchmark 同源)。作者以「零樣本 LVIS」等外部集部分緩解,但分布對齊仍值得追問。</li>
+          <li data-lang="en"><b>Baselines aren't data-matched.</b> OWLv2/gDINO/T-Rex2 weren't trained on SA-Co-scale/-distribution data; part of the "2×" on SA-Co/Gold is a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">home-field advantage</mark> (SAM 3's training distribution shares provenance with the benchmark). External sets like zero-shot LVIS partly mitigate this, but distribution alignment deserves scrutiny.</li>
+          <li data-lang="zh"><b>離人類還有一段。</b> Gold cgF1 54.1 vs 人類 72.8;影片 pHOTA 也只有人類的 ~82%。作者坦承<mark class="m-limit" data-t="LIMITATION/FUTURE">細粒度跨域概念(飛機型號、醫學名詞、熱影像)零樣本泛化差</mark>,需靠微調或合成資料補救——這削弱了「anything」的普適宣稱。</li>
+          <li data-lang="en"><b>A real gap to humans remains.</b> Gold cgF1 54.1 vs human 72.8; video pHOTA is only ~82% of human. The authors concede <mark class="m-limit" data-t="LIMITATION/FUTURE">poor zero-shot generalization to fine-grained cross-domain concepts (aircraft types, medical terms, thermal imagery)</mark>, needing fine-tuning or synthetic data—tempering the "anything" claim.</li>
+          <li data-lang="zh"><b>cgF1 是新指標,利於自己。</b> 主指標 cgF1 由作者定義、以 0.5 信心門檻 gating,並用「3 標註者 oracle」計分。這些選擇合理,但<mark class="m-assume" data-t="ASSUMPTION/CLAIM">非社群標準</mark>;跨論文比較時要小心,別把 cgF1 當成與 AP 可互換。</li>
+          <li data-lang="en"><b>cgF1 is a self-defined metric.</b> The headline cgF1 is authored here, gated at 0.5 confidence, and scored with a "3-annotator oracle." Reasonable, but <mark class="m-assume" data-t="ASSUMPTION/CLAIM">not a community standard</mark>; be careful comparing across papers and don't treat cgF1 as interchangeable with AP.</li>
+          <li data-lang="zh"><b>AI 標註者的偏誤閉環。</b> 用微調 MLLM 當驗證者確實省人力,但驗證者與被訓練的 SAM 3 <mark class="m-limit" data-t="LIMITATION/FUTURE">可能共享盲點</mark>,形成「模型幫模型背書」的閉環偏誤;論文用人類抽查緩解,但長尾上的系統性偏差難以量化。</li>
+          <li data-lang="en"><b>AI-annotator feedback bias.</b> Fine-tuned MLLM verifiers save labor, but verifier and trainee (SAM 3) may <mark class="m-limit" data-t="LIMITATION/FUTURE">share blind spots</mark>, creating a "model endorsing model" loop; human spot-checks help, but systematic long-tail bias is hard to quantify.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>模型 vs 資料</b>:若把 baseline(OWLv2/T-Rex2)也在 SA-Co 上訓練,差距還剩多少?presence head 的 +1.5 是否會被更大資料稀釋?</li>
+          <li data-lang="en"><b>Model vs data</b>: if baselines (OWLv2/T-Rex2) were trained on SA-Co too, how much lead remains? Would the presence head's +1.5 wash out with more data?</li>
+          <li data-lang="zh"><b>比較公平性</b>:SA-Co benchmark 與 SA-Co 訓練資料同源,「翻倍」有多少是分布對齊帶來的?外部集(LVIS/COCO)上的領先幅度是否一致?</li>
+          <li data-lang="en"><b>Fairness</b>: the SA-Co benchmark shares provenance with SA-Co training data—how much of "2×" is distribution alignment? Are the leads consistent on external sets (LVIS/COCO)?</li>
+          <li data-lang="zh"><b>概念泛化的邊界</b>:在完全沒見過的細粒度域(醫學、遙測、熱影像),零樣本 cgF1 掉多少?需要多少標註才追平專門模型?</li>
+          <li data-lang="en"><b>Concept OOD limits</b>: on truly unseen fine-grained domains (medical, remote sensing, thermal), how far does zero-shot cgF1 drop? How much labeling to match a specialist?</li>
+          <li data-lang="zh"><b>擁擠影片的真相</b>:每物件獨立 masklet、無共享上下文,在密集多物件、頻繁遮擋下的身分切換(ID switch)有多嚴重?延遲的線性成長在實務上可接受嗎?</li>
+          <li data-lang="en"><b>Crowded-video truth</b>: with independent per-object masklets and no shared context, how bad are ID switches under dense, occluded scenes? Is the linear latency growth acceptable in practice?</li>
+          <li data-lang="zh"><b>cgF1 的設計效應</b>:0.5 信心門檻與 oracle 多正解評分,對 SAM 3(良好校準)是否比對 baseline 更有利?換成標準 AP,排名會變嗎?</li>
+          <li data-lang="en"><b>cgF1 design effects</b>: do the 0.5-confidence gate and multi-truth oracle favor SAM 3 (well-calibrated) more than baselines? Under standard AP, does the ranking change?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 SAM 3 讀成「<b>能理解任意語言指令的分割器</b>」。它<mark class="m-assume" data-t="ASSUMPTION/CLAIM">只吃簡短名詞片語</mark>,不做長 referring 或推理;那些是靠外接 MLLM(SAM 3 Agent)達成的。核心 SAM 3 是一個<b>強力的概念級偵測+追蹤器</b>,不是語言推理器。</span>
+        <span data-lang="en">Reading SAM 3 as "<b>a segmenter that understands arbitrary language</b>." It <mark class="m-assume" data-t="ASSUMPTION/CLAIM">only takes short noun phrases</mark>, not long referring or reasoning—those come from wrapping an MLLM (SAM 3 Agent). Core SAM 3 is a <b>powerful concept-level detector+tracker</b>, not a language reasoner.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">Limitations 寫得坦白(跨域概念、多物件影片延遲、模式硬切換),並開源模型與 benchmark。用「校準導向」的 cgF1、以及 hard-negative 消融,展現了對<b>真實可用性</b>而非刷榜的關注,值得肯定。</span>
+        <span data-lang="en">The Limitations are candid (cross-domain concepts, multi-object video latency, hard mode-switch), and both model and benchmark are open-sourced. The calibration-oriented cgF1 and hard-negative ablations show a focus on <b>real usability</b> over leaderboard gaming—commendable.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「解耦互相衝突的目標」是可複用的設計原則</b>:presence head(what vs where)、detector/tracker(身分無關 vs 分辨身分)都是同一招。當你發現一個 head/query 被迫兼顧兩個本質矛盾的任務時,先想能不能拆。</li>
+          <li data-lang="en"><b>"Decouple conflicting objectives" is a reusable design principle</b>: the presence head (what vs where) and detector/tracker split (identity-agnostic vs identity-separating) are the same move. When one head/query is forced to juggle two intrinsically opposed tasks, first ask if you can split them.</li>
+          <li data-lang="zh"><b>hard negatives 與校準比刷 AP 更接近落地</b>:對任何開放詞彙/檢索式系統,系統性挖掘對抗性負例、並用 gating/校準指標評測,往往比追高 AP 更能反映真實可用性。</li>
+          <li data-lang="en"><b>Hard negatives and calibration beat chasing AP</b>: for any open-vocabulary/retrieval-style system, systematically mining adversarial negatives and evaluating with gated/calibrated metrics reflects real usability better than raw AP.</li>
+          <li data-lang="zh"><b>AI-as-annotator 是資料飛輪的新槓桿</b>:把「驗證」這種可判別任務交給微調過的 MLLM,能把高品質標註成本結構打掉一半,合成資料的 scaling 甚至接近人工——值得在你自己的資料瓶頸上試。</li>
+          <li data-lang="en"><b>AI-as-annotator is a new data-flywheel lever</b>: delegating discriminative "verification" to fine-tuned MLLMs can halve the cost of high-quality labels, with synthetic data scaling nearly like human data—worth trying on your own data bottleneck.</li>
+          <li data-lang="zh"><b>把 SAM 3 當工具而非終點</b>:核心模型 + 外接 MLLM(SAM 3 Agent)就能零樣本做 referring/推理分割。做需要「語言→遮罩」的任務時,值得直接把 SAM 3 當可呼叫的視覺工具。</li>
+          <li data-lang="en"><b>Treat SAM 3 as a tool, not an endpoint</b>: core model + an MLLM wrapper (SAM 3 Agent) does zero-shot referring/reasoning segmentation. For "language→mask" tasks, it's worth calling SAM 3 as a vision tool.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「可提示分割能延伸到語意概念層級」</span><span data-lang="en">"Promptable segmentation extends to the concept level"</span></td><td><span data-lang="zh">PCS 任務定義與 SA-Co benchmark(概念量 &gt;50×)。</span><span data-lang="en">The PCS task and SA-Co benchmark (&gt;50× concepts).</span></td></tr>
+          <tr><td><span data-lang="zh">「辨識/定位解耦提升開放詞彙偵測」</span><span data-lang="en">"Decoupling recognition/localization helps open-vocab detection"</span></td><td><span data-lang="zh">presence head 設計與其消融(IL_MCC 提升)。</span><span data-lang="en">The presence-head design and its ablation (IL_MCC lift).</span></td></tr>
+          <tr><td><span data-lang="zh">「AI 標註者可規模化造高品質資料」</span><span data-lang="en">"AI annotators can scale high-quality data"</span></td><td><span data-lang="zh">資料引擎、AI 驗證者吞吐翻倍、合成資料 scaling law。</span><span data-lang="en">The data engine, 2× AI-verifier throughput, synthetic-data scaling.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">SAM 3 把 SAM 的可提示介面從「幾何點選單一物件」推進到「<b>用概念一次選取所有實例並跨影片追蹤</b>」。技術上靠<b>辨識/定位、偵測/追蹤兩層解耦</b> + presence head + hard negatives;真正的引擎則是<b>用 AI 當標註者</b>造出 4M 概念資料。它在 PCS 上把既有系統翻倍,並統一了「概念級選取 × 高品質遮罩 × 追蹤」——但離人類與真正的跨域泛化仍有距離。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">SAM 3 pushes SAM's promptable interface from "geometrically pick one object" to "<b>use a concept to select every instance and track it across video</b>." Technically it leans on <b>two layers of decoupling</b> (recognition/localization, detection/tracking) + a presence head + hard negatives; the real engine is <b>AI-as-annotator</b> building 4M-concept data. It doubles prior systems on PCS and unifies "concept-level selection × high-quality masks × tracking"—though a gap to humans and true cross-domain generalization remains.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">SAM / SAM 2</span>
+          <span class="chip">DETR / MDETR</span>
+          <span class="chip">Perception Encoder</span>
+          <span class="chip">OWLv2 · GroundingDINO</span>
+          <span class="chip">T-Rex2 · DINO-X</span>
+          <span class="chip">GLEE · LISA</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">與 SAM 家族的關係</span><span data-lang="en">Relation to the SAM family</span></span>
+        <span data-lang="zh">SAM(空間提示)→ SAM 2(加時間/影片)→ SAM 3(加語意/概念)。SAM 3 <b>沿用 SAM 2 的 tracker 與 memory</b>,並<b>泛化</b>其能力:同一模型既做 PCS 也做 PVS,且 PVS/VOS 指標還贏過 SAM 2。</span>
+        <span data-lang="en">SAM (spatial prompts) → SAM 2 (adds time/video) → SAM 3 (adds semantics/concepts). SAM 3 <b>reuses SAM 2's tracker and memory</b> and <b>generalizes</b> it: one model does both PCS and PVS, and even beats SAM 2 on PVS/VOS.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Carion et al. 2025 (SAM 3) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'SAM 3 reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

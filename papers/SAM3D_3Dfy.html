@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>SAM 3D — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"SAM 3D: 3Dfy Anything in Images","authors":"SAM 3D Team, Meta Superintelligence Labs (X. Chen, F.-J. Chu, P. Gleize, K. J. Liang, A. Sax, H. Tang, W. Wang, …, P. Dollár, G. Gkioxari, M. Feiszli, J. Malik)","year":"2025","venue":"arXiv:2511.16624","tags":["Segment Anything","3D Reconstruction","Single-Image 3D","Generative Model","Flow Matching","Data Engine"],"tldr":"從「單張自然影像 + 物件遮罩」生成該物件完整的 3D 形狀、材質與場景位姿;靠人機協作(MITL)資料引擎 + LLM 式多階段訓練突破 3D 資料瓶頸,真實影像人類偏好勝率至少 5:1。","tldr_en":"A generative foundation model that reconstructs the full 3D shape, texture, and scene pose of an object from a single natural image plus a mask; a model-in-the-loop data engine and LLM-style multi-stage training break the 3D data barrier, winning human-preference tests on real images by at least 5:1."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:88px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">SAM 3D 是一個<b>視覺接地(visually grounded)的生成式 3D 重建模型</b>:輸入<b>單張自然影像 + 一個物件遮罩 \(M\)</b>,就輸出該物件的<b>完整 3D 形狀、材質與場景位姿(shape / texture / layout)</b>。它專攻<mark class="m-problem" data-t="PROBLEM/GAP">遮擋與雜亂的真實場景</mark>,靠的是<mark class="m-method" data-t="METHOD/IDEA">「辨識驅動重建」的學習先驗</mark>,而非多視角幾何。關鍵武器是一套<mark class="m-method" data-t="METHOD/IDEA">人機協作(MITL)資料引擎 + LLM 式多階段訓練</mark>,真實影像人類偏好勝率<mark class="m-result" data-t="RESULT/EVIDENCE">至少 5:1</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">SAM 3D is a <b>visually grounded generative 3D reconstruction model</b>: given a <b>single natural image plus one object mask \(M\)</b>, it outputs that object's <b>full 3D shape, texture, and scene layout</b>. It targets <mark class="m-problem" data-t="PROBLEM/GAP">occluded, cluttered real-world scenes</mark> using <mark class="m-method" data-t="METHOD/IDEA">recognition-driven learned priors</mark> rather than multi-view geometry. The key weapon is a <mark class="m-method" data-t="METHOD/IDEA">model-in-the-loop (MITL) data engine + LLM-style multi-stage training</mark>, winning human-preference tests on real images by <mark class="m-result" data-t="RESULT/EVIDENCE">at least 5:1</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/SAM3D/fig1_teaser.png" alt="Figure 1 teaser">
+        <figcaption data-lang="zh"><b>Fig.1</b> SAM 3D 把一張影像變成「可組合的 3D 場景」——逐物件預測 geometry、texture、layout。上排:四個真實場景(客廳、街景、運河城景),黃圈標出被舉到 3D 的物件;下排:各物件回復出的高品質 3D 資產(魚、桌、盆栽、籃子、船、腳踏車、建築、汽車…)。留意這些都是<b>被遮擋 / 雜亂</b>場景中的物件。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> SAM 3D turns one image into a composable 3D scene—per-object geometry, texture, and layout. Top: four real scenes (living room, street, canal city) with yellow circles marking objects lifted to 3D; bottom: the high-quality 3D assets recovered for each (fish, table, plant, basket, boat, bicycle, buildings, car…). Note these live in <b>occluded / cluttered</b> scenes.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 想從<mark class="m-problem" data-t="PROBLEM/GAP">單張自然影像</mark>重建物件的完整 3D(形狀+材質+位姿),但既有 image-to-3D 只在乾淨、置中的單物件上訓練,一遇<mark class="m-problem" data-t="PROBLEM/GAP">遮擋、雜亂、遠距</mark>就崩;更根本的是<mark class="m-problem" data-t="PROBLEM/GAP">「自然影像 ↔ 3D 真值」的配對資料極度稀缺(3D 資料瓶頸)</mark>。</li>
+          <li data-lang="en"><b>Problem</b> — Reconstruct an object's full 3D (shape+texture+pose) from a <mark class="m-problem" data-t="PROBLEM/GAP">single natural image</mark>, but existing image-to-3D is trained on clean, centered single objects and breaks under <mark class="m-problem" data-t="PROBLEM/GAP">occlusion, clutter, distance</mark>; more fundamentally, <mark class="m-problem" data-t="PROBLEM/GAP">paired "natural image ↔ 3D ground truth" data is extremely scarce (the 3D data barrier)</mark>.</li>
+          <li data-lang="zh"><b>方法</b> — 把重建當成<mark class="m-method" data-t="METHOD/IDEA">條件生成 \(p(S,T,R,t,s\mid I,M)\)</mark>(兩階段 latent flow matching);再用<mark class="m-method" data-t="METHOD/IDEA">MITL 資料引擎</mark>——人類不會建 mesh,但會「從 \(N\) 個候選挑最好 + 對齊姿態」,把生成問題轉成驗證問題——配合<mark class="m-method" data-t="METHOD/IDEA">合成預訓練 → 半合成 mid-training → 真實 SFT+DPO</mark> 的 LLM 式配方。</li>
+          <li data-lang="en"><b>Method</b> — Cast reconstruction as <mark class="m-method" data-t="METHOD/IDEA">conditional generation \(p(S,T,R,t,s\mid I,M)\)</mark> (two-stage latent flow matching); build a <mark class="m-method" data-t="METHOD/IDEA">MITL data engine</mark>—humans can't make meshes but <b>can pick the best of \(N\) candidates and align pose</b>, turning generation into verification—plus an LLM-style recipe: <mark class="m-method" data-t="METHOD/IDEA">synthetic pretrain → semi-synthetic mid-train → real SFT + DPO</mark>.</li>
+          <li data-lang="zh"><b>結果</b> — 真實影像人類偏好<mark class="m-result" data-t="RESULT/EVIDENCE">物件 5:1、場景 6:1</mark>勝過前 SOTA;在自建困難基準 SA-3DAO 上 F1@0.01 <mark class="m-result" data-t="RESULT/EVIDENCE">0.2344(對手最佳 ~0.16)</mark>;首次做到 shape+layout 聯合生成,ADD-S@0.1 <mark class="m-result" data-t="RESULT/EVIDENCE">2% → 77%</mark>。</li>
+          <li data-lang="en"><b>Results</b> — Human preference on real images: <mark class="m-result" data-t="RESULT/EVIDENCE">5:1 (objects), 6:1 (scenes)</mark> over prior SOTA; on the self-built hard benchmark SA-3DAO, F1@0.01 <mark class="m-result" data-t="RESULT/EVIDENCE">0.2344 (best rival ~0.16)</mark>; first to jointly generate shape+layout, ADD-S@0.1 <mark class="m-result" data-t="RESULT/EVIDENCE">2% → 77%</mark>.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">電腦視覺傳統上以<mark class="m-method" data-t="METHOD/IDEA">多視角幾何</mark>(binocular stereo、SfM、MVS、NeRF)作為 3D 的主要訊號,需要多張校準影像。但心理學家早就發現<b>人類能從單張影像感知深度與形狀</b>——靠所謂<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「圖像線索(pictorial cues)」</mark>:陰影、紋理,尤其是<b>辨識(familiar-object cue)</b>。Roberts(1963)即指出:<mark class="m-method" data-t="METHOD/IDEA">一旦影像被辨識為已知物件,其 3D 形狀與位姿就能被回復</mark>。SAM 3D 正是把「辨識驅動重建」這個老想法,用現代生成模型 + 大規模資料重新實現。</p>
+        <p data-lang="en">Computer vision has traditionally treated <mark class="m-method" data-t="METHOD/IDEA">multi-view geometry</mark> (binocular stereo, SfM, MVS, NeRF) as the primary 3D signal, needing many calibrated views. Yet psychologists long ago showed <b>humans perceive depth and shape from a single image</b>—via <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"pictorial cues"</mark>: shading, texture, and above all <b>recognition (the familiar-object cue)</b>. Roberts (1963) argued that <mark class="m-method" data-t="METHOD/IDEA">once an image is recognized as a known object, its 3D shape and pose can be recovered</mark>. SAM 3D revives this recognition-driven idea with modern generative models + massive data.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這是把 <b>SAM(分割)資料引擎哲學 + LLM 訓練配方</b>整包搬進 3D:核心賭注不是「更聰明的網路」,而是<b>「如何在沒有 3D 真值的世界裡,規模化生產真實影像的 3D 標註」</b>。答案是:讓人類做他們擅長的「選擇與對齊」,讓模型做它擅長的「生成候選」,兩者組成飛輪。</p>
+          <p data-lang="en" style="margin-top:6px">This ports the <b>SAM (segmentation) data-engine philosophy + the LLM training recipe</b> wholesale into 3D: the bet isn't "a smarter net" but <b>"how to mass-produce 3D annotations for natural images in a world with no 3D ground truth."</b> The answer: let humans do what they're good at (selecting &amp; aligning) and the model do what it's good at (proposing candidates), forming a flywheel.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不只是「又一個 image-to-3D」,而是底下幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not "yet another image-to-3D" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">辨識 → 重建。</b> 單張影像的完整 3D 靠<mark class="m-assume" data-t="ASSUMPTION/CLAIM">學到的先驗與辨識</mark>補齊看不見的部分(背面、被遮擋處),而非測量。這讓模型能泛化到<b>沒見過的物件</b>(由見過的「零件」組成)。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Recognition → reconstruction.</b> Full 3D from one image completes the unseen (back sides, occluded parts) via <mark class="m-assume" data-t="ASSUMPTION/CLAIM">learned priors and recognition</mark>, not measurement—enabling generalization to <b>novel objects</b> (assembled from seen "parts").</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">把「生成」變「驗證」以破解資料瓶頸。</b> 一般人不會做 3D mesh,但能<mark class="m-method" data-t="METHOD/IDEA">從 \(N\) 個候選挑最好、對齊姿態</mark>。用 best-of-N + 人類偏好,拿到 ~100 萬張影像、314 萬 mesh 的真實 3D 標註——前所未有的規模。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Turn "generation" into "verification" to break the data barrier.</b> People can't make meshes but <mark class="m-method" data-t="METHOD/IDEA">can pick the best of \(N\) and align pose</mark>. Best-of-N + human preference yields ~1M images and 3.14M meshes of real 3D annotation—unprecedented scale.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">LLM 式多階段訓練 + 資料飛輪。</b> 合成預訓練建詞彙 → 半合成 mid-training 學遮擋/mask-following → 真實 SFT+DPO 對齊人類偏好;model-in-the-loop 讓<mark class="m-result" data-t="RESULT/EVIDENCE">模型與資料互相拉抬,Elo 近乎線性成長</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">LLM-style multi-stage training + a data flywheel.</b> Synthetic pretrain builds vocabulary → semi-synthetic mid-train learns occlusion/mask-following → real SFT+DPO aligns to preference; model-in-the-loop makes <mark class="m-result" data-t="RESULT/EVIDENCE">model and data lift each other, with near-linear Elo growth</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">Segment Anything 家族的 3D 成員。</b> SAM 3D 吃 <b>SAM / SAM 2 / SAM 3</b> 產生的遮罩當輸入,把每個被分割的 2D 物件「舉」到完整 3D。它<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不自己做分割</mark>,而是分割之後的「3D 化」那一環,且對遮罩來源與精度不敏感。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">The 3D member of the Segment Anything family.</b> SAM 3D consumes masks from <b>SAM / SAM 2 / SAM 3</b> and lifts each segmented 2D object to full 3D. It <mark class="m-assume" data-t="ASSUMPTION/CLAIM">does not segment itself</mark>—it's the "3D-ify" stage after segmentation, and is agnostic/robust to the mask source and its precision.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">SAM 3D: 3Dfy Anything in Images</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>SAM 3D Team · Chen, Chu, Gleize, Liang, Sax, Tang, Wang … Dollár, Gkioxari, Feiszli, Malik</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Meta Superintelligence Labs</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2025 · arXiv:2511.16624</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.CV · Single-image 3D reconstruction</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>github.com/facebookresearch/sam-3d-objects</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「3D 重建 = 多視角幾何問題」重新定義成「<b>單張影像的辨識式生成問題</b>」,並示範<b>如何在沒有 3D 真值時規模化造資料</b>。這是 3D 感知邁向「真實世界、in-the-wild」的一步,直接惠及機器人、AR/VR、遊戲、影視。</span>
+        <span data-lang="en">Reframes "3D reconstruction = multi-view geometry" as "<b>recognition-based generation from a single image</b>," and shows <b>how to scale data creation without 3D ground truth</b>. A step toward real-world, in-the-wild 3D perception—benefiting robotics, AR/VR, gaming, and film.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">MITL data engine</span><span class="chip">Flow matching</span>
+          <span class="chip">Mixture-of-Transformers</span><span class="chip">Best-of-N</span>
+          <span class="chip">DPO alignment</span><span class="chip">SA-3DAO</span>
+        </div>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">自建基準</span><span data-lang="en">self-benchmark</span></span><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">幻覺 vs 測量</span><span data-lang="en">hallucination</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">多視角幾何</span><span data-lang="en">Multi-view geometry</span></b><br>(SfM / MVS / NeRF)</td><td><span data-lang="zh">需要<mark class="m-problem" data-t="PROBLEM/GAP">多張校準影像</mark>;單張影像根本拿不到完整 3D,也只重建<b>可見表面</b>。</span><span data-lang="en">Needs <mark class="m-problem" data-t="PROBLEM/GAP">many calibrated views</mark>; a single image can't give full 3D and only recovers the <b>visible surface</b>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">單物件 image-to-3D</span><span data-lang="en">Single-object image-to-3D</span></b><br>(Trellis, Hunyuan3D, TripoSG…)</td><td><span data-lang="zh">只在<mark class="m-problem" data-t="PROBLEM/GAP">乾淨、置中、無遮擋</mark>的單物件上訓練;自然場景裡物件遠、被遮擋、雜亂就失敗,且<b>不預測 layout</b>。</span><span data-lang="en">Trained on <mark class="m-problem" data-t="PROBLEM/GAP">clean, centered, unoccluded</mark> single objects; fails when objects are distant/occluded/cluttered, and <b>predicts no layout</b>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">3D 資料集</span><span data-lang="en">3D datasets</span></b><br>(ShapeNet, Objaverse-XL)</td><td><span data-lang="zh">多為<mark class="m-problem" data-t="PROBLEM/GAP">合成單物件、無配對真實影像</mark>;真實 3D 資料集又小又偏室內。模型只能學到「渲染視角」。</span><span data-lang="en">Mostly <mark class="m-problem" data-t="PROBLEM/GAP">synthetic single objects with no paired real images</mark>; real 3D datasets are small and indoor-biased. Models only learn "rendered views."</span></td></tr>
+          <tr><td><b><span data-lang="zh">人工標 3D</span><span data-lang="en">Manual 3D labeling</span></b></td><td><span data-lang="zh">一般標註者<mark class="m-problem" data-t="PROBLEM/GAP">無法直接產生 mesh</mark>;連專業 3D 藝術家一個 mesh 都可能花「數分鐘到 5 小時以上」。</span><span data-lang="en">Generalist annotators <mark class="m-problem" data-t="PROBLEM/GAP">can't author meshes</mark>; even pro 3D artists take "minutes to over 5 hours" per mesh.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「能否從單張自然影像,對任意被遮擋/雜亂的物件,重建出完整的 3D 形狀+材質+場景位姿——而且有辦法規模化取得訓練資料?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"Can we reconstruct full 3D shape + texture + scene pose for any occluded/cluttered object from a single natural image—and actually obtain the training data at scale?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,SAM 3D 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how SAM 3D fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">SAM 3D 如何補上</span><span data-lang="en">How SAM 3D fills it</span></th></tr>
+          <tr>
+            <td><b>Trellis / Hunyuan3D / TripoSG</b><br><small><span data-lang="zh">單物件生成</span><span data-lang="en">single-object gen</span></small></td>
+            <td><span data-lang="zh">孤立物件訓練,<mark class="m-problem" data-t="PROBLEM/GAP">遮擋/雜亂即崩</mark>,無 layout。</span><span data-lang="en">Isolated-object training, <mark class="m-problem" data-t="PROBLEM/GAP">breaks on occlusion/clutter</mark>, no layout.</span></td>
+            <td><span data-lang="zh">用 render-paste + MITL 真實資料學<mark class="m-method" data-t="METHOD/IDEA">遮擋補全、mask-following</mark>,並聯合預測 layout。</span><span data-lang="en">Learns <mark class="m-method" data-t="METHOD/IDEA">occlusion completion, mask-following</mark> from render-paste + MITL real data, and jointly predicts layout.</span></td>
+          </tr>
+          <tr>
+            <td><b>Megapose / FoundationPose</b><br><small><span data-lang="zh">pose 兩段式管線</span><span data-lang="en">two-stage pose pipeline</span></small></td>
+            <td><span data-lang="zh">model-based:先取 shape 再估 pose,仰賴 CAD/已知模型,限桌面/街景/室內。</span><span data-lang="en">Model-based: shape then pose, needs CAD/known models, limited to tabletop/street/indoor.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">model-free 聯合生成</mark> shape+pose,跨物種與多樣場景。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Model-free joint generation</mark> of shape+pose across object types and diverse scenes.</span></td>
+          </tr>
+          <tr>
+            <td><b>MIDI</b><br><small><span data-lang="zh">聯合場景生成</span><span data-lang="en">joint scene gen</span></small></td>
+            <td><span data-lang="zh">聯合但受限於<mark class="m-problem" data-t="PROBLEM/GAP">有支撐面的室內場景</mark>。</span><span data-lang="en">Joint but restricted to <mark class="m-problem" data-t="PROBLEM/GAP">supporting-surface indoor scenes</mark>.</span></td>
+            <td><span data-lang="zh">以 <mark class="m-method" data-t="METHOD/IDEA">mask prompt 指定物件</mark>,逐物件重建,適用範圍廣得多。</span><span data-lang="en">Uses a <mark class="m-method" data-t="METHOD/IDEA">mask prompt to pick objects</mark>, reconstructs per-object, far broader coverage.</span></td>
+          </tr>
+          <tr>
+            <td><b>ShapeNet / Objaverse-XL</b><br><small><span data-lang="zh">3D 資料</span><span data-lang="en">3D data</span></small></td>
+            <td><span data-lang="zh">合成單物件,<mark class="m-problem" data-t="PROBLEM/GAP">無配對真實影像</mark>。</span><span data-lang="en">Synthetic single objects, <mark class="m-problem" data-t="PROBLEM/GAP">no paired real images</mark>.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">MITL 資料引擎</mark>造出 ~100 萬真實影像配 314 萬 mesh + 7M+ 偏好對。</span><span data-lang="en">A <mark class="m-method" data-t="METHOD/IDEA">MITL data engine</mark> yields ~1M real images with 3.14M meshes + 7M+ preference pairs.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這裡的痛點<b>一半是模型(遮擋/場景),一半是資料(沒有真值)</b>。SAM 3D 的洞見是:這兩件事其實是同一件——<b>沒有真實影像的 3D 資料,模型就學不會真實場景</b>。因此它把「造資料」本身當成一等公民,而不是只調架構。</p>
+          <p data-lang="en" style="margin-top:6px">Note the pain points are <b>half model (occlusion/scenes), half data (no ground truth)</b>. SAM 3D's insight: they're the same problem—<b>without 3D data on real images, the model never learns real scenes</b>. So it treats "making data" as a first-class citizen, not just an architecture tweak.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 SAM 3D 讀成「一個更強的 image-to-3D 網路」。它真正的貢獻是<mark class="m-method" data-t="METHOD/IDEA">資料引擎 + 訓練配方</mark>——論文明說「合成預訓練能泛化,<b>前提是有足夠的真實後訓練</b>」。架構(建立在 Trellis 上)反而是相對次要的一環。</span>
+        <span data-lang="en">Don't read SAM 3D as "a stronger image-to-3D net." Its real contribution is the <mark class="m-method" data-t="METHOD/IDEA">data engine + training recipe</mark>—the paper states synthetic pretraining generalizes <b>only given adequate real post-training</b>. The architecture (built on Trellis) is comparatively secondary.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">3D 之所以落後文字/影像模型,正是<b>資料規模差了好幾個數量級</b>。誰能規模化造出「真實影像 ↔ 3D」的配對,誰就掌握 3D 基礎模型的入場券。</span>
+        <span data-lang="en">3D lags text/image models precisely because <b>data is orders of magnitude smaller</b>. Whoever can mass-produce "real image ↔ 3D" pairs holds the ticket to 3D foundation models.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">baseline 公平?</span><span data-lang="en">fair baselines?</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">成本可複現?</span><span data-lang="en">reproducible?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">問題定義:反轉「拍照」這個映射</span><span data-lang="en">Problem setup: inverting the photographic map</span></h3>
+        <p data-lang="zh">拍照把 3D 物件壓成 2D 像素,由影像 \(I\) 中的遮罩 \(M\) 指定。SAM 3D 要<b>反轉</b>它:物件有形狀 \(S\)、材質 \(T\),以及相機座標下的旋轉/平移/縮放 \((R,t,s)\)。因為 3D→2D 有損,故建模為<mark class="m-method" data-t="METHOD/IDEA">條件分佈</mark>,並訓練生成模型 \(q\) 去逼近:</p>
+        <p data-lang="en">A photograph collapses a 3D object into 2D pixels, designated by a mask \(M\) in image \(I\). SAM 3D <b>inverts</b> it: the object has shape \(S\), texture \(T\), and rotation/translation/scale \((R,t,s)\) in camera coordinates. Since 3D→2D is lossy, model it as a <mark class="m-method" data-t="METHOD/IDEA">conditional distribution</mark> and train a generative \(q\) to approximate it:</p>
+        <div class="eq">$$q(S,T,R,t,s\mid I,M)\;\approx\;p(S,T,R,t,s\mid I,M)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">關鍵體認:單張影像的 3D 本質上是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">多解、不確定</mark>的(背面看不到),所以答案不是唯一 mesh,而是一個<b>分佈</b>——輸出是「合理樣本」。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Key realization: single-image 3D is inherently <mark class="m-assume" data-t="ASSUMPTION/CLAIM">multi-solution and uncertain</mark> (back sides are unseen), so the answer is a <b>distribution</b>, not a unique mesh—outputs are "plausible samples."</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">架構:兩階段 latent flow matching</span><span data-lang="en">Architecture: two-stage latent flow matching</span></h3>
+        <figure class="fig"><img src="figs/SAM3D/fig2_architecture.png" alt="Figure 2 architecture">
+          <figcaption data-lang="zh"><b>Fig.2</b> SAM 3D 架構。<b>(上)Geometry 模型</b>:DINOv2 編碼「裁切物件+遮罩」與「全圖+遮罩」(選配 point map),經 <b>Mixture-of-Transformers(MoT)</b> 兩流架構(shape / layout 兩組 token,在 multi-modal self-attention 層共享資訊),輸出粗形狀 voxel \(O\) 與 layout(Rotation/Translation/Scale)。<b>(下)Texture &amp; Refinement 模型</b>:取 \(O\) 的 active voxels,用 sparse flow transformer 細化幾何並合成材質,再由 VAE decoder 出 mesh 或 3D Gaussian splats。右側為 MoT 與其 self-attention 遮罩(注意 <b>Stop Grad</b>:layout 不回傳梯度到 shape 分支)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> SAM 3D architecture. <b>(top) Geometry model</b>: DINOv2 encodes "cropped object+mask" and "full image+mask" (optional point map); a <b>Mixture-of-Transformers (MoT)</b> two-stream design (shape / layout token groups sharing info in a multi-modal self-attention layer) outputs coarse voxel shape \(O\) and layout (Rotation/Translation/Scale). <b>(bottom) Texture &amp; Refinement model</b>: takes \(O\)'s active voxels, refines geometry and synthesizes texture with a sparse flow transformer, then VAE-decodes to mesh or 3D Gaussian splats. Right: MoT and its self-attention mask (note <b>Stop Grad</b>: layout does not backprop into the shape branch).</figcaption></figure>
+        <p data-lang="zh">建立在 Trellis(Xiang 2025)的兩階段結構化 latent 之上,但<mark class="m-method" data-t="METHOD/IDEA">不同於 Trellis 只重建孤立物件,SAM 3D 還預測 layout,組成連貫的多物件場景</mark>。</p>
+        <p data-lang="en">Built on Trellis (Xiang 2025) two-stage structured latents, but <mark class="m-method" data-t="METHOD/IDEA">unlike Trellis (isolated objects only), SAM 3D also predicts layout, forming coherent multi-object scenes</mark>.</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>Geometry 模型(1.2B)</b>:MoT flow transformer,建模 \(p(O,R,t,s\mid I,M)\),\(O\in\mathbb{R}^{64^3}\) 粗 voxel、\(R\in\mathbb{R}^6\) 為 6D 旋轉。</li>
+          <li data-lang="en"><b>Geometry model (1.2B)</b>: MoT flow transformer modeling \(p(O,R,t,s\mid I,M)\), with coarse voxels \(O\in\mathbb{R}^{64^3}\) and 6D rotation \(R\in\mathbb{R}^6\).</li>
+          <li data-lang="zh"><b>Texture &amp; Refinement 模型(600M)</b>:sparse latent flow transformer,建模 \(p(S,T\mid I,M,O)\)。</li>
+          <li data-lang="en"><b>Texture &amp; Refinement model (600M)</b>: a sparse latent flow transformer modeling \(p(S,T\mid I,M,O)\).</li>
+          <li data-lang="zh"><b>輸入編碼</b>:DINOv2 給出 4 組 conditioning tokens(裁切物件+其遮罩、全圖+其遮罩);<b>選配</b> LiDAR/單目深度的 point map \(P\)。</li>
+          <li data-lang="en"><b>Input encoding</b>: DINOv2 yields 4 sets of conditioning tokens (cropped object+mask, full image+mask); an <b>optional</b> point map \(P\) from LiDAR/monocular depth.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵想法一:辨識式生成(flow matching)</span><span data-lang="en">Key idea 1: recognition-based generation (flow matching)</span></h3>
+        <p data-lang="zh">預/中訓練用<mark class="m-method" data-t="METHOD/IDEA">rectified conditional flow matching</mark>(Liu 2022):在噪聲 \(x_0\) 與資料 latent \(x_1\) 之間走直線 \(x_\tau=(1-\tau)x_0+\tau x_1\),學一個速度場逼近 \(x_1-x_0\):</p>
+        <p data-lang="en">Pre/mid-training uses <mark class="m-method" data-t="METHOD/IDEA">rectified conditional flow matching</mark> (Liu 2022): a straight path \(x_\tau=(1-\tau)x_0+\tau x_1\) between noise \(x_0\) and data latent \(x_1\), learning a velocity field toward \(x_1-x_0\):</p>
+        <div class="eq">$$\mathcal{L}_{\text{CFM}}=\mathbb{E}_{\tau,\,x_0,\,x_1}\Big\lVert v_\theta\big(x_\tau,\tau\mid c\big)-\big(x_1-x_0\big)\Big\rVert^2$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">其中 \(c\) 是條件(\(I,M\) 的 DINOv2 編碼,選配 \(P\))。推論時解此 ODE 生成 latent,再 decode 成 mesh/splats。<span class="add">[導讀補充] 上式為 rectified flow 的標準形式;論文以名稱引用,細節在附錄 C.2。</span></p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Here \(c\) is the conditioning (DINOv2 encodings of \(I,M\), optional \(P\)). At inference, solve this ODE to generate a latent, then decode to mesh/splats. <span class="add">[guide note] The equation is the standard rectified-flow form; the paper cites it by name (details in App. C.2).</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵想法二:MITL 資料引擎(把生成變驗證)</span><span data-lang="en">Key idea 2: the MITL data engine (generation → verification)</span></h3>
+        <figure class="fig"><img src="figs/SAM3D/fig4_data_engine.png" alt="Figure 5 data engine">
+          <figcaption data-lang="zh"><b>Fig.3</b> 一個樣本在資料引擎中的一生。<b>Stage 1</b> 選物件+遮罩(Human + SAM,約 10 秒);<b>Stage 2</b> 從多來源候選中<b>成對比較</b>挑最好的 shape/texture(Human + Model Suite,約 80 秒,best-of-N);<b>Stage 2.5</b> 若全部候選都爛,才送<b>專業 3D 藝術家</b>手工建(Art-3DO);<b>Stage 3</b> 把 mesh 對齊到用深度估計得到的 2.5D 點雲,標出 R/t/s(Human + Point Cloud,約 150 秒)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Life of an example in the data engine. <b>Stage 1</b> pick object + mask (Human + SAM, ~10 s); <b>Stage 2</b> choose the best shape/texture by <b>pairwise comparison</b> among multi-source candidates (Human + Model Suite, ~80 s, best-of-N); <b>Stage 2.5</b> only if all candidates fail, route to <b>professional 3D artists</b> (Art-3DO); <b>Stage 3</b> align the mesh to a depth-derived 2.5D point cloud, labeling R/t/s (Human + Point Cloud, ~150 s).</figcaption></figure>
+        <p data-lang="zh">核心把戲:<mark class="m-method" data-t="METHOD/IDEA">人類不做生成,只做「選擇」與「對齊」</mark>。對每個物件用一組模型(檢索、text-to-3D、image-to-3D,含 SAM 3D 自身)產生 \(N=8\) 個候選,人類做 best-of-N 挑最佳並評分 \(r\);低於門檻 \(\alpha\) 的成為 DPO 的負樣本 \(D^-\)。整個引擎可視為一個 API:餵入當前模型 \(q\),回傳訓練樣本 \(D^+\)、品質分 \(r\in[0,1]\) 與被拒候選 \(D^-\)。</p>
+        <p data-lang="en">The core trick: <mark class="m-method" data-t="METHOD/IDEA">humans never generate—only "select" and "align."</mark> For each object, an ensemble (retrieval, text-to-3D, image-to-3D incl. SAM 3D itself) produces \(N=8\) candidates; humans do best-of-N selection and rate quality \(r\); those below threshold \(\alpha\) become DPO negatives \(D^-\). The engine is an API: feed the current model \(q\), get back training samples \(D^+\), quality \(r\in[0,1]\), and rejected candidates \(D^-\).</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">資料飛輪</span><span data-lang="en">The flywheel</span></span>
+          <p data-lang="zh" style="margin-top:6px">冷啟動時初始模型很爛,故先大量借助檢索/現成模型;隨訓練推進,<mark class="m-result" data-t="RESULT/EVIDENCE">SAM 3D 自己最終產出 ~80% 的標註資料</mark>。model-in-the-loop 讓資料與模型互相拉抬——「造資料」變成對齊的副產品。</p>
+          <p data-lang="en" style="margin-top:6px">At cold start the initial model is weak, so it leans on retrieval/off-the-shelf models; as training proceeds, <mark class="m-result" data-t="RESULT/EVIDENCE">SAM 3D itself ends up producing ~80% of annotated data</mark>. Model-in-the-loop lets data and model lift each other—"making data" becomes a byproduct of alignment.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵想法三:LLM 式多階段訓練</span><span data-lang="en">Key idea 3: LLM-style multi-stage training</span></h3>
+        <figure class="fig"><img src="figs/SAM3D/fig3_training_paradigm.png" alt="Figure 4 training paradigm">
+          <figcaption data-lang="zh"><b>Fig.4</b> 訓練範式(綠=模型訓練、黃=資料引擎、紫=資料來源)。合成 3D mesh 經 Render Engine → <b>Iso-3DO</b> 做預訓練;自然影像經 Render Paste → <b>RP-3DO</b> 做 mid-training;<b>MITL 資料引擎</b>產出 MITL/Art-3DO 做真實 SFT;偏好資料做 <b>Preference Optimization(DPO)</b>;整條線由 model-in-the-loop 回饋。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Training paradigm (green = model training, yellow = data engine, purple = data source). Synthetic meshes via a Render Engine → <b>Iso-3DO</b> for pretraining; natural images via Render Paste → <b>RP-3DO</b> for mid-training; the <b>MITL data engine</b> yields MITL/Art-3DO for real SFT; preference data drives <b>Preference Optimization (DPO)</b>; the whole loop is closed by model-in-the-loop.</figcaption></figure>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STEP 1</span><b><span data-lang="zh">預訓練</span><span data-lang="en">Pretrain</span></b><small><span data-lang="zh">Iso-3DO:270 萬孤立合成物件,24 視角。學形狀/材質詞彙。<b>2.5T tokens</b>。</span><span data-lang="en">Iso-3DO: 2.7M isolated synthetic objects, 24 views. Learns shape/texture vocabulary. <b>2.5T tokens</b>.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 1.5</span><b><span data-lang="zh">Mid-training</span><span data-lang="en">Mid-train</span></b><small><span data-lang="zh">RP-3DO:6100 萬 render-paste 樣本。學遮擋補全、mask-following、layout。<b>2.7T tokens</b>。</span><span data-lang="en">RP-3DO: 61M render-paste samples. Learns occlusion completion, mask-following, layout. <b>2.7T tokens</b>.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 2a</span><b>SFT</b><small><span data-lang="zh">先 MITL-3DO(較雜),再 Art-3DO(藝術家高品質,抑制 floaters/無底/不對稱)。</span><span data-lang="en">First MITL-3DO (noisier), then Art-3DO (high-quality artist data; suppresses floaters/bottomless/asymmetry).</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 2b</span><b><span data-lang="zh">DPO + 蒸餾</span><span data-lang="en">DPO + Distill</span></b><small><span data-lang="zh">用 \(D^+/D^-\) 對齊人類偏好(對稱、封閉);蒸餾把 NFE 25→4,近乎即時。<b>0.5T tokens</b>。</span><span data-lang="en">Align to preference (symmetry, closure) with \(D^+/D^-\); distill NFE 25→4 for near-instant inference. <b>0.5T tokens</b>.</span></small></div>
+        </div>
+        <p data-lang="zh">SFT 之後接 <mark class="m-method" data-t="METHOD/IDEA">DPO(Rafailov 2023)</mark>,用資料引擎 Stage 2 的 \(D^+/D^-\) 對消除人類敏感的瑕疵(不對稱、破洞):</p>
+        <p data-lang="en">After SFT comes <mark class="m-method" data-t="METHOD/IDEA">DPO (Rafailov 2023)</mark>, using \(D^+/D^-\) pairs from data-engine Stage 2 to eliminate human-salient defects (asymmetry, holes):</p>
+        <div class="eq">$$\mathcal{L}_{\text{DPO}}=-\,\mathbb{E}_{(d^+,d^-)}\log\sigma\!\left(\beta\log\frac{q_\theta(d^+)}{q_{\text{ref}}(d^+)}-\beta\log\frac{q_\theta(d^-)}{q_{\text{ref}}(d^-)}\right)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><span class="add">[導讀補充] 上式為 DPO 標準形式;論文引用 DPO 並用於 flow-matching 模型,細節在附錄 C.3。</span></p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><span class="add">[guide note] Standard DPO form; the paper cites DPO and adapts it to the flow-matching model (App. C.3).</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(I,\;M\)</td><td><span data-lang="zh">輸入影像、指定「要重建哪個物件」的遮罩(來自 SAM 系列)。</span><span data-lang="en">Input image; mask designating which object to reconstruct (from the SAM series).</span></td></tr>
+          <tr><td>\(S,\;T\)</td><td><span data-lang="zh">物件的 3D 形狀、材質(可 decode 成 mesh 或 Gaussian splats)。</span><span data-lang="en">The object's 3D shape and texture (decodable to mesh or Gaussian splats).</span></td></tr>
+          <tr><td>\(R,t,s\)</td><td><span data-lang="zh">layout:6D 旋轉 \(R\in\mathbb{R}^6\)、平移 \(t\in\mathbb{R}^3\)、縮放 \(s\in\mathbb{R}^3\)(相機座標)。</span><span data-lang="en">Layout: 6D rotation \(R\in\mathbb{R}^6\), translation \(t\in\mathbb{R}^3\), scale \(s\in\mathbb{R}^3\) (camera frame).</span></td></tr>
+          <tr><td>\(O\)</td><td><span data-lang="zh">Geometry 模型輸出的粗 voxel 形狀,\(O\in\mathbb{R}^{64^3}\),餵給第二階段細化。</span><span data-lang="en">Coarse voxel shape from the Geometry model, \(O\in\mathbb{R}^{64^3}\), fed to stage-2 refinement.</span></td></tr>
+          <tr><td>\(N,\;\alpha\)</td><td><span data-lang="zh">best-of-N 的候選數(預設 8);\(\alpha\) 是品質門檻(隨訓練漸升,像 curriculum)。</span><span data-lang="en">Best-of-N candidate count (default 8); \(\alpha\) the quality threshold (rises over time, curriculum-like).</span></td></tr>
+          <tr><td>\(D^+,\;D^-\)</td><td><span data-lang="zh">被選中的訓練樣本 / 被拒的較差候選,構成 DPO 偏好對。</span><span data-lang="en">Chosen training sample / rejected worse candidates, forming DPO preference pairs.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">先讓模型在<b>海量合成物件</b>上學會「3D 長什麼樣」,再用<b>貼進真實照片</b>學會遮擋,最後靠<b>人類挑選+對齊</b>把它對齊到真實世界——資料與模型組成一個越轉越強的飛輪。</span>
+        <span data-lang="en">First teach the model "what 3D looks like" on <b>massive synthetic objects</b>, then teach occlusion by <b>pasting into real photos</b>, finally align to the real world via <b>human selection + posing</b>—data and model forming an ever-strengthening flywheel.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何用兩階段?</span><span data-lang="en">Why two stages?</span></span>
+        <span data-lang="zh">先由 Geometry 模型定<b>粗形狀 + 位姿</b>,再由 Texture &amp; Refinement 在其 active voxels 上<mark class="m-method" data-t="METHOD/IDEA">細化幾何並上材質</mark>。好處:粗形狀主導整體結構,材質階段不必負擔幾何,較少步數就穩定。</span>
+        <span data-lang="en">The Geometry model fixes <b>coarse shape + pose</b>; Texture &amp; Refinement then <mark class="m-method" data-t="METHOD/IDEA">refines geometry and paints texture</mark> on its active voxels. Payoff: coarse shape drives structure, so the texture stage needn't carry geometry and stabilizes in fewer steps.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">輸出是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">從分佈中取樣的「合理 3D」</mark>,看不見的背面由先驗腦補。這對「內容生成」極好,但用作「量測」需謹慎——它不是真值。</span>
+        <span data-lang="en">Outputs are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">plausible 3D sampled from a distribution</mark>; unseen back sides are inferred from priors. Excellent for content creation, but use with care as "measurement"—it is not ground truth.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">3D 形狀:對 image-to-3D SOTA(Tab.2)</span><span data-lang="en">3D shape vs image-to-3D SOTA (Tab.2)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">模型</span><span data-lang="en">Model</span></th><th>F1@0.01 ↑<br><small>SA-3DAO</small></th><th>vIoU ↑</th><th>Chamfer ↓</th><th>EMD ↓</th><th>Uni3D ↑<br><small>ISO3D</small></th></tr>
+          <tr><td>Trellis</td><td>0.1475</td><td>0.1392</td><td>0.0902</td><td>0.2131</td><td>0.3698</td></tr>
+          <tr><td>HY3D-2.0</td><td>0.1574</td><td>0.1504</td><td>0.0866</td><td>0.2049</td><td>0.3662</td></tr>
+          <tr><td>Direct3D-S2</td><td>0.1513</td><td>0.1465</td><td>0.0962</td><td>0.2160</td><td>0.3653</td></tr>
+          <tr><td>TripoSG</td><td>0.1533</td><td>0.1445</td><td>0.0844</td><td>0.2057</td><td>0.3687</td></tr>
+          <tr><td>Hi3DGen</td><td>0.1629</td><td>0.1531</td><td>0.0937</td><td>0.2134</td><td>0.3594</td></tr>
+          <tr><td class="win">SAM 3D</td><td class="win">0.2344</td><td class="win">0.2311</td><td class="win">0.0400</td><td class="win">0.1211</td><td class="win">0.3707</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">在困難真實集 SA-3DAO 上<mark class="m-result" data-t="RESULT/EVIDENCE">全面且大幅領先</mark>(F1 幾乎翻倍、Chamfer 減半);在乾淨孤立物件 ISO3D 上只是<b>持平或略勝</b>——這正是它的定位:<b>贏在真實、雜亂、遮擋</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">On the hard real set SA-3DAO it <mark class="m-result" data-t="RESULT/EVIDENCE">leads across the board by a wide margin</mark> (F1 nearly doubles, Chamfer halves); on clean isolated ISO3D it only <b>matches or slightly beats</b>—exactly its positioning: <b>wins where scenes are real, cluttered, occluded</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">3D 場景 layout(Tab.3,節選)</span><span data-lang="en">3D scene layout (Tab.3, excerpt)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th>3D IoU ↑<br><small>SA-3DAO</small></th><th>ADD-S@0.1 ↑<br><small>SA-3DAO</small></th><th>3D IoU ↑<br><small>ADT</small></th><th>ADD-S@0.1 ↑<br><small>ADT</small></th></tr>
+          <tr><td>HY3D-2.0 + FoundationPose <small>(pipeline)</small></td><td>0.2937</td><td>0.5396</td><td>0.3864</td><td>0.5992</td></tr>
+          <tr><td>SAM 3D + FoundationPose <small>(pipeline)</small></td><td>0.2837</td><td>0.5079</td><td>0.3661</td><td>0.6495</td></tr>
+          <tr><td>MIDI <small>(joint)</small></td><td>—</td><td>—</td><td class="bad">0.0336</td><td class="bad">0.0175</td></tr>
+          <tr><td class="win">SAM 3D <small>(joint)</small></td><td class="win">0.4254</td><td class="win">0.7232</td><td class="win">0.4970</td><td class="win">0.7673</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">SAM 3D 的<mark class="m-result" data-t="RESULT/EVIDENCE">聯合 shape+layout 生成</mark>大勝兩段式 pipeline 與聯合模型 MIDI;論文標誌性數字:<mark class="m-result" data-t="RESULT/EVIDENCE">ADD-S@0.1 從 2% → 77%</mark>,是「真實世界聯合 layout」的新能力。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">SAM 3D's <mark class="m-result" data-t="RESULT/EVIDENCE">joint shape+layout generation</mark> beats both two-stage pipelines and the joint model MIDI; the headline number: <mark class="m-result" data-t="RESULT/EVIDENCE">ADD-S@0.1 from 2% → 77%</mark>—a new real-world joint-layout capability.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">人類偏好(Fig.8)</span><span data-lang="en">Human preference (Fig.8)</span></h3>
+        <p data-lang="zh">在真實影像的 head-to-head 偏好測試中,SAM 3D <mark class="m-result" data-t="RESULT/EVIDENCE">單物件 ≥ 5:1</mark>、<mark class="m-result" data-t="RESULT/EVIDENCE">場景 ≈ 6:1</mark> 勝過前 SOTA。材質比較(給定 SAM 3D 形狀,只比材質)時,標註者也顯著偏好 SAM 3D。<span class="add">[導讀補充] 5:1 意即約 83% 的兩兩對決中被選為較佳。</span></p>
+        <p data-lang="en">In head-to-head preference tests on real images, SAM 3D beats prior SOTA by <mark class="m-result" data-t="RESULT/EVIDENCE">≥ 5:1 (single objects)</mark> and <mark class="m-result" data-t="RESULT/EVIDENCE">≈ 6:1 (scenes)</mark>. On texture (fixing SAM 3D shape, comparing only texture), annotators also strongly prefer SAM 3D. <span class="add">[guide note] 5:1 means chosen as better in ~83% of pairwise duels.</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融:多階段逐級加分(Tab.4)</span><span data-lang="en">Ablation: cascading multi-stage gains (Tab.4)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">訓練階段(累加)</span><span data-lang="en">Training stage (cumulative)</span></th><th>F1@0.01 ↑</th><th>Chamfer ↓</th><th><span data-lang="zh">材質勝率</span><span data-lang="en">Texture WR</span></th></tr>
+          <tr><td><span data-lang="zh">預訓練</span><span data-lang="en">Pretrain</span> (Iso-3DO)</td><td>0.1349</td><td>0.1036</td><td>—</td></tr>
+          <tr><td>+ Mid-train (RP-3DO)</td><td>0.1705</td><td>0.0760</td><td>60.7</td></tr>
+          <tr><td>+ SFT (MITL-3DO)</td><td>0.2027</td><td>0.0578</td><td>66.9</td></tr>
+          <tr><td>+ DPO (MITL-3DO)</td><td>0.2156</td><td>0.0498</td><td>66.4</td></tr>
+          <tr><td>+ SFT (Art-3DO)</td><td>0.2331</td><td>0.0445</td><td>—</td></tr>
+          <tr><td class="win">+ DPO (Art-3DO) = <span data-lang="zh">最終</span><span data-lang="en">final</span></td><td class="win">0.2344</td><td class="win">0.0400</td><td>—</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">近乎<mark class="m-result" data-t="RESULT/EVIDENCE">單調上升</mark>——每個階段(尤其 SFT MITL 與 Art-3DO)都實打實加分,驗證「合成→真實」多階段配方。這是全篇最有說服力的證據:<b>資料/訓練配方,而非單一巧思,撐起了效能</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Near-<mark class="m-result" data-t="RESULT/EVIDENCE">monotonic gains</mark>—each stage (esp. SFT MITL and Art-3DO) adds real value, validating the synthetic→real multi-stage recipe. The most convincing evidence in the paper: <b>the data/training recipe, not a single trick, carries performance</b>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/SAM3D/fig5_qualitative.png" alt="Figure 6 qualitative comparison">
+        <figcaption data-lang="zh"><b>Fig.5</b> 對競品的質性比較(SA-3DAO)。欄位:輸入影像 | Zoom-In(綠框為目標物件)| <b>SAM 3D(藍底)</b> | Trellis | HY3D-2.0 | Direct3D-S2 | TripoSG | Hi3DGen | <b>3D Artist(綠底=藝術家真值)</b>。留意<b>被遮擋的物件</b>(第 2 列折疊畫架、第 4 列被象群遮住的圓桌、第 5 列大象):baseline 產出破碎/殘缺的 mesh,SAM 3D 卻能補出完整、合理的形狀,最接近藝術家真值。</figcaption>
+        <figcaption data-lang="en"><b>Fig.5</b> Qualitative comparison (SA-3DAO). Columns: Input | Zoom-In (green outline = target) | <b>SAM 3D (blue)</b> | Trellis | HY3D-2.0 | Direct3D-S2 | TripoSG | Hi3DGen | <b>3D Artist (green = artist GT)</b>. Note the <b>occluded objects</b> (row 2 folding easel, row 4 round table hidden behind elephants, row 5 elephant): baselines yield broken/partial meshes, while SAM 3D completes a coherent shape closest to the artist GT.</figcaption></figure>
+
+      <div class="card" style="border-left:4px solid var(--c-assume); background:#fffdf3">
+        <h3 class="serif"><span data-lang="zh">實驗證明了什麼、沒證明什麼</span><span data-lang="en">What it proves / doesn't</span></h3>
+        <p data-lang="zh"><b>證明了</b>:在<b>遮擋/雜亂的真實影像</b>上,SAM 3D 的形狀、材質、layout 都遠勝現有方法(量化 + 大規模人類偏好);多階段訓練逐級有效。<br><b>沒完全證明</b>:<mark class="m-limit" data-t="LIMITATION/FUTURE">重建的「正確性」</mark>——因為缺乏真值,SA-3DAO 的「真值」本身是藝術家從單張影像的<b>估計</b>;偏好測試衡量的是「人覺得好看」而非「幾何正確」。</p>
+        <p data-lang="en"><b>Proves</b>: on <b>occluded/cluttered real images</b>, SAM 3D beats prior work on shape, texture, and layout (quantitatively + large-scale human preference); multi-stage training helps monotonically.<br><b>Doesn't fully prove</b>: <mark class="m-limit" data-t="LIMITATION/FUTURE">reconstruction "correctness"</mark>—lacking ground truth, SA-3DAO's "GT" is itself an artist's <b>estimate</b> from a single image; preference tests measure "looks good," not "geometrically correct."</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">在真實、遮擋、雜亂的影像上,形狀/材質/layout <b>三項全面領先</b>,人類偏好 5:1~6:1;且首度做到單張影像的<b>聯合 shape+layout</b> 生成。</span>
+        <span data-lang="en"><b>Leads across shape / texture / layout</b> on real, occluded, cluttered images, with 5:1–6:1 human preference; and is first to do <b>joint shape+layout</b> from a single image.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">讀數字時小心</span><span data-lang="en">Read numbers with care</span></div>
+        <span data-lang="zh">最亮眼的勝幅都在<mark class="m-limit" data-t="LIMITATION/FUTURE">作者自建的 SA-3DAO 與自辦的偏好測試</mark>上。在第三方、乾淨的 ISO3D 上,SAM 3D 只是持平或小勝(Uni3D 0.3707 vs 0.3698)。</span>
+        <span data-lang="en">The flashiest margins are on the <mark class="m-limit" data-t="LIMITATION/FUTURE">authors' own SA-3DAO and self-run preference tests</mark>. On third-party clean ISO3D, SAM 3D only matches or slightly wins (Uni3D 0.3707 vs 0.3698).</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">效率</span><span data-lang="en">Efficiency</span></div>
+        <span data-lang="zh" style="font-size:13.5px">蒸餾把 Geometry 模型的 NFE 從 25 → 4(甚至 1 步),<b>4 步 ≈ 10× 加速</b>,達到近乎即時的 shape+layout。</span>
+        <span data-lang="en" style="font-size:13.5px">Distillation cuts the Geometry model's NFE 25 → 4 (even 1 step), <b>~10× speedup at 4 steps</b>, for near-instant shape+layout.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">自建基準</span><span data-lang="en">self-benchmark</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">baseline 公平</span><span data-lang="en">fair baselines</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「真值」與模型共享同一種偏見</b>:SA-3DAO 的「GT」是<mark class="m-limit" data-t="LIMITATION/FUTURE">3D 藝術家從單張影像估計</mark>的 mesh;論文自承藝術家「靠辨識、常識先驗、對稱假設補齊看不見的背面」。這與模型的重建原理<b>如出一轍</b>——用同源的先驗當標準,可能系統性偏袒同樣走先驗路線的 SAM 3D。</li>
+          <li data-lang="en"><b>"Ground truth" shares the model's bias</b>: SA-3DAO's "GT" is a mesh <mark class="m-limit" data-t="LIMITATION/FUTURE">artists estimate from a single image</mark>; the paper admits artists "use recognition, commonsense priors, symmetry to fill unseen backs"—the very same principle as the model. Grading against a same-origin prior may systematically favor a prior-driven model like SAM 3D.</li>
+          <li data-lang="zh"><b>幻覺 vs 測量</b>:輸出是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">從 \(p(\cdot\mid I,M)\) 取樣的合理形狀</mark>,看不見處全靠腦補。對機器人抓取、量測等需要<b>幾何正確性</b>的下游,「看起來對」不等於「真的對」,論文未量化這種幻覺風險。</li>
+          <li data-lang="en"><b>Hallucination vs measurement</b>: outputs are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">plausible samples from \(p(\cdot\mid I,M)\)</mark>; unseen regions are invented. For downstream needing <b>geometric correctness</b> (robotic grasping, metrology), "looks right" ≠ "is right," and the paper doesn't quantify this hallucination risk.</li>
+          <li data-lang="zh"><b>baseline 公平性</b>:大勝幅來自 SA-3DAO,但 Trellis/Hunyuan3D 等<mark class="m-assume" data-t="ASSUMPTION/CLAIM">本就為孤立、無遮擋物件設計</mark>,拿去測遮擋場景本身吃虧。這比較的是「為此任務訓練 vs 未為此任務訓練」,而非純架構優劣。</li>
+          <li data-lang="en"><b>Baseline fairness</b>: the big margins come from SA-3DAO, but Trellis/Hunyuan3D etc. are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">designed for isolated, unoccluded objects</mark>; testing them on occluded scenes is inherently disadvantaged. This compares "trained for this task vs not," not architecture per se.</li>
+          <li data-lang="zh"><b>天價成本、難以複現</b>:~100 萬影像、7M+ 偏好、專業藝術家團隊、\(2.5+2.7+0.5\) 兆 tokens 的訓練。<mark class="m-limit" data-t="LIMITATION/FUTURE">學術界幾乎無法複現或公平對比</mark>;多少增益來自資料規模、多少來自方法,難以拆解。</li>
+          <li data-lang="en"><b>Enormous cost, hard to reproduce</b>: ~1M images, 7M+ preferences, a pro-artist team, \(2.5+2.7+0.5\) trillion training tokens. <mark class="m-limit" data-t="LIMITATION/FUTURE">Academia can barely reproduce or compare fairly</mark>; how much gain is data scale vs method is hard to disentangle.</li>
+          <li data-lang="zh"><b>作者坦承的限制</b>:(1) 解析度受限(voxel \(64^3\)、每 voxel ≤32 splats)→ <mark class="m-limit" data-t="LIMITATION/FUTURE">細瘦結構、手/臉易失真</mark>;(2) <mark class="m-limit" data-t="LIMITATION/FUTURE">逐物件預測,不做物理推理</mark>(接觸、穿模、共地面)→ 場景可能物理不一致;(3) 材質不知位姿 → 旋轉對稱物可能<mark class="m-limit" data-t="LIMITATION/FUTURE">貼錯朝向</mark>。</li>
+          <li data-lang="en"><b>Author-acknowledged limits</b>: (1) resolution caps (voxel \(64^3\), ≤32 splats/voxel) → <mark class="m-limit" data-t="LIMITATION/FUTURE">thin structures, hands/faces distort</mark>; (2) <mark class="m-limit" data-t="LIMITATION/FUTURE">per-object prediction, no physical reasoning</mark> (contact, interpenetration, shared ground) → scenes may be physically inconsistent; (3) texture is pose-unaware → rotationally symmetric objects can get <mark class="m-limit" data-t="LIMITATION/FUTURE">mis-oriented texture</mark>.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>自建基準的效度</b>:若在一個<b>有真實 3D 掃描真值</b>的獨立資料集上評測(而非藝術家估計),SAM 3D 的領先幅度還會這麼大嗎?</li>
+          <li data-lang="en"><b>Validity of the self-benchmark</b>: on an independent set with <b>real 3D-scan ground truth</b> (not artist estimates), would SAM 3D's lead remain this large?</li>
+          <li data-lang="zh"><b>幻覺的代價</b>:對同一物件多次取樣,背面/被遮處的變異有多大?能否量化「先驗腦補」在需要幾何正確的下游任務(抓取)上的錯誤率?</li>
+          <li data-lang="en"><b>Cost of hallucination</b>: sampling the same object multiple times, how much do unseen/occluded regions vary? Can the "prior-inpainting" error be quantified on geometry-critical downstream (grasping)?</li>
+          <li data-lang="zh"><b>比較的公平面</b>:若把 Trellis/Hunyuan3D 也用 render-paste + MITL 資料微調,差距會縮小多少?贏的是「方法」還是「為此任務造的資料」?</li>
+          <li data-lang="en"><b>Fairness of comparison</b>: if Trellis/Hunyuan3D were also fine-tuned on render-paste + MITL data, how much would the gap shrink? Is the win "method" or "task-specific data"?</li>
+          <li data-lang="zh"><b>資料 vs 方法</b>:在固定資料規模下,MoT 兩流架構相對單流/普通 transformer 的淨貢獻有多少?論文缺此對照。</li>
+          <li data-lang="en"><b>Data vs method</b>: at fixed data scale, what's the net contribution of the MoT two-stream design vs single-stream/plain transformer? The paper lacks this control.</li>
+          <li data-lang="zh"><b>飛輪的偏差累積</b>:最終 ~80% 資料由模型自己產生,是否會<b>自我強化偏見</b>(模型愛做的形狀被過度取樣)?長期是否收斂到某種風格?</li>
+          <li data-lang="en"><b>Flywheel bias accumulation</b>: ~80% of final data is model-generated—does this <b>self-reinforce biases</b> (over-sampling shapes the model likes)? Does it converge to a house style over time?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 SAM 3D 當成「精確的 3D 掃描器」。它其實是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">辨識驅動的生成器</mark>:給你一個「符合這張照片、且符合世界常識」的合理 3D。對內容生成/AR/遊戲極佳;對「我要正確的物理尺寸與背面幾何」則需額外驗證(或給它 pointmap/多視角)。</span>
+        <span data-lang="en">Treating SAM 3D as a "precise 3D scanner." It's a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">recognition-driven generator</mark>: it gives a plausible 3D "consistent with this photo and with world priors." Superb for content/AR/gaming; for "exact physical size and back-side geometry" you need extra verification (or feed it a pointmap/multi-view).</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">Limitations 寫得坦白(解析度、無物理推理、材質朝向),且對<b>遮罩精度的敏感性做了 robustness 分析</b>(過/欠分割皆可)。多階段消融(Tab.4)也誠實展示每一步的邊際貢獻。</span>
+        <span data-lang="en">The Limitations are candid (resolution, no physics, texture orientation), and there's a <b>robustness analysis to mask precision</b> (over/under-segmentation both OK). The cascading ablation (Tab.4) honestly shows each step's marginal contribution.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「把生成問題轉成驗證問題」是通用的造資料招式</b>:當某模態的標註太難(3D mesh、複雜結構),不妨讓模型產候選、讓人做 best-of-N 選擇 + 對齊,再把偏好轉成 SFT/DPO 資料。這套 model-in-the-loop 飛輪可移植到其他「難以直接標註」的領域。</li>
+          <li data-lang="en"><b>"Turn generation into verification" is a general data-making move</b>: when annotation is too hard (3D meshes, complex structures), let the model propose candidates, let humans do best-of-N selection + alignment, and convert preferences into SFT/DPO data. This model-in-the-loop flywheel transfers to other "hard-to-annotate" domains.</li>
+          <li data-lang="zh"><b>LLM 的訓練配方可跨模態搬運</b>:pretrain → mid-train → SFT → DPO → distill 這條線,在 3D 上同樣有效(Tab.4 近單調)。做新模態的基礎模型時,值得直接借這套「合成打底、真實對齊」的階梯。</li>
+          <li data-lang="en"><b>The LLM training recipe ports across modalities</b>: pretrain → mid-train → SFT → DPO → distill works in 3D too (near-monotonic in Tab.4). For a new-modality foundation model, borrow this "synthetic base, real alignment" ladder.</li>
+          <li data-lang="zh"><b>與幾何模型互補而非取代</b>:SAM 3D 可<b>選配吃 pointmap</b>(來自 LiDAR 或 VGGT/MoGe 類單目幾何)。務實的 pipeline 是:幾何模型給 2.5D 骨架,SAM 3D 補出完整物件——組合出既接地又完整的場景。</li>
+          <li data-lang="en"><b>Complements, not replaces, geometry models</b>: SAM 3D <b>optionally consumes a pointmap</b> (from LiDAR or VGGT/MoGe-style monocular geometry). A pragmatic pipeline: geometry model gives the 2.5D scaffold, SAM 3D completes full objects—yielding a scene that is both grounded and complete.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「單張影像可重建 in-the-wild 完整 3D」</span><span data-lang="en">"single-image full 3D works in the wild"</span></td><td><span data-lang="zh">作為遮擋/雜亂真實場景的代表性正面證據。</span><span data-lang="en">A flagship positive example on occluded/cluttered real scenes.</span></td></tr>
+          <tr><td><span data-lang="zh">「用人機協作 + best-of-N 規模化造資料」</span><span data-lang="en">"MITL + best-of-N scales annotation"</span></td><td><span data-lang="zh">引其資料引擎與飛輪(生成→驗證的範式)。</span><span data-lang="en">Cite the data engine and flywheel (generation→verification paradigm).</span></td></tr>
+          <tr><td><span data-lang="zh">「Segment Anything 家族延伸到 3D」</span><span data-lang="en">"Segment Anything extends to 3D"</span></td><td><span data-lang="zh">SAM/SAM 2/SAM 3 出遮罩,SAM 3D 把每個遮罩舉到 3D。</span><span data-lang="en">SAM/SAM 2/SAM 3 give masks; SAM 3D lifts each mask to 3D.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">SAM 3D 把「單張影像的完整 3D」從<b>幾何測量問題</b>改寫成<b>辨識式生成問題</b>,並用一套「人挑選、模型生成」的 MITL 資料引擎 + LLM 式多階段訓練<b>破解 3D 資料瓶頸</b>。它是 Segment Anything 家族的 3D 化身:給遮罩,還你一個合理、完整、可組合的 3D 世界——真正的價值不在網路,而在<b>造資料的方法論</b>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">SAM 3D rewrites "full 3D from one image" from a <b>geometry-measurement problem</b> into a <b>recognition-based generation problem</b>, and <b>breaks the 3D data barrier</b> with a "humans select, model generates" MITL data engine + LLM-style multi-stage training. It's the 3D incarnation of Segment Anything: give it a mask, get back a plausible, complete, composable 3D world—its real value is not the network but the <b>data-making methodology</b>.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">SAM / SAM 2 / SAM 3</span>
+          <span class="chip">Trellis (structured latents)</span>
+          <span class="chip">VGGT / MoGe (geometry)</span>
+          <span class="chip">DPO · RAFT</span>
+          <span class="chip">Mixture-of-Transformers</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">與相關工作的關係</span><span data-lang="en">Relation to related work</span></span>
+        <span data-lang="zh" style="font-size:13.5px"><b>vs 幾何模型(VGGT/DUSt3R/MoGe)</b>:它們回復<b>可見的 2.5D 場景</b>幾何(多視角/單目深度);SAM 3D 生成<b>完整、含背面</b>的單物件 3D,靠先驗而非測量。兩者互補,SAM 3D 甚至能吃它們的 pointmap。<br><b>vs SAM 3</b>:SAM 3 做 2D 概念分割;SAM 3D 是下游把每個遮罩「3D 化」的那一環。</span>
+        <span data-lang="en" style="font-size:13.5px"><b>vs geometry models (VGGT/DUSt3R/MoGe)</b>: they recover <b>visible 2.5D scene</b> geometry (multi-view/monocular depth); SAM 3D generates <b>full, back-inclusive</b> per-object 3D via priors, not measurement. Complementary—SAM 3D can even consume their pointmaps.<br><b>vs SAM 3</b>: SAM 3 does 2D concept segmentation; SAM 3D is the downstream "3D-ify each mask" stage.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · SAM 3D Team 2025 (SAM 3D: 3Dfy Anything in Images) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'SAM 3D reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

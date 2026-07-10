@@ -165,3 +165,7 @@ Embed this near the top of every guide so `build_index.py` can list it:
 ```
 
 JSON must use double quotes inside; wrap the attribute in single quotes.
+**Escape any apostrophe as `&#39;`** — a raw `'` in the content closes the
+single-quoted attribute and silently breaks that paper's index card (the JSON
+fails to parse, so the card falls back to title-only and loses its tags/tldr).
+For bilingual guides also include a `tldr_en` key (English one-liner).

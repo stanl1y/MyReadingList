@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Segment Anything (SAM) — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Segment Anything","authors":"Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C. Berg, Wan-Yen Lo, Piotr Dollár, Ross Girshick","year":"2023","venue":"ICCV","tags":["Segment Anything","Foundation Model","Image Segmentation","Promptable Segmentation","Zero-shot Transfer","SA-1B","Data Engine","ViT"],"tldr":"SAM 提出「可提示分割 (promptable segmentation)」新任務、一個可即時互動的分割模型,並用「資料引擎」自動標出 SA-1B(11M 影像、1.1B masks),打造出能零樣本遷移到多種分割任務的視覺基礎模型。","tldr_en":"SAM introduces a new promptable-segmentation task, a real-time interactive model, and a data engine that auto-labels SA-1B (11M images, 1.1B masks), yielding a segmentation foundation model that transfers zero-shot to many tasks via prompt engineering."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:120px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.05em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">Segment Anything(SA)專案想把「影像分割」帶進<b>基礎模型(foundation model)</b>時代,靠三個互相扣連的元件:一個新<b>任務</b>(可提示分割 promptable segmentation)、一個能<b>即時互動</b>的模型 <b>SAM</b>、以及一個用「<b>資料引擎</b>」自動標註出的巨型資料集 <b>SA-1B</b>(1,100 萬影像、11 億 masks)。訓練完的 SAM 能靠 <mark class="m-method" data-t="METHOD/IDEA">prompt engineering</mark> <mark class="m-result" data-t="RESULT/EVIDENCE">零樣本(zero-shot)遷移</mark>到邊緣偵測、物件提議、實例分割等它沒被訓練過的任務。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">The Segment Anything (SA) project aims to bring image segmentation into the era of <b>foundation models</b> via three interlocking pieces: a new <b>task</b> (promptable segmentation), a <b>real-time interactive</b> model, <b>SAM</b>, and a giant dataset, <b>SA-1B</b> (11M images, 1.1B masks), auto-labeled by a <b>data engine</b>. Once trained, SAM <mark class="m-result" data-t="RESULT/EVIDENCE">transfers zero-shot</mark> via <mark class="m-method" data-t="METHOD/IDEA">prompt engineering</mark> to tasks it was never trained on—edge detection, object proposals, instance segmentation, and more.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/SAMv1/fig1_teaser.png" alt="Figure 1 teaser: task, model, data">
+        <figcaption data-lang="zh"><b>Fig.1</b> 三個互相扣連的元件。(a) <b>任務</b>:給任意 prompt(前景/背景點、框、mask、文字)輸出「有效 mask」;(b) <b>模型 SAM</b>:重量級 image encoder + 輕量 prompt encoder / mask decoder;(c) <b>資料</b>:data engine(模型與標註互相迭代)產出 SA-1B。<b>要注意</b>:模型、任務、資料是被<b>共同設計</b>的,彼此互為條件。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> Three interconnected components. (a) <b>Task</b>: given any prompt (fg/bg points, box, mask, text), output a "valid mask"; (b) <b>Model SAM</b>: a heavyweight image encoder + lightweight prompt encoder / mask decoder; (c) <b>Data</b>: a data engine (model and annotation co-iterate) produces SA-1B. <b>Notice</b> that task, model, and data are <b>co-designed</b>, each conditioning the others.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — NLP 的基礎模型(GPT/CLIP)靠 web-scale 資料 + prompt 達成強泛化,但<mark class="m-problem" data-t="PROBLEM/GAP">影像分割沒有 web-scale 的 mask 資料</mark>,而且既有模型多是「一個模型解一個固定任務」,難以零樣本遷移。</li>
+          <li data-lang="en"><b>Problem</b> — NLP foundation models (GPT/CLIP) generalize via web-scale data + prompting, but <mark class="m-problem" data-t="PROBLEM/GAP">segmentation has no web-scale mask data</mark>, and existing models mostly solve a single fixed task, resisting zero-shot transfer.</li>
+          <li data-lang="zh"><b>任務</b> — 定義 <mark class="m-method" data-t="METHOD/IDEA">promptable segmentation</mark>:對任意 prompt 都要輸出一個「合理的 valid mask」,即使 prompt 有歧義(點在襯衫上 → 襯衫或人都算對)。這個任務同時當<b>預訓練目標</b>與<b>下游遷移</b>的介面。</li>
+          <li data-lang="en"><b>Task</b> — Define <mark class="m-method" data-t="METHOD/IDEA">promptable segmentation</mark>: for any prompt, return a reasonable valid mask, even when ambiguous (a point on a shirt → shirt or person both count). This serves as both the <b>pre-training objective</b> and the <b>downstream interface</b>.</li>
+          <li data-lang="zh"><b>模型 + 資料</b> — SAM = <mark class="m-method" data-t="METHOD/IDEA">MAE 預訓練 ViT-H image encoder</mark> + 輕量 prompt/mask decoder,給定影像 embedding 後對每個 prompt 僅需 <b>~50ms</b>。用「資料引擎」由<b>人工 → 半自動 → 全自動</b>三階段滾出 <mark class="m-result" data-t="RESULT/EVIDENCE">SA-1B:11M 影像、1.1B masks(比既有最大資料集多 400 倍)</mark>。</li>
+          <li data-lang="en"><b>Model + Data</b> — SAM = an <mark class="m-method" data-t="METHOD/IDEA">MAE-pretrained ViT-H image encoder</mark> + a lightweight prompt/mask decoder; given an image embedding, each prompt costs only <b>~50ms</b>. A three-stage data engine (manual → semi-automatic → fully automatic) rolls out <mark class="m-result" data-t="RESULT/EVIDENCE">SA-1B: 11M images, 1.1B masks (400× more than any prior dataset)</mark>.</li>
+          <li data-lang="zh"><b>結果</b> — 單一前景點分割在 23 個資料集上<mark class="m-result" data-t="RESULT/EVIDENCE">勝過最強互動式分割器 RITM(16/23,oracle 下 23/23)</mark>;零樣本遷移到邊緣偵測、物件提議、實例分割、文字轉 mask 都有可觀表現,常逼近甚至(人評下)超越全監督方法。</li>
+          <li data-lang="en"><b>Results</b> — Single-point segmentation <mark class="m-result" data-t="RESULT/EVIDENCE">beats the strongest interactive segmenter RITM on 16/23 datasets (23/23 under an oracle)</mark>; zero-shot transfer to edge detection, object proposals, instance segmentation, and text-to-mask is strong—often nearing or (by human ratings) exceeding fully supervised methods.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">在 NLP,<mark class="m-method" data-t="METHOD/IDEA">大型語言模型(GPT-3)</mark>證明:在 web-scale 語料上做 next-token 預訓練,再用 <b>prompt engineering</b> 就能零/少樣本解新任務。視覺上,<mark class="m-method" data-t="METHOD/IDEA">CLIP/ALIGN</mark> 用對比學習對齊文字與影像,讓工程化的文字 prompt 能零樣本辨識新概念。但這些主要是「編碼器 / 對齊」,<mark class="m-problem" data-t="PROBLEM/GAP">視覺還有大量問題(如密集分割)缺乏充足訓練資料</mark>。</p>
+        <p data-lang="en">In NLP, <mark class="m-method" data-t="METHOD/IDEA">large language models (GPT-3)</mark> showed that next-token pre-training on web-scale corpora plus <b>prompt engineering</b> solves new tasks zero/few-shot. In vision, <mark class="m-method" data-t="METHOD/IDEA">CLIP/ALIGN</mark> align text and images by contrastive learning, letting engineered text prompts recognize novel concepts zero-shot. But these are mostly encoders/alignment; <mark class="m-problem" data-t="PROBLEM/GAP">many vision problems (e.g., dense segmentation) still lack abundant training data</mark>.</p>
+        <p data-lang="zh">分割本身是個龐雜領域:互動式分割、邊緣偵測、物件提議、前景分割、語義/實例/全景分割……過去多為「單一模型、固定任務」。SAM 想做的不是再多一個分割器,而是一個能<mark class="m-method" data-t="METHOD/IDEA">被組合(composed)進更大系統、透過 prompt 適應多種任務</mark>的分割基礎模型。</p>
+        <p data-lang="en">Segmentation is itself a sprawling field: interactive segmentation, edge detection, object proposals, foreground segmentation, semantic/instance/panoptic segmentation… traditionally "one model, one fixed task." SAM's goal is not another segmenter but a segmentation foundation model that can be <mark class="m-method" data-t="METHOD/IDEA">composed into larger systems and adapted to many tasks via prompting</mark>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的精神是把 <b>GPT/CLIP 的「任務可提示 + 資料規模化」配方</b>移植到分割。最大的創新其實不在模型架構(設計刻意簡單),而在<b>「任務 × 資料引擎」</b>:先定義一個能當預訓練目標又能當下游介面的任務,再用「模型參與標註」的飛輪把資料規模從沒有做到 11 億。<b>模型是手段,任務與資料才是主角。</b></p>
+          <p data-lang="en" style="margin-top:6px">The spirit is to port the <b>GPT/CLIP recipe (promptable tasks + data scaling)</b> to segmentation. The key novelty is not the architecture (deliberately simple) but the <b>"task × data engine"</b>: first define a task that doubles as pre-training objective and downstream interface, then use a model-in-the-loop flywheel to scale data from nothing to 1.1B masks. <b>The model is the means; the task and data are the stars.</b></p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不只是「一個好用的分割工具」,而是底下這幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not just "a handy segmentation tool" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">任務即介面。</b> 「輸出 valid mask」這個可提示任務,<mark class="m-method" data-t="METHOD/IDEA">同時是預訓練目標,也是下游遷移的通用介面</mark>——把新任務轉譯成「餵什麼 prompt」,而非重新訓練。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">The task is the interface.</b> The promptable "output a valid mask" objective is <mark class="m-method" data-t="METHOD/IDEA">both the pre-training target and a universal downstream interface</mark>—new tasks become "what prompt to feed," not retraining.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">資料引擎是真正的護城河。</b> 沒有 web-scale mask,就用「模型幫忙標、標好再訓模型」的飛輪:<mark class="m-result" data-t="RESULT/EVIDENCE">99.1% 的 masks 是全自動產生的</mark>,規模達 1.1B。<b>資料規模化的方法本身,就是貢獻。</b></li>
+          <li data-lang="en"><b style="color:var(--c-method)">The data engine is the real moat.</b> With no web-scale masks, use a flywheel—model assists labeling, labels train the model: <mark class="m-result" data-t="RESULT/EVIDENCE">99.1% of masks are generated fully automatically</mark>, reaching 1.1B. <b>The data-scaling method is itself the contribution.</b></li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">刻意處理歧義。</b> 一個點可能指襯衫也可能指人;SAM <mark class="m-method" data-t="METHOD/IDEA">一次輸出 3 個 mask(整體 / 部件 / 子部件)</mark>並各給信心分,而不是硬平均成一團糊。這對「valid mask」定義是關鍵。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Ambiguity is handled by design.</b> A point may mean the shirt or the person; SAM <mark class="m-method" data-t="METHOD/IDEA">outputs 3 masks (whole / part / subpart)</mark> each with a confidence score, instead of averaging into mush. This is central to the "valid mask" definition.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">攤提(amortize)成本的架構。</b> 把「重」放進只跑一次的 image encoder,把「輕」留給每個 prompt(~50ms)。<mark class="m-result" data-t="RESULT/EVIDENCE">同一張影像的 embedding 可被無數 prompt 重用</mark>,才可能瀏覽器內即時互動。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">An amortized architecture.</b> Put the "heavy" in a once-per-image encoder and keep the "light" per prompt (~50ms). <mark class="m-result" data-t="RESULT/EVIDENCE">One image embedding is reused across countless prompts</mark>, enabling real-time interaction in a browser.</li>
+          <li data-lang="zh"><b style="color:var(--c-limit)">分割 ≠ 辨識。</b> SAM 輸出的是<b>不帶語義標籤</b>的 mask——它「切得出任何東西,卻叫不出名字」。要做語義/實例任務仍需外接偵測器或 CLIP。這既是設計選擇,也是它的邊界。</li>
+          <li data-lang="en"><b style="color:var(--c-limit)">Segmentation ≠ recognition.</b> SAM outputs <b>label-free</b> masks—it can "cut out anything but names nothing." Semantic/instance tasks still need an external detector or CLIP. This is both a design choice and its boundary.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Segment Anything</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Kirillov, Mintun, Ravi, Mao, Rolland, Gustafson, Xiao, Whitehead, Berg, Lo, Dollár, Girshick</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Meta AI Research (FAIR)</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2023 · ICCV(arXiv:2304.02643)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.CV · Image Segmentation</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>segment-anything.com · github.com/facebookresearch/segment-anything</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「分割」從「訓一個模型解一個任務」重新定義成「<b>訓一個可提示基礎模型 + 用 prompt 組合出任務</b>」。並免費釋出 1.1B masks 的 SA-1B 與 Apache-2.0 的 SAM,直接改變了整個電腦視覺社群的工作流。<span class="add">[導讀補充] SAM 已成為無數下游工作(SAM 2/3、Grounded-SAM、醫療 SAM…)的基石。</span></span>
+        <span data-lang="en">Reframes segmentation from "train one model per task" to "<b>train one promptable foundation model, then compose tasks via prompts</b>." Freely releasing SA-1B (1.1B masks) and SAM (Apache-2.0) reshaped the CV community's workflow. <span class="add">[guide note] SAM has become the basis for countless follow-ups (SAM 2/3, Grounded-SAM, medical SAM…).</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Promptable Segmentation</span><span class="chip">Valid mask</span>
+          <span class="chip">Data engine</span><span class="chip">SA-1B</span>
+          <span class="chip">MAE ViT-H</span><span class="chip">Zero-shot transfer</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">互動式分割</span><span data-lang="en">Interactive segmentation</span></b><br>(RITM, FocalClick)</td><td><span data-lang="zh">目標是「多點幾下後最終切好<b>一個</b> mask」,<mark class="m-problem" data-t="PROBLEM/GAP">為人類使用者設計、綁定 human-in-loop</mark>,也不處理歧義、無法零樣本當別的任務用。</span><span data-lang="en">Aims to eventually cut <b>one</b> mask after enough clicks; <mark class="m-problem" data-t="PROBLEM/GAP">designed for human users, tied to a human-in-loop</mark>, ignores ambiguity, and can't be repurposed zero-shot as other tasks.</span></td></tr>
+          <tr><td><b><span data-lang="zh">語義 / 實例 / 全景分割</span><span data-lang="en">Semantic / instance / panoptic</span></b><br>(Mask R-CNN, Mask2Former)</td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">固定標籤集、固定任務</mark>;訓練與測試任務相同,換新分佈或新任務就要重新標註、重新訓練。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Fixed label set, fixed task</mark>; train and test tasks are identical, so a new distribution or task means re-annotating and retraining.</span></td></tr>
+          <tr><td><b><span data-lang="zh">視覺基礎模型</span><span data-lang="en">Vision foundation models</span></b><br>(CLIP, ALIGN)</td><td><span data-lang="zh">對齊文字與影像很強,但<mark class="m-problem" data-t="PROBLEM/GAP">不輸出密集 mask</mark>;而且分割缺乏 CLIP 那種 web-scale(影像-文字)的天然監督。</span><span data-lang="en">Great at text-image alignment but <mark class="m-problem" data-t="PROBLEM/GAP">don't output dense masks</mark>; and segmentation lacks CLIP-style web-scale (image-text) natural supervision.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">論文把問題拆成三個彼此糾纏的子問題:<b>(1) 什麼任務能帶來零樣本泛化?(2) 對應的模型架構是什麼?(3) 什麼資料能餵養這個任務與模型?</b></p>
+        <p data-lang="en" style="margin-top:14px">The paper factors the problem into three entangled sub-questions: <b>(1) What task enables zero-shot generalization? (2) What is the corresponding model architecture? (3) What data can power this task and model?</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,SAM 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how SAM fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">缺口</span><span data-lang="en">Gap</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">SAM 如何補上</span><span data-lang="en">How SAM fills it</span></th></tr>
+          <tr>
+            <td><b><span data-lang="zh">缺「可遷移的任務」</span><span data-lang="en">No transferable task</span></b></td>
+            <td><span data-lang="zh">既有分割任務彼此獨立、無共用預訓練目標。</span><span data-lang="en">Segmentation tasks are siloed, no shared pre-training objective.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">promptable segmentation</mark>:一個任務兼做預訓練與下游介面。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Promptable segmentation</mark>: one task as both pre-training and downstream interface.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">缺「即時互動」</span><span data-lang="en">No real-time interaction</span></b></td>
+            <td><span data-lang="zh">重模型難以在互動場景即時回應 prompt。</span><span data-lang="en">Heavy models can't respond to prompts in real time.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">攤提架構</mark>:image encoder 跑一次,prompt/decoder ~50ms。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Amortized design</mark>: encoder runs once, prompt/decoder ~50ms.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">缺「大規模 mask 資料」</span><span data-lang="en">No large-scale mask data</span></b></td>
+            <td><span data-lang="zh">網路上 mask 稀少;最大資料集僅百萬級 masks。</span><span data-lang="en">Masks are scarce online; the largest datasets have only millions of masks.</span></td>
+            <td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">資料引擎 → SA-1B 1.1B masks</mark>(400× 於既有)。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Data engine → SA-1B, 1.1B masks</mark> (400× prior).</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">缺「歧義處理」</span><span data-lang="en">No ambiguity handling</span></b></td>
+            <td><span data-lang="zh">單一輸出會把多個合理解答平均成糊。</span><span data-lang="en">A single output averages multiple valid answers into mush.</span></td>
+            <td><span data-lang="zh">一次<mark class="m-method" data-t="METHOD/IDEA">輸出 3 個 mask + IoU 信心分</mark>(整體/部件/子部件)。</span><span data-lang="en">Outputs <mark class="m-method" data-t="METHOD/IDEA">3 masks + IoU confidence</mark> (whole/part/subpart).</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這裡的痛點不是「精度不夠」,而是<b>「不可遷移、不可規模化、不可即時」</b>——都是<b>系統與資料</b>層次的問題,而非某個 loss 或 backbone。這解釋了為何論文的重心放在「任務定義 + 資料引擎」,模型反而刻意保持簡單。這是一種「<b>用工程與資料換泛化</b>」的賭注。</p>
+          <p data-lang="en" style="margin-top:6px">Note the pain points aren't "not accurate enough" but <b>"not transferable, not scalable, not real-time"</b>—all <b>systems-and-data</b> problems, not a loss or backbone. That's why the paper centers on "task definition + data engine" and keeps the model deliberately simple. It's a bet on <b>trading engineering and data for generalization</b>.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把「zero-shot」讀成 CLIP 那種「<b>沒見過的概念</b>」。SAM 的 zero-shot 主要是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">任務遷移(task transfer)</mark>:分割「切東西」的能力是被 1.1B masks <b>大量監督</b>過的,新的只是「拿去做邊緣/提議/實例」這些任務。它不是「沒學過分割」。</span>
+        <span data-lang="en">Don't read "zero-shot" like CLIP's "<b>unseen concepts</b>." SAM's zero-shot is mainly <mark class="m-assume" data-t="ASSUMPTION/CLAIM">task transfer</mark>: the "cut things out" skill was <b>heavily supervised</b> on 1.1B masks; what's new is repurposing it for edge/proposal/instance tasks. It has hardly "never seen segmentation."</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">若三個子問題能被一起解掉,分割就能像 NLP 一樣「先預訓練一次、之後靠 prompt 解一切」,大幅降低每個新應用的標註與訓練成本——這是把 CV 帶進基礎模型時代的一塊關鍵拼圖。</span>
+        <span data-lang="en">If all three sub-questions are solved together, segmentation can work like NLP—"pre-train once, then prompt for everything"—slashing the annotation/training cost of each new application, a key piece in bringing CV into the foundation-model era.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">資料循環性</span><span data-lang="en">data circularity</span></span><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">zero-shot 名實</span><span data-lang="en">zero-shot label</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">任務:可提示分割與其預訓練</span><span data-lang="en">Task: promptable segmentation &amp; its pre-training</span></h3>
+        <p data-lang="zh">給定影像 \(I\) 與任意 prompt \(p\)(前景/背景點、框、粗略 mask、或文字),模型 \(f\) 要輸出一個 <b>valid mask</b>:</p>
+        <p data-lang="en">Given an image \(I\) and any prompt \(p\) (fg/bg points, a box, a coarse mask, or text), the model \(f\) must output a <b>valid mask</b>:</p>
+        <div class="eq">$$f(I,\,p)\;=\;M,\qquad p\in\{\text{points},\,\text{box},\,\text{mask},\,\text{text}\}$$</div>
+        <p data-lang="zh">「valid」的定義很關鍵:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">即使 \(p\) 有歧義(可指多個物件),輸出至少要是其中一個物件的合理 mask</mark>。預訓練時<mark class="m-method" data-t="METHOD/IDEA">模擬互動</mark>:對每個訓練 mask 隨機採樣一連串 prompt(共 11 輪),把預測與 ground truth 比對——這自然地成為一個強的預訓練目標,也讓 SAM 能無縫嵌入資料引擎。</p>
+        <p data-lang="en">The "valid" clause is key: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">even if \(p\) is ambiguous (could refer to several objects), the output must be a reasonable mask for at least one of them</mark>. Pre-training <mark class="m-method" data-t="METHOD/IDEA">simulates interaction</mark>: for each training mask, sample a sequence of prompts (11 rounds) and compare predictions to ground truth—a strong pre-training objective that also lets SAM slot into the data engine.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">下游遷移完全靠 <b>prompt engineering</b>:例如有一個貓的偵測框,就把框當 prompt 餵給 SAM,即得貓的實例 mask。任務層次的泛化,而非只是分佈泛化。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Downstream transfer is pure <b>prompt engineering</b>: e.g., feed a cat detector's box as a prompt to get the cat's instance mask. Task-level generalization, not merely distribution shift.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">模型 SAM:三個元件</span><span data-lang="en">The SAM model: three components</span></h3>
+        <figure class="fig"><img src="figs/SAMv1/fig2_architecture.png" alt="Figure 4 SAM architecture">
+          <figcaption data-lang="zh"><b>Fig.2</b>(原文 Fig.4)SAM 架構。<b>重</b>的 image encoder 只跑一次產生 image embedding;之後各種 prompt(mask/點/框/文字)經 prompt encoder,與 embedding 在<b>輕量</b> mask decoder 中融合,對每個 prompt 即時輸出多個 mask 與 score。<b>要注意</b>:重擔在左(一次),互動在右(每個 prompt ~50ms)——這正是能瀏覽器內即時的關鍵。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> (paper's Fig.4) SAM architecture. The <b>heavy</b> image encoder runs once to make an image embedding; then prompts (mask/points/box/text) pass through the prompt encoder and fuse with the embedding in a <b>lightweight</b> mask decoder, emitting multiple masks + scores per prompt in real time. <b>Notice</b> the heavy work is on the left (once) and interaction on the right (~50ms per prompt)—the key to in-browser real-time use.</figcaption></figure>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>Image encoder</b> — <mark class="m-method" data-t="METHOD/IDEA">MAE 預訓練的 ViT-H/16</mark>(14×14 windowed + 4 個 global attention blocks),輸入 \(1024\times1024\),輸出 \(64\times64\times256\) 的 embedding(16× 下採樣)。只跑一次,故可放心堆 FLOPs。</li>
+          <li data-lang="en"><b>Image encoder</b> — an <mark class="m-method" data-t="METHOD/IDEA">MAE-pretrained ViT-H/16</mark> (14×14 windowed + 4 global attention blocks), input \(1024\times1024\), output a \(64\times64\times256\) embedding (16× downscaled). Runs once, so FLOPs are affordable.</li>
+          <li data-lang="zh"><b>Prompt encoder</b> — 稀疏 prompt 映射到 256 維:點 = 位置編碼 + 前景/背景 learned embedding;框 = 兩角 embedding;文字 = <mark class="m-method" data-t="METHOD/IDEA">CLIP text encoder</mark>。稠密 prompt(mask)以卷積下採樣後與 image embedding 逐元素相加。</li>
+          <li data-lang="en"><b>Prompt encoder</b> — sparse prompts map to 256-dim: a point = positional encoding + fg/bg learned embedding; a box = two-corner embeddings; text = the <mark class="m-method" data-t="METHOD/IDEA">CLIP text encoder</mark>. Dense prompts (masks) are conv-downsampled and added element-wise to the image embedding.</li>
+          <li data-lang="zh"><b>Mask decoder</b> — 輕量,改造自 Transformer decoder:用 <mark class="m-method" data-t="METHOD/IDEA">雙向 cross-attention(prompt↔image)</mark>更新所有 embedding,跑兩個 block,再上採樣 + MLP 產生一個動態線性分類器,對每個像素算前景機率。給定 embedding 後在 CPU/瀏覽器 <b>~50ms</b>。</li>
+          <li data-lang="en"><b>Mask decoder</b> — lightweight, a modified Transformer decoder: <mark class="m-method" data-t="METHOD/IDEA">two-way cross-attention (prompt↔image)</mark> updates all embeddings over two blocks, then upsampling + an MLP form a dynamic linear classifier giving a per-pixel foreground probability. ~<b>50ms</b> on CPU/browser given the embedding.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">歧義、損失與訓練</span><span data-lang="en">Ambiguity, losses &amp; training</span></h3>
+        <p data-lang="zh">面對歧義 prompt,SAM 一次預測 <mark class="m-method" data-t="METHOD/IDEA">3 個 mask</mark> \(\{M_1,M_2,M_3\}\)(對應整體/部件/子部件),訓練時只對<b>損失最小</b>的那個反向傳播:</p>
+        <p data-lang="en">For ambiguous prompts, SAM predicts <mark class="m-method" data-t="METHOD/IDEA">3 masks</mark> \(\{M_1,M_2,M_3\}\) (whole/part/subpart) and backprops only through the <b>minimum-loss</b> one:</p>
+        <div class="eq">$$\mathcal{L}_{\text{mask}}=\min_{k\in\{1,2,3\}}\Big(20\,\mathcal{L}_{\text{focal}}(M_k,M^\ast)+\mathcal{L}_{\text{dice}}(M_k,M^\ast)\Big)$$</div>
+        <p data-lang="zh">同時一個 IoU 預測頭以 MSE 學習估計每個 mask 的品質(當信心分用來排序):</p>
+        <p data-lang="en">An IoU-prediction head is trained with MSE to estimate each mask's quality (used as a confidence score for ranking):</p>
+        <div class="eq">$$\mathcal{L}_{\text{iou}}=\big(\widehat{\text{IoU}}(M_k)-\text{IoU}(M_k,M^\ast)\big)^2$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">focal:dice = 20:1。訓練:AdamW,ViT-H,batch 256,約 90k iters(≈2 個 SA-1B epoch)。<span class="add">[導讀補充] 上面兩式的符號組合是依原文文字描述(focal+dice 20:1、min-over-masks、IoU 用 MSE)整理成的形式化寫法,原論文正文未列出方程式。</span></p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">focal:dice = 20:1. Training: AdamW, ViT-H, batch 256, ~90k iters (≈2 SA-1B epochs). <span class="add">[guide note] The two equations above are a formalization of the paper's prose (focal+dice 20:1, min-over-masks, IoU via MSE); the main text does not print equations.</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">資料引擎:三階段飛輪</span><span data-lang="en">Data engine: a three-stage flywheel</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph">STAGE 1</span><b><span data-lang="zh">輔助人工</span><span data-lang="en">Assisted-manual</span></b><small><span data-lang="zh">標註員用 SAM 工具點選 + 筆刷修;模型重訓 6 次,標註 34→14 秒/mask。<b>4.3M masks / 120k 影像。</b></span><span data-lang="en">Annotators click + brush with SAM; retrained 6×, time 34→14 s/mask. <b>4.3M masks / 120k images.</b></span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph">STAGE 2</span><b><span data-lang="zh">半自動</span><span data-lang="en">Semi-automatic</span></b><small><span data-lang="zh">先自動填入有信心的 mask,標註員只補剩下的,提升多樣性。<b>+5.9M(共 10.2M)/ 180k 影像。</b></span><span data-lang="en">Auto-prefill confident masks; annotators add the rest, boosting diversity. <b>+5.9M (10.2M total) / 180k images.</b></span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph">STAGE 3</span><b><span data-lang="zh">全自動</span><span data-lang="en">Fully automatic</span></b><small><span data-lang="zh">32×32 點格 prompt,選信心 + 穩定 mask,NMS 去重。套到全部 11M 影像 → <b>1.1B masks。</b></span><span data-lang="en">32×32 point grid prompts; keep confident + stable masks, NMS dedup. Applied to all 11M → <b>1.1B masks.</b></span></small></div>
+        </div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:6px">核心是「<mark class="m-method" data-t="METHOD/IDEA">模型幫忙標、標好再訓模型</mark>」的正回饋:模型越好、標得越快越自動,最終 <mark class="m-result" data-t="RESULT/EVIDENCE">99.1% 的 masks 全自動生成</mark>。穩定性判準:把機率圖在 \(0.5\pm\delta\) 閾值化仍得到相似 mask。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:6px">The core is a positive feedback loop—<mark class="m-method" data-t="METHOD/IDEA">the model assists labeling; labels train the model</mark>: the better the model, the faster/more automatic the labeling, ending with <mark class="m-result" data-t="RESULT/EVIDENCE">99.1% of masks generated fully automatically</mark>. Stability test: thresholding the probability map at \(0.5\pm\delta\) still yields a similar mask.</p>
+        <figure class="fig"><img src="figs/SAMv1/fig3_sa1b.png" alt="Figure 2 SA-1B example masks">
+          <figcaption data-lang="zh"><b>Fig.3</b>(原文 Fig.2)SA-1B 樣例,依「每張影像的 mask 數」分組(&lt;50 到 &gt;500)。<b>要注意</b>:這些 mask <b>全部由 SAM 自動產生</b>,平均每張 ~100 個;涵蓋 stuff/things、大小物件與複雜形狀——這是 SA-1B「多樣且密集」的直觀證據。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> (paper's Fig.2) SA-1B samples grouped by masks-per-image (&lt;50 to &gt;500). <b>Notice</b> these masks are <b>all auto-generated by SAM</b>, ~100 per image on average, spanning stuff/things, large/small objects and complex shapes—visual evidence that SA-1B is diverse and dense.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(p\)</td><td><span data-lang="zh">prompt:前景/背景點、框、粗 mask、或文字——「指出要切什麼」。</span><span data-lang="en">Prompt: fg/bg points, a box, a coarse mask, or text—"what to segment."</span></td></tr>
+          <tr><td>\(M,\;M^\ast\)</td><td><span data-lang="zh">預測 mask 與 ground-truth mask。</span><span data-lang="en">Predicted mask and ground-truth mask.</span></td></tr>
+          <tr><td>\(\{M_1,M_2,M_3\}\)</td><td><span data-lang="zh">對歧義 prompt 的三個候選(整體/部件/子部件)。</span><span data-lang="en">Three candidates for an ambiguous prompt (whole/part/subpart).</span></td></tr>
+          <tr><td>\(\widehat{\text{IoU}}\)</td><td><span data-lang="zh">模型自估的 mask 品質分,用來排序、挑最有信心的一個。</span><span data-lang="en">The model's self-estimated mask-quality score, used to rank and pick the most confident.</span></td></tr>
+          <tr><td>\(\mathcal{L}_{\text{focal}},\mathcal{L}_{\text{dice}}\)</td><td><span data-lang="zh">mask 監督損失,以 20:1 線性組合。</span><span data-lang="en">Mask-supervision losses, combined linearly at 20:1.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">把影像「編碼一次」變成可重用的 embedding,之後每個 prompt 只做一點輕量融合就吐 mask;而<b>資料</b>則靠「模型自己標、標了再訓自己」的飛輪滾到 10 億級。</span>
+        <span data-lang="en">Encode the image <b>once</b> into a reusable embedding; then each prompt does a little lightweight fusion to emit a mask. The <b>data</b> is rolled to a billion scale by a flywheel where the model labels for itself, then trains on it.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何只放 3 個 mask?</span><span data-lang="en">Why exactly 3 masks?</span></span>
+        <span data-lang="zh">作者觀察到巢狀 mask 通常最多三層:<b>整體 → 部件 → 子部件</b>(如 人 → 襯衫 → 口袋)。3 個輸出足以覆蓋多數歧義,再多收益遞減。<span class="add">[導讀補充] 這是啟發式選擇,並非理論保證。</span></span>
+        <span data-lang="en">The authors note nested masks are usually at most three deep: <b>whole → part → subpart</b> (person → shirt → pocket). Three outputs cover most ambiguity; more gives diminishing returns. <span class="add">[guide note] A heuristic choice, not a theoretical guarantee.</span></span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">「即時」只涵蓋 prompt encoder + mask decoder(~50ms);<mark class="m-assume" data-t="ASSUMPTION/CLAIM">重的 ViT-H image encoder 並非即時</mark>。攤提前提是「同一張影像餵很多 prompt」,單張單 prompt 就享受不到這個好處。</span>
+        <span data-lang="en">"Real-time" covers only the prompt encoder + mask decoder (~50ms); <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the heavy ViT-H image encoder is not real-time</mark>. Amortization assumes "many prompts per image"; a single prompt on a single image doesn't get the benefit.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">核心:單點分割(23 個資料集,零樣本)</span><span data-lang="en">Core: single-point segmentation (23 datasets, zero-shot)</span></h3>
+        <figure class="fig"><img src="figs/SAMv1/fig4_results.png" alt="Figure 9 point-to-mask evaluation">
+          <figcaption data-lang="zh"><b>Fig.4</b>(原文 Fig.9)單點分割評測。(a) SAM 相對 RITM 的 IoU 差:16/23 為正、最高 +46.9;(b) 人評 mask 品質,SAM 明顯高於 RITM,且高於「單輸出(不處理歧義)」版本;(c,d) 隨點數增加各法差距縮小。<b>要注意</b>:1 點時絕對 mIoU 偏低是<b>歧義</b>造成(GT 只有一個 mask),不是 SAM 差——看 oracle 曲線(SAM 三選一取最佳)就跳很高。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> (paper's Fig.9) Point-to-mask evaluation. (a) SAM's IoU delta vs RITM: positive on 16/23, up to +46.9; (b) human mask-quality ratings—SAM clearly above RITM and above the "single-output (ambiguity-unaware)" variant; (c,d) the gap shrinks as points increase. <b>Notice</b> the low absolute mIoU at 1 point is due to <b>ambiguity</b> (GT has one mask), not SAM being weak—the oracle curve (best of SAM's 3) jumps far higher.</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">SAM 在 <mark class="m-result" data-t="RESULT/EVIDENCE">16/23 個資料集勝過最強互動式分割器 RITM,最多 ~47 IoU</mark>;若用 oracle 解歧義,<mark class="m-result" data-t="RESULT/EVIDENCE">在全部 23 個都勝</mark>。人評分數落在 7–9(物件可辨識、錯誤小而少)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">SAM <mark class="m-result" data-t="RESULT/EVIDENCE">beats the strongest interactive segmenter RITM on 16/23 datasets, by up to ~47 IoU</mark>; with an oracle resolving ambiguity, it <mark class="m-result" data-t="RESULT/EVIDENCE">wins on all 23</mark>. Human ratings land at 7–9 (object identifiable, errors small and rare).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">零樣本遷移到四個新任務</span><span data-lang="en">Zero-shot transfer to four new tasks</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">任務 / 資料集</span><span data-lang="en">Task / dataset</span></th><th>SAM</th><th><span data-lang="zh">對照</span><span data-lang="en">Baseline</span></th><th><span data-lang="zh">解讀</span><span data-lang="en">Read</span></th></tr>
+          <tr>
+            <td><span data-lang="zh">邊緣偵測 / BSDS500 (ODS↑)</span><span data-lang="en">Edge detection / BSDS500 (ODS↑)</span></td>
+            <td class="ok">.768</td>
+            <td>Canny .600<br>HED .788</td>
+            <td><span data-lang="zh">從沒學過邊緣,卻遠勝經典法、逼近 HED;傾向<b>多預測邊</b>(高 recall)。</span><span data-lang="en">Never trained on edges, yet far beats classics, nears HED; tends to <b>predict more edges</b> (high recall).</span></td>
+          </tr>
+          <tr>
+            <td><span data-lang="zh">物件提議 / LVIS (AR@1000↑)</span><span data-lang="en">Object proposals / LVIS (AR@1000↑)</span></td>
+            <td>59.3</td>
+            <td>ViTDet-H 63.0</td>
+            <td><span data-lang="zh">整體略低,但在<mark class="m-result" data-t="RESULT/EVIDENCE">中/大物件、稀有/常見類別勝過</mark>在 LVIS 上訓練的 ViTDet。</span><span data-lang="en">Slightly lower overall, but <mark class="m-result" data-t="RESULT/EVIDENCE">beats LVIS-trained ViTDet on medium/large and rare/common</mark>.</span></td>
+          </tr>
+          <tr>
+            <td><span data-lang="zh">實例分割 / COCO (mask AP↑)</span><span data-lang="en">Instance seg / COCO (mask AP↑)</span></td>
+            <td>46.5</td>
+            <td>ViTDet-H 51.0</td>
+            <td><span data-lang="zh">AP 落後全監督 ViTDet,但<mark class="m-result" data-t="RESULT/EVIDENCE">人評 SAM 8.1 &gt; ViTDet 7.9</mark>(邊界更利落)。</span><span data-lang="en">AP trails supervised ViTDet, but <mark class="m-result" data-t="RESULT/EVIDENCE">humans rate SAM 8.1 &gt; ViTDet 7.9</mark> (crisper boundaries).</span></td>
+          </tr>
+          <tr>
+            <td><span data-lang="zh">文字轉 mask / 概念驗證</span><span data-lang="en">Text-to-mask / proof-of-concept</span></td>
+            <td colspan="2"><span data-lang="zh">可切「a wheel」「beaver tooth grille」</span><span data-lang="en">Segments "a wheel", "beaver tooth grille"</span></td>
+            <td><span data-lang="zh">用 CLIP image-embedding 訓、text-embedding 推;<mark class="m-limit" data-t="LIMITATION/FUTURE">尚不穩健</mark>,失敗時補一個點常能救。</span><span data-lang="en">Train with CLIP image-embeddings, infer with text; <mark class="m-limit" data-t="LIMITATION/FUTURE">not yet robust</mark>—a point often fixes failures.</span></td>
+          </tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">四個任務都<b>只靠 prompt engineering</b>、沒為它們訓練過。故事是:<mark class="m-result" data-t="RESULT/EVIDENCE">一個模型當「分割元件」插進不同系統,就能跨越低/中/高階視覺任務</mark>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">All four tasks use <b>only prompt engineering</b>, none trained for. The story: <mark class="m-result" data-t="RESULT/EVIDENCE">one model, dropped in as a "segmentation component," spans low/mid/high-level vision tasks</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融:資料與規模的貢獻</span><span data-lang="en">Ablations: what data and scale buy</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">消融項</span><span data-lang="en">Ablation</span></th><th><span data-lang="zh">發現</span><span data-lang="en">Finding</span></th></tr>
+          <tr><td><b><span data-lang="zh">資料引擎階段</span><span data-lang="en">Data-engine stages</span></b></td><td><span data-lang="zh">每個階段都提升 mIoU;<mark class="m-result" data-t="RESULT/EVIDENCE">只用全自動 masks 只比用全部低 ~0.5 mIoU</mark> → 預設只用全自動,簡化訓練。</span><span data-lang="en">Each stage improves mIoU; <mark class="m-result" data-t="RESULT/EVIDENCE">automatic-only is just ~0.5 mIoU below using all data</mark> → default to automatic-only for simplicity.</span></td></tr>
+          <tr><td><b><span data-lang="zh">資料量</span><span data-lang="en">Data volume</span></b></td><td><span data-lang="zh">0.1M 影像明顯掉;<mark class="m-result" data-t="RESULT/EVIDENCE">1M(~10%)已逼近全量 11M</mark>(仍含 ~100M masks)。</span><span data-lang="en">0.1M images drops clearly; <mark class="m-result" data-t="RESULT/EVIDENCE">1M (~10%) already nears the full 11M</mark> (still ~100M masks).</span></td></tr>
+          <tr><td><b><span data-lang="zh">Image encoder 規模</span><span data-lang="en">Image-encoder scale</span></b></td><td><span data-lang="zh">ViT-B(91M)→ViT-L(308M)→ViT-H(636M):<mark class="m-limit" data-t="LIMITATION/FUTURE">ViT-H 對 ViT-L 增益已很邊際,呈飽和</mark>。</span><span data-lang="en">ViT-B(91M)→ViT-L(308M)→ViT-H(636M): <mark class="m-limit" data-t="LIMITATION/FUTURE">ViT-H over ViT-L is marginal—saturating</mark>.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">SA-1B 資料集本身(也是核心產出)</span><span data-lang="en">SA-1B itself (a core deliverable)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">面向</span><span data-lang="en">Aspect</span></th><th>SA-1B</th><th><span data-lang="zh">對照</span><span data-lang="en">vs prior</span></th></tr>
+          <tr><td><span data-lang="zh">影像 / masks</span><span data-lang="en">Images / masks</span></td><td class="win">11M / 1.1B</td><td><span data-lang="zh">masks 為既有最大者 <b>400×</b>;影像 11× 於 Open Images</span><span data-lang="en"><b>400×</b> the masks of the largest prior set; 11× the images of Open Images</span></td></tr>
+          <tr><td><span data-lang="zh">每張 mask 數</span><span data-lang="en">Masks per image</span></td><td class="win">~100</td><td><span data-lang="zh">36× 於 Open Images</span><span data-lang="en">36× Open Images</span></td></tr>
+          <tr><td><span data-lang="zh">mask 品質</span><span data-lang="en">Mask quality</span></td><td class="win">94% pairs &gt;90% IoU</td><td><span data-lang="zh">人類互評一致性僅 85–91% IoU</span><span data-lang="en">inter-annotator consistency 85–91% IoU</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">RAI 分析:SA-1B 地理/收入較既有資料集更均衡(所有區域皆 ≥28M masks),SAM 在<mark class="m-result" data-t="RESULT/EVIDENCE">性別/年齡/膚色分組上表現相近</mark>(信賴區間多重疊)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">RAI analysis: SA-1B is more geographically/economically balanced (every region ≥28M masks), and SAM performs <mark class="m-result" data-t="RESULT/EVIDENCE">similarly across gender/age/skin-tone groups</mark> (mostly overlapping CIs).</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">單點分割<b>大勝</b>互動式基線;零樣本遷移到四個新任務都有可觀表現,實例分割的 <b>AP 雖略輸</b>全監督 ViTDet,<b>人評卻更好</b>。故事是「一個模型、prompt 解一切」的<b>可行性證明</b>。</span>
+        <span data-lang="en">Single-point segmentation <b>strongly beats</b> interactive baselines; zero-shot transfer to four new tasks is solid, and though instance-seg <b>AP slightly trails</b> supervised ViTDet, <b>humans rate SAM higher</b>. The story is a <b>proof of feasibility</b> for "one model, prompt for everything."</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">數字要小心讀</span><span data-lang="en">Read the numbers carefully</span></div>
+        <span data-lang="zh">「1 點 mIoU 偏低」不代表 SAM 弱,是<b>歧義</b>+GT 只標一個 mask 的評測假象(看 oracle);反過來,「人評贏 ViTDet」也<mark class="m-assume" data-t="ASSUMPTION/CLAIM">部分是因為 COCO/LVIS 的 GT 本身品質不高</mark>——這把刀兩面都割。</span>
+        <span data-lang="en">"Low 1-point mIoU" isn't SAM being weak—it's an artifact of <b>ambiguity</b> + GT having one mask (see the oracle). Conversely, "beating ViTDet in human ratings" <mark class="m-assume" data-t="ASSUMPTION/CLAIM">is partly because COCO/LVIS GT quality is itself low</mark>—a double-edged sword.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">AP 落後</span><span data-lang="en">AP gap</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">沒有語義</span><span data-lang="en">no semantics</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>資料的循環性(self-training bias)</b>:<mark class="m-limit" data-t="LIMITATION/FUTURE">SA-1B 有 99.1% 的 mask 是 SAM 自己產的</mark>,再拿回去訓 SAM。而「94% masks &gt;90% IoU」的品質驗證,又是讓標註員<b>用 SAM 的筆刷工具</b>去修——修正過程本身帶著 SAM 的先驗。資料集會系統性地<b>繼承 SAM 的盲點</b>(漏細結構、幻覺小碎塊),獨立性存疑。</li>
+          <li data-lang="en"><b>Data circularity (self-training bias)</b>: <mark class="m-limit" data-t="LIMITATION/FUTURE">99.1% of SA-1B masks are produced by SAM itself</mark>, then fed back to train SAM. And the "94% masks &gt;90% IoU" quality check has annotators correct masks <b>using SAM's own brush tool</b>—correction carrying SAM's prior. The dataset systematically <b>inherits SAM's blind spots</b> (missing fine structure, hallucinated fragments); its independence is questionable.</li>
+          <li data-lang="zh"><b>「zero-shot」名實之爭</b>:分割「切東西」的能力被 1.1B masks 重度監督過,涵蓋極廣的視覺分佈。所謂 zero-shot 主要是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">任務遷移</mark>,而非 CLIP 那種概念/分佈的新穎性。23 個評測集相對 SA-1B 到底有多「未見」,論文未量化。</li>
+          <li data-lang="en"><b>"Zero-shot" naming dispute</b>: the "cut things out" skill is heavily supervised on 1.1B masks spanning a huge visual distribution. The zero-shot here is mainly <mark class="m-assume" data-t="ASSUMPTION/CLAIM">task transfer</mark>, not CLIP-style concept/distribution novelty. How "unseen" the 23 eval sets are relative to SA-1B is never quantified.</li>
+          <li data-lang="zh"><b>分割不含語義</b>:SAM 只給<mark class="m-limit" data-t="LIMITATION/FUTURE">class-agnostic 的 mask,沒有標籤</mark>。要做語義/全景分割「不知如何設計 prompt」(作者自承)。嚴格說,SAM 更像一個超強的「類別無關提議產生器 + 介面」,把「辨識」外包給偵測器/CLIP,基礎模型的完整性打了折。</li>
+          <li data-lang="en"><b>Segmentation without semantics</b>: SAM emits <mark class="m-limit" data-t="LIMITATION/FUTURE">class-agnostic masks, no labels</mark>. For semantic/panoptic segmentation it's "unclear how to design prompts" (authors' own words). Strictly, SAM is closer to a superb class-agnostic proposal generator + interface, outsourcing recognition to a detector/CLIP—discounting its completeness as a foundation model.</li>
+          <li data-lang="zh"><b>不是真的即時、算力門檻高</b>:即時只涵蓋輕量 decoder;<mark class="m-limit" data-t="LIMITATION/FUTURE">ViT-H image encoder 很重</mark>,單張單 prompt 享受不到攤提。SA-1B 全自動階段對全部 11M 高解析影像跑 SAM,算力與資料授權成本極高,學術端難複現。</li>
+          <li data-lang="en"><b>Not truly real-time; steep compute</b>: real-time covers only the light decoder; <mark class="m-limit" data-t="LIMITATION/FUTURE">the ViT-H encoder is heavy</mark>, so single-prompt/single-image gets no amortization. The fully automatic stage runs SAM over all 11M high-res images—compute and licensing costs are high, hard for academia to reproduce.</li>
+          <li data-lang="zh"><b>作者坦承的限制</b>:漏細結構、偶爾幻覺小碎塊、邊界不如「zoom-in」法利落;多點時專用互動法會贏過 SAM;文字轉 mask 僅屬探索。</li>
+          <li data-lang="en"><b>Author-acknowledged limits</b>: misses fine structure, occasionally hallucinates small disconnected components, boundaries less crisp than "zoom-in" methods; dedicated interactive methods beat SAM with many points; text-to-mask is exploratory.</li>
+          <li data-lang="zh"><b>指標選擇偏向 SAM</b>:實例分割 AP 明顯落後,論文轉而強調「人評更好」並歸因於 GT 有偏。這雖有道理,卻也<mark class="m-assume" data-t="ASSUMPTION/CLAIM">把評估標準換成對自己有利的一把尺</mark>,同時削弱了整個 benchmark 的可信度。</li>
+          <li data-lang="en"><b>Metric choice favors SAM</b>: instance-seg AP clearly trails, so the paper pivots to "better human ratings," blaming biased GT. Reasonable—but it also <mark class="m-assume" data-t="ASSUMPTION/CLAIM">swaps in a yardstick favorable to itself</mark>, while undercutting the credibility of the benchmark it relies on.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>資料的循環性</b>:若 99% 的訓練 mask 出自 SAM 自己,SA-1B 究竟提供了多少「新資訊」,而非放大模型既有先驗?只用 stage-1 的 4.3M 純人工 mask 能到哪?</li>
+          <li data-lang="en"><b>Data circularity</b>: if 99% of training masks come from SAM itself, how much genuinely new information does SA-1B add versus amplifying the model's priors? How far would 4.3M purely-human stage-1 masks get you?</li>
+          <li data-lang="zh"><b>zero-shot 名實</b>:當預訓練分佈(1.1B 多樣 masks)幾乎涵蓋下游影像統計時,「zero-shot」標籤是否公平?該如何量化 23 個評測集相對 SA-1B 的新穎度?</li>
+          <li data-lang="en"><b>Zero-shot label</b>: when the pre-training distribution (1.1B diverse masks) likely covers downstream image statistics, is "zero-shot" a fair label? How should we quantify the novelty of the 23 eval sets relative to SA-1B?</li>
+          <li data-lang="zh"><b>指標之爭</b>:人評說 SAM 的 mask 比「用 GT 訓練的 ViTDet」還好。這代表 benchmark 壞了,還是 mask AP 量錯了品質?這個領域該相信哪一個?</li>
+          <li data-lang="en"><b>The metric war</b>: humans say SAM's masks beat GT-trained ViTDet. Does that mean the benchmark is broken, or that mask AP mis-measures quality? Which should the field trust?</li>
+          <li data-lang="zh"><b>沒有語義還算基礎模型嗎?</b> 一個「切得出萬物、卻叫不出名字」、必須外接辨識器的模型,是分割的 foundation model,還是一個極佳的介面 + 提議器?</li>
+          <li data-lang="en"><b>Is it a foundation model without semantics?</b> A model that "cuts out anything but names nothing" and needs an external recognizer—is it a segmentation foundation model, or a superb interface + proposal generator?</li>
+          <li data-lang="zh"><b>攤提假設的現實性</b>:重 encoder 的設計對邊緣/即時部署限制多大?「同影像多 prompt」的攤提前提,在真實應用中有多常成立?</li>
+          <li data-lang="en"><b>Reality of the amortization assumption</b>: how much does the heavy encoder limit edge/real-time deployment? How often does the "many prompts per image" premise actually hold in practice?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 SAM 讀成「<b>一個能自動理解影像所有物件的通用視覺模型</b>」。它其實是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">被動、無語義的分割介面</mark>:你得告訴它「切哪裡」(prompt),它才切;它不知道切出來的是什麼。真正的威力來自「被組合進更大系統」。</span>
+        <span data-lang="en">Reading SAM as "<b>a general vision model that understands every object in an image</b>." It is actually a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">passive, semantics-free segmentation interface</mark>: you must tell it "where" (a prompt) before it cuts, and it doesn't know what it cut. Its real power comes from being composed into larger systems.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">Limitations 誠實(漏細節、非即時、無語義、文字弱),且大方開源 SA-1B(1.1B masks)與 SAM(Apache-2.0)。<b>把資料與模型都放出來</b>,讓外界能真正檢驗與延伸——這是它影響力的重要來源。</span>
+        <span data-lang="en">The limitations are candid (misses detail, not real-time, no semantics, weak text), and it generously open-sources SA-1B (1.1B masks) and SAM (Apache-2.0). <b>Releasing both data and model</b> lets the community truly test and extend it—a major source of its impact.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「任務即介面」的設計法</b>可遷移:先找一個既能當預訓練目標、又能靠 prompt 涵蓋眾多下游的「元任務」,勝過為每個任務各訓一個模型。做新領域基礎模型時,值得先問「我的 promptable 任務是什麼?」</li>
+          <li data-lang="en"><b>The "task-as-interface" design pattern</b> transfers: find a meta-task that is both a pre-training objective and, via prompts, a cover for many downstream tasks—better than one model per task. For a new-domain foundation model, first ask "what is my promptable task?"</li>
+          <li data-lang="zh"><b>沒有資料就造飛輪</b>:當 web-scale 標註不存在,「模型參與標註 → 標註訓練模型」的 data engine 是可行且強大的路。關鍵是<b>用階段性自動化把人力導向最難的樣本</b>。</li>
+          <li data-lang="en"><b>No data? Build a flywheel</b>: when web-scale annotation doesn't exist, a "model-in-the-loop" data engine is viable and powerful. The key is <b>staged automation steering human effort to the hardest cases</b>.</li>
+          <li data-lang="zh"><b>把模型當「元件」而非「終點」</b>:SAM 的價值大半來自被組合(接偵測器做實例、接 CLIP 做文字、接 gaze 做互動)。設計模型時預留<b>乾淨、可組合的介面</b>,會放大它的長期影響。</li>
+          <li data-lang="en"><b>Treat the model as a component, not an endpoint</b>: much of SAM's value comes from composition (a detector for instances, CLIP for text, gaze for interaction). Designing a <b>clean, composable interface</b> amplifies long-term impact.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「可提示 / 可組合的視覺基礎模型」</span><span data-lang="en">"promptable / composable vision foundation model"</span></td><td><span data-lang="zh">SAM 是代表性範例(task+model+data 三位一體)。</span><span data-lang="en">SAM as the flagship example (task+model+data trinity).</span></td></tr>
+          <tr><td><span data-lang="zh">「model-in-the-loop 資料引擎可規模化標註」</span><span data-lang="en">"model-in-the-loop data engines scale annotation"</span></td><td><span data-lang="zh">引 SA-1B 三階段(1.1B masks、99.1% 全自動)。</span><span data-lang="en">Cite SA-1B's three stages (1.1B masks, 99.1% automatic).</span></td></tr>
+          <tr><td><span data-lang="zh">「class-agnostic 分割 / 通用 mask 先驗」</span><span data-lang="en">"class-agnostic segmentation / general mask prior"</span></td><td><span data-lang="zh">引 SAM 作為下游任務的分割元件或標註器。</span><span data-lang="en">Cite SAM as a segmentation component / labeler for downstream tasks.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">Segment Anything 用「<b>可提示任務 × 資料引擎 × 攤提式模型</b>」把影像分割推向基礎模型時代:一個 class-agnostic 的 SAM + 11 億 masks 的 SA-1B,能靠 prompt 零樣本遷移到眾多任務。它真正的創新在「任務定義與資料規模化」而非架構;而它的邊界(無語義、資料循環、非即時)也同樣清楚。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">Segment Anything pushes image segmentation into the foundation-model era via "<b>a promptable task × a data engine × an amortized model</b>": a class-agnostic SAM + SA-1B's 1.1B masks that transfer zero-shot to many tasks via prompting. Its real novelty is task definition and data scaling, not architecture—and its boundaries (no semantics, data circularity, not real-time) are just as clear.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀 · 系列脈絡</span><span data-lang="en">Further reading · series</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">CLIP / ALIGN</span>
+          <span class="chip">MAE · ViT / ViTDet</span>
+          <span class="chip">DETR · Mask2Former</span>
+          <span class="chip">RITM / FocalClick</span>
+          <span class="chip">SAM 2（video）</span>
+          <span class="chip">SAM 3（concepts）</span>
+          <span class="chip">Grounded-SAM</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">在系列中的位置</span><span data-lang="en">Place in the series</span></span>
+        <span data-lang="zh">這是 <b>Segment Anything 系列的起點</b>:定義了可提示分割與 SA-1B。後續 SAM 2 加入<b>影像→影片 + memory</b>、SAM 3 引入<b>concept prompts(名詞短語/範例)</b>;效率線(MobileSAM/FastSAM/EfficientSAM)與開放詞彙線(Grounded-SAM)也都由它長出。</span>
+        <span data-lang="en">This is the <b>origin of the Segment Anything series</b>: it defines promptable segmentation and SA-1B. SAM 2 later adds <b>image→video + memory</b>, and SAM 3 introduces <b>concept prompts (noun phrases/exemplars)</b>; the efficiency line (MobileSAM/FastSAM/EfficientSAM) and the open-vocabulary line (Grounded-SAM) also grow from it.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Kirillov et al. 2023 (Segment Anything, SAM) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Segment Anything reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

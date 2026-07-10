@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>SAM 2 — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"SAM 2: Segment Anything in Images and Videos","authors":"Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, ⋯, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer (Meta FAIR)","year":"2024","venue":"ICLR 2025 (arXiv:2408.00714)","tags":["Segment Anything","Video Segmentation","Promptable Segmentation","Foundation Model","Streaming Memory","VOS","Data Engine"],"tldr":"SAM 2 把 SAM 的「可提示影像分割」推廣到影片:一個帶串流記憶(streaming memory)的統一 transformer,可在任一幀用點/框/遮罩提示,即時分割並在時間軸上追蹤任何物件;影片上比前人少用 3× 互動、影像上比 SAM 快 6×,並以資料引擎收集出含 35.5M 遮罩的 SA-V 資料集(53× 大)。","tldr_en":"SAM 2 extends SAM&#39;s promptable image segmentation to video: a unified transformer with streaming memory that segments and tracks any object from clicks/boxes/masks on any frame in real time; 3× fewer interactions than prior work on video, 6× faster than SAM on images, plus a data engine that builds the 35.5M-mask SA-V dataset (53× larger)."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:120px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.05em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">SAM 2 是 SAM 的<b>影片版續作</b>:一個帶 <b>streaming memory(串流記憶)</b> 的統一 transformer,可在影片<b>任一幀</b>用點/框/遮罩提示,即時分割並沿時間軸追蹤<b>任何</b>物件(把影像視為單幀影片)。它在互動式影片分割上<mark class="m-result" data-t="RESULT/EVIDENCE">用少 3× 的互動就達到更高精度</mark>,在影像分割上<mark class="m-result" data-t="RESULT/EVIDENCE">比 SAM 更準且快 6×</mark>,並用「模型在環路中(model-in-the-loop)」的資料引擎建出 35.5M 遮罩的 <b>SA-V</b> 資料集(53× 大)。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">SAM 2 is <b>SAM's video sequel</b>: a unified transformer with <b>streaming memory</b> that, from clicks/boxes/masks on <b>any frame</b>, segments and tracks <b>any</b> object through a video in real time (an image is a single-frame video). On interactive video segmentation it <mark class="m-result" data-t="RESULT/EVIDENCE">reaches higher accuracy with 3× fewer interactions</mark>; on image segmentation it is <mark class="m-result" data-t="RESULT/EVIDENCE">more accurate than SAM and 6× faster</mark>; and a model-in-the-loop data engine builds the 35.5M-mask <b>SA-V</b> dataset (53× larger).</p>
+      </div>
+
+      <figure class="fig"><img src="figs/SAMv2/fig1_overview.png" alt="Figure 1 overview">
+        <figcaption data-lang="zh"><b>Fig.1</b> 三大貢獻一圖看懂。<b>(a) 任務</b>:promptable visual segmentation——在一或多幀給點/框/遮罩,輸出整段影片的物件遮罩(masklet)。<b>(b) 模型</b>:image encoder → memory attention ↔ memory bank → mask decoder → memory encoder 的串流迴圈。<b>(c) 資料</b>:同一個模型既是產品也是標註工具,「annotate ↔ train」迴圈滾出 SA-V(642.6K masklets / 35.5M masks / 50.9K videos / 196 小時)。<b>要注意</b>:模型與資料是共生的——資料引擎用 SAM 2 標,標好的資料再訓練更強的 SAM 2。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> The three contributions at a glance. <b>(a) Task</b>: promptable visual segmentation — clicks/boxes/masks on one or more frames produce the object's mask across the whole video (a "masklet"). <b>(b) Model</b>: the streaming loop image encoder → memory attention ↔ memory bank → mask decoder → memory encoder. <b>(c) Data</b>: the very same model is both product and annotation tool; an "annotate ↔ train" loop grows SA-V (642.6K masklets / 35.5M masks / 50.9K videos / 196 hours). <b>Notice</b>: model and data are symbiotic — the engine annotates with SAM 2, and that data trains a stronger SAM 2.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — SAM 只做<mark class="m-problem" data-t="PROBLEM/GAP">靜態影像</mark>分割,但真實世界會動;現有影片分割模型與資料集<mark class="m-problem" data-t="PROBLEM/GAP">無法「segment anything in videos」</mark>——類別受限、只標整物不標部件、且無法互動式修正錯誤。</li>
+          <li data-lang="en"><b>Problem</b> — SAM only segments <mark class="m-problem" data-t="PROBLEM/GAP">static images</mark>, yet the world moves; existing video models and datasets <mark class="m-problem" data-t="PROBLEM/GAP">cannot "segment anything in videos"</mark> — class-limited, whole-object-only (no parts), and no way to interactively fix mistakes.</li>
+          <li data-lang="zh"><b>任務</b> — 定義 <mark class="m-method" data-t="METHOD/IDEA">Promptable Visual Segmentation(PVS)</mark>:把 SAM 的可提示分割推廣到影片,可在任一幀提示、可反覆用額外提示修正 masklet。影像 SA 與傳統 VOS 都是 PVS 的特例。</li>
+          <li data-lang="en"><b>Task</b> — Define <mark class="m-method" data-t="METHOD/IDEA">Promptable Visual Segmentation (PVS)</mark>: SAM's promptable segmentation generalized to video, promptable on any frame and iteratively refinable. Image SA and classic VOS are special cases of PVS.</li>
+          <li data-lang="zh"><b>方法</b> — 給 SAM 架構加上 <mark class="m-method" data-t="METHOD/IDEA">streaming memory</mark>:逐幀串流處理,用 memory attention 把當前幀 cross-attend 到 memory bank(過去幀 + 被提示幀 + object pointers),記憶為空時就退化成 SAM。</li>
+          <li data-lang="en"><b>Method</b> — Add <mark class="m-method" data-t="METHOD/IDEA">streaming memory</mark> to the SAM architecture: process frames one at a time; memory attention cross-attends the current frame to a memory bank (past frames + prompted frames + object pointers). With empty memory it reduces to SAM.</li>
+          <li data-lang="zh"><b>結果</b> — 互動影片分割<mark class="m-result" data-t="RESULT/EVIDENCE">少 3× 互動且更準</mark>;半監督 VOS、影像 SA 全面 SOTA;影像<mark class="m-result" data-t="RESULT/EVIDENCE">比 SAM 快 6×</mark>;SA-V 資料集<mark class="m-result" data-t="RESULT/EVIDENCE">遮罩量 53×</mark>於任何現有 VOS 資料集,且資料引擎快 8.4×。</li>
+          <li data-lang="en"><b>Results</b> — Interactive video segmentation with <mark class="m-result" data-t="RESULT/EVIDENCE">3× fewer interactions and higher accuracy</mark>; SOTA on semi-supervised VOS and image SA; <mark class="m-result" data-t="RESULT/EVIDENCE">6× faster than SAM</mark> on images; SA-V has <mark class="m-result" data-t="RESULT/EVIDENCE">53× more masks</mark> than any existing VOS dataset, collected by an 8.4×-faster data engine.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">前作 <mark class="m-method" data-t="METHOD/IDEA">Segment Anything(SAM,Kirillov et al. 2023)</mark> 用「可提示分割 + SA-1B 大資料」開創了影像分割的基礎模型,zero-shot 能力讓它被廣泛應用(醫療、遙測、偽裝物偵測⋯)。但<mark class="m-problem" data-t="PROBLEM/GAP">影像只是世界的靜態快照</mark>,AR/VR、機器人、自駕、影片剪輯都需要「時間維度」上的分割。</p>
+        <p data-lang="en">The predecessor <mark class="m-method" data-t="METHOD/IDEA">Segment Anything (SAM, Kirillov et al. 2023)</mark> established an image-segmentation foundation model via "promptable segmentation + the large SA-1B dataset," whose zero-shot ability drove wide adoption (medical, remote sensing, camouflaged-object detection…). But <mark class="m-problem" data-t="PROBLEM/GAP">an image is only a static snapshot</mark>; AR/VR, robotics, autonomous driving and video editing all need segmentation along the temporal axis.</p>
+        <p data-lang="zh">影片分割自成一個領域:<mark class="m-method" data-t="METHOD/IDEA">互動式 VOS(iVOS)</mark> 常把 SAM 之類的影像工具接上 mask/point 追蹤器,但<mark class="m-problem" data-t="PROBLEM/GAP">追蹤器對某些物件失效、SAM 在影片幀上不一定準、且沒有機制互動修正</mark>——出錯只能整幀重畫再從頭追蹤。<mark class="m-method" data-t="METHOD/IDEA">半監督 VOS</mark> 則假設第一幀已有完整遮罩,但那個高品質遮罩本身就難標。</p>
+        <p data-lang="en">Video segmentation is its own field: <mark class="m-method" data-t="METHOD/IDEA">interactive VOS (iVOS)</mark> often bolts an image tool like SAM onto a mask/point tracker, but <mark class="m-problem" data-t="PROBLEM/GAP">the tracker fails on some objects, SAM is not always accurate on video frames, and there is no interactive-correction mechanism</mark> — an error means re-annotating a whole frame and restarting the track. <mark class="m-method" data-t="METHOD/IDEA">Semi-supervised VOS</mark> assumes a full first-frame mask, but that high-quality mask is itself costly to draw.</p>
+        <p data-lang="zh">資料面上,DAVIS、YouTube-VOS、MOSE 等<mark class="m-problem" data-t="PROBLEM/GAP">規模有限、且圍繞特定類別(人、車、動物)、只標整物不標部件</mark>,不足以支撐「segment anything」。SAM 2 的答案是:一次補齊「任務 + 模型 + 資料」三塊。</p>
+        <p data-lang="en">On data, DAVIS, YouTube-VOS, MOSE and others are <mark class="m-problem" data-t="PROBLEM/GAP">size-limited, centered on specific classes (people, vehicles, animals), and annotate whole objects not parts</mark> — too thin to support "segment anything." SAM 2's answer: fill all three at once — task + model + dataset.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">SAM 2 精準複製了 SAM 的成功配方——<b>「定義一個可提示的通用任務 + 造一個能自我加速標註的資料引擎 + 一個簡單可規模化的模型」</b>——只是把戰場從影像搬到影片。真正的新東西其實只有一個:<b>記憶(memory)</b>。影片相對影像多出的就是「時間」,而記憶正是把時間資訊帶進 SAM 的最小充分改動。</p>
+          <p data-lang="en" style="margin-top:6px">SAM 2 faithfully replays SAM's winning recipe — <b>"define one promptable general task + build a self-accelerating data engine + a simple, scalable model"</b> — just moving the arena from images to video. The one genuinely new ingredient is <b>memory</b>. What video adds over images is "time," and memory is the minimal sufficient change that carries temporal information into SAM.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不只是「SAM 出影片版了」,而是底下這幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is more than "SAM now does video" — it's these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">影像 = 單幀影片,用一個模型統一。</b> 不為影片另造模型,而是把影像分割當成記憶為空的特例,<mark class="m-result" data-t="RESULT/EVIDENCE">同一個 SAM 2 同時刷新影像與影片 SOTA</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Image = single-frame video, unified in one model.</b> Rather than a separate video model, image segmentation is the empty-memory special case; <mark class="m-result" data-t="RESULT/EVIDENCE">one SAM 2 sets SOTA on both</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">Streaming memory 就是把「時間」帶進 SAM 的關鍵。</b> memory bank 存過去幀 + 被提示幀 + object pointers,memory attention 用 cross-attention 讀它——這讓「在第 3 幀點一下就能修好整段」成為可能,而非重畫。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Streaming memory is how "time" enters SAM.</b> The memory bank stores past frames + prompted frames + object pointers; memory attention reads it via cross-attention — this is what lets "one click on frame 3 fix the whole masklet" instead of redrawing.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">資料引擎是共生飛輪。</b> 用當前模型加速標註 → 更多資料 → 更強模型 → 又更快標註。三階段把每幀標註從 37.8 秒壓到 4.5 秒(8.4×),這是能造出 53× 大資料集的真正原因。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">The data engine is a symbiotic flywheel.</b> Use the current model to speed annotation → more data → a stronger model → faster annotation again. Three phases cut per-frame time from 37.8s to 4.5s (8.4×) — the real reason a 53×-larger dataset was feasible.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">「可提示 + 可互動修正」勝過「一次到位」。</b> PVS 不追求零互動,而是<mark class="m-result" data-t="RESULT/EVIDENCE">讓每次互動的邊際效益最大化</mark>——這才是把分割做成「可用工具」而非「跑分模型」的關鍵。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">"Promptable + interactively fixable" beats "one-shot perfect."</b> PVS doesn't chase zero interaction; it <mark class="m-result" data-t="RESULT/EVIDENCE">maximizes the marginal value of each interaction</mark> — the key to a usable tool rather than a benchmark model.</li>
+          <li data-lang="zh"><b style="color:var(--c-limit)">簡單勝過花俏。</b> 記憶就直接存特徵到 FIFO 佇列(不用 GRU);影像編碼器換成更小但更有效的 Hiera;移除 RPB 換來速度。多處「少即是多」的工程選擇。</li>
+          <li data-lang="en"><b style="color:var(--c-limit)">Simple beats fancy.</b> Memory is just features in a FIFO queue (no GRU); the image encoder is the smaller-but-better Hiera; removing RPB buys speed. Many "less is more" engineering calls.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">SAM 2: Segment Anything in Images and Videos</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Ravi, Gabeur, Hu, Hu, Ryali, Ma, Khedr, Rädle, … Girshick, Dollár, Feichtenhofer</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Meta FAIR</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2024 · arXiv:2408.00714<span class="add">[導讀補充] 後被 ICLR 2025 接收</span></span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.CV · Video / Image Segmentation</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>github.com/facebookresearch/sam2</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把 SAM「可提示分割基礎模型」的範式<b>擴張到影片</b>,並附上迄今最大的影片分割資料集。對 AR/VR、機器人、影片編輯、標註產業都是即戰力;更示範了「任務 + 模型 + 資料引擎」這套基礎模型方法論如何被系統性地複製到新模態。</span>
+        <span data-lang="en">Extends SAM's "promptable-segmentation foundation model" paradigm <b>to video</b>, with the largest video-segmentation dataset to date. Immediately useful for AR/VR, robotics, and video editing; and a template for how the "task + model + data engine" recipe transfers to a new modality.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Streaming memory</span><span class="chip">Memory bank</span>
+          <span class="chip">Masklet</span><span class="chip">Hiera encoder</span>
+          <span class="chip">Object pointers</span><span class="chip">SA-V</span><span class="chip">Data engine</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b>SAM</b><br><small><span data-lang="zh">影像可提示分割</span><span data-lang="en">promptable image seg</span></small></td><td><span data-lang="zh">只吃<mark class="m-problem" data-t="PROBLEM/GAP">單張靜態影像</mark>,沒有時間概念;逐幀套用既慢又不連貫(物件在幀間會漂移、閃爍)。</span><span data-lang="en">Handles only a <mark class="m-problem" data-t="PROBLEM/GAP">single static image</mark>, no notion of time; applying it frame-by-frame is slow and incoherent (objects drift/flicker across frames).</span></td></tr>
+          <tr><td><b><span data-lang="zh">SAM + 追蹤器</span><span data-lang="en">SAM + tracker</span></b><br><small>(iVOS)</small></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">解耦的拼裝</mark>:追蹤器可能對某些物件失效、SAM 在影片幀不一定準,而且<mark class="m-problem" data-t="PROBLEM/GAP">出錯無法互動修正</mark>——只能整幀重畫、從頭再追。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">A decoupled bolt-on</mark>: the tracker fails on some objects, SAM isn't reliable on video frames, and <mark class="m-problem" data-t="PROBLEM/GAP">errors can't be interactively fixed</mark> — you re-annotate a whole frame and restart the track.</span></td></tr>
+          <tr><td><b><span data-lang="zh">半監督 VOS 模型</span><span data-lang="en">Semi-supervised VOS</span></b></td><td><span data-lang="zh">假設第一幀已有<mark class="m-assume" data-t="ASSUMPTION/CLAIM">完整 GT 遮罩</mark>,但那個遮罩本身難標;且多針對特定類別、不支援點/框互動。</span><span data-lang="en">Assumes a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">full GT mask</mark> on frame 1 — itself hard to draw; and is class-specific, without click/box interaction.</span></td></tr>
+          <tr><td><b><span data-lang="zh">既有影片資料集</span><span data-lang="en">Existing video datasets</span></b></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">規模小、類別窄、只標整物</mark>(人/車/動物),不含部件與長尾物件,無法支撐「anything」。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Small, class-narrow, whole-object-only</mark> (people/vehicles/animals), no parts or long-tail objects — cannot support "anything."</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「能不能有一個統一模型,像 SAM 那樣可提示、可互動,但在影像與影片上都能即時 segment anything?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"Can one unified, SAM-like promptable and interactive model segment anything, in real time, across both images and video?"</b></p>
+      </div>
+
+      <figure class="fig"><img src="figs/SAMv2/fig2_interactive_task.png" alt="Figure 2 interactive task">
+        <figcaption data-lang="zh"><b>Fig.2</b> PVS 任務與「記憶」的價值。<b>Step 1(選取)</b>:在 frame 1 用正/負點(綠/紅)選出狗的舌頭,SAM 2 沿藍色箭頭自動傳播成 masklet;但到 frame 3 追丟了。<b>Step 2(修正)</b>:只在 frame 3 補<b>一個</b>正點(紅箭頭=修正),就把舌頭救回並重新正確傳播。<b>要注意</b>:解耦的 SAM+追蹤器會像 frame 1 那樣需要好幾個點從頭重標——<b>是「記憶」讓單一次點擊就夠</b>。</figcaption>
+        <figcaption data-lang="en"><b>Fig.2</b> The PVS task and the value of memory. <b>Step 1 (selection)</b>: positive/negative clicks (green/red) on frame 1 pick the dog's tongue; SAM 2 auto-propagates it into a masklet (blue arrows), but loses it by frame 3. <b>Step 2 (refinement)</b>: a <b>single</b> positive click on frame 3 (red arrow = correction) recovers the tongue and re-propagates correctly. <b>Notice</b>: a decoupled SAM+tracker would need several clicks to re-annotate frame 3 from scratch — <b>memory is what makes one click enough</b>.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,SAM 2 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how SAM 2 fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">面向</span><span data-lang="en">Axis</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">SAM 2 如何補上</span><span data-lang="en">How SAM 2 fills it</span></th></tr>
+          <tr>
+            <td><b><span data-lang="zh">任務</span><span data-lang="en">Task</span></b></td>
+            <td><span data-lang="zh">SA 只在影像;VOS 只吃第一幀遮罩。</span><span data-lang="en">SA is image-only; VOS takes only a first-frame mask.</span></td>
+            <td><span data-lang="zh">定義 <mark class="m-method" data-t="METHOD/IDEA">PVS</mark>:任一幀、任意提示、可反覆修正;SA/VOS 都是其特例。</span><span data-lang="en">Defines <mark class="m-method" data-t="METHOD/IDEA">PVS</mark>: any frame, any prompt, iteratively refinable; SA/VOS are special cases.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">模型</span><span data-lang="en">Model</span></b></td>
+            <td><span data-lang="zh">SAM 無時間記憶;拼裝式追蹤器無法互動修正。</span><span data-lang="en">SAM has no temporal memory; bolt-on trackers can't be interactively corrected.</span></td>
+            <td><span data-lang="zh">加 <mark class="m-method" data-t="METHOD/IDEA">streaming memory</mark>:memory bank + memory attention,單次點擊即可跨幀修正。</span><span data-lang="en">Adds <mark class="m-method" data-t="METHOD/IDEA">streaming memory</mark>: a memory bank + memory attention, so one click corrects across frames.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">資料</span><span data-lang="en">Data</span></b></td>
+            <td><span data-lang="zh">影片資料集小、窄、無部件標註。</span><span data-lang="en">Video datasets are small, narrow, part-free.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">SA-V</mark>:35.5M 遮罩、含部件、地理多樣,53× 大。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">SA-V</mark>: 35.5M masks incl. parts, geographically diverse, 53× larger.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">速度</span><span data-lang="en">Speed</span></b></td>
+            <td><span data-lang="zh">SAM 的 ViT 編碼器重;逐幀處理慢。</span><span data-lang="en">SAM's ViT encoder is heavy; per-frame processing is slow.</span></td>
+            <td><span data-lang="zh">改用 <mark class="m-method" data-t="METHOD/IDEA">MAE-Hiera</mark> 編碼器 + 串流,影像快 6×、影片即時(30–44 FPS)。</span><span data-lang="en">Uses an <mark class="m-method" data-t="METHOD/IDEA">MAE-Hiera</mark> encoder + streaming: 6× faster on images, real-time video (30–44 FPS).</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">SAM 2 不是只解「影片分割精度」這一個技術點,而是<b>同時把任務、模型、資料、速度四件事一起補齊</b>——這正是「基礎模型」而非「單篇 SOTA」的打法。它的最強論述不是任何單一數字,而是<b>「一個模型、一套資料、一種互動範式,覆蓋影像與影片」</b>的整體性。</p>
+          <p data-lang="en" style="margin-top:6px">SAM 2 doesn't just fix "video-segmentation accuracy"; it <b>closes task, model, data, and speed together</b> — the foundation-model playbook, not a single-SOTA paper. Its strongest claim is not any one number but the <b>wholeness</b>: one model, one dataset, one interaction paradigm, spanning images and video.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 PVS 讀成「追求零互動的全自動分割」。它的設計哲學相反:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">承認模型會出錯,但讓「修正一次」的成本降到最低</mark>(第 3 幀點一下就好)。把它當「更省力的互動工具」比當「全自動黑盒」更貼近作者本意。</span>
+        <span data-lang="en">Don't read PVS as "fully automatic, zero-interaction" segmentation. Its philosophy is the opposite: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">assume the model errs, but make each correction as cheap as possible</mark> (one click on frame 3). Read it as a "lower-effort interactive tool," not a "fully automatic black box."</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「影像分割基礎模型」升級成「<b>影像+影片統一的互動分割基礎模型</b>」,並用同一個模型驅動資料引擎——這是能一次改變「模型能力」與「資料規模」兩條曲線的關鍵設計。</span>
+        <span data-lang="en">Upgrades an "image-segmentation foundation model" into a "<b>unified image+video interactive-segmentation foundation model</b>," and drives the data engine with that same model — a design that bends both the capability curve and the data-scale curve at once.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">基線公平嗎</span><span data-lang="en">fair baselines</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">多物件效率</span><span data-lang="en">multi-object</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">任務定義:PVS 與 masklet</span><span data-lang="en">Task setup: PVS and masklets</span></h3>
+        <p data-lang="zh">給一段影片的幀序列 \((I_t)_{t=1}^{T}\),使用者可在<b>任一幀</b>提供提示 —— 正/負點、框、或遮罩 —— 來定義或修正目標物件。模型須輸出該物件的<mark class="m-method" data-t="METHOD/IDEA">時空遮罩(masklet)</mark> \((\mathbf{m}_t)_{t=1}^{T}\),即每一幀上的分割遮罩:</p>
+        <p data-lang="en">Given a video's frames \((I_t)_{t=1}^{T}\), the user may prompt <b>any frame</b> — positive/negative clicks, a box, or a mask — to define or correct a target object. The model must output the object's <mark class="m-method" data-t="METHOD/IDEA">spatio-temporal mask (a "masklet")</mark> \((\mathbf{m}_t)_{t=1}^{T}\), i.e. a segmentation on every frame:</p>
+        <div class="eq">$$\text{SAM 2}\big((I_t)_{t=1}^{T},\ \text{prompts on any frames}\big)\ \longrightarrow\ (\mathbf{m}_t)_{t=1}^{T}$$</div>
+        <p data-lang="zh">收到提示後模型須在<b>該幀立即</b>回應一個有效遮罩,並<b>傳播</b>到全片;之後可在任意幀追加提示來反覆修正。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">影像被視為單幀影片</mark>(\(T=1\)),此時記憶為空,模型行為等同 SAM。</p>
+        <p data-lang="en">On receiving a prompt the model must respond <b>immediately on that frame</b> with a valid mask and <b>propagate</b> it across the video; extra prompts on any frame iteratively refine it. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">An image is a single-frame video</mark> (\(T=1\)); then memory is empty and SAM 2 behaves exactly like SAM.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">架構:SAM + streaming memory</span><span data-lang="en">Architecture: SAM + streaming memory</span></h3>
+        <figure class="fig"><img src="figs/SAMv2/fig3_architecture.png" alt="Figure 3 architecture">
+          <figcaption data-lang="zh"><b>Fig.3</b> SAM 2 架構(串流迴圈)。逐幀處理:<b>image encoder</b>(每幀只跑一次)產生無條件特徵 → <b>memory attention</b> 把當前幀 cross-attend 到 <b>memory bank</b>(過去幀 + 被提示幀 + object pointers)→ <b>mask decoder</b>(可另收提示)輸出該幀遮罩 → <b>memory encoder</b> 把新預測寫回記憶,供未來幀使用。<b>要注意</b>:提示可「來自未來幀」;記憶為空時整條路徑就退化成 SAM。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> The SAM 2 architecture (a streaming loop). Per frame: the <b>image encoder</b> (run once per frame) yields unconditioned features → <b>memory attention</b> cross-attends the current frame to the <b>memory bank</b> (past frames + prompted frames + object pointers) → the <b>mask decoder</b> (optionally taking prompts) outputs this frame's mask → the <b>memory encoder</b> writes the new prediction back into memory for future frames. <b>Notice</b>: prompts may come "from the future"; with empty memory the whole path reduces to SAM.</figcaption></figure>
+        <div class="flow">
+          <div class="step"><span class="ph mono">ENCODE</span><b><span data-lang="zh">影像編碼器</span><span data-lang="en">Image encoder</span></b><small><span data-lang="zh">MAE-預訓練 Hiera,階層式、每幀只跑一次。</span><span data-lang="en">MAE-pretrained Hiera, hierarchical, run once per frame.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">CONDITION</span><b><span data-lang="zh">記憶注意力</span><span data-lang="en">Memory attention</span></b><small><span data-lang="zh">\(L\) 層:self-attn → cross-attn 到記憶 → MLP。</span><span data-lang="en">\(L\) blocks: self-attn → cross-attn to memory → MLP.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">DECODE</span><b><span data-lang="zh">遮罩解碼器</span><span data-lang="en">Mask decoder</span></b><small><span data-lang="zh">two-way blocks,可收提示,出遮罩 + occlusion head。</span><span data-lang="en">Two-way blocks, takes prompts, outputs mask + occlusion head.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">WRITE-BACK</span><b><span data-lang="zh">記憶編碼器 → 記憶庫</span><span data-lang="en">Memory encoder → bank</span></b><small><span data-lang="zh">遮罩降採樣 + 幀特徵,存進 FIFO 佇列。</span><span data-lang="en">Downsampled mask + frame features, into a FIFO queue.</span></small></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">五個關鍵元件</span><span data-lang="en">The five key components</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">元件</span><span data-lang="en">Component</span></th><th><span data-lang="zh">怎麼做 / 為何重要</span><span data-lang="en">How it works / why it matters</span></th></tr>
+          <tr><td><b>Image encoder</b></td><td><span data-lang="zh">用 <mark class="m-method" data-t="METHOD/IDEA">MAE 預訓練的 Hiera</mark>(階層式),整段互動<b>只跑一次</b>提供無條件特徵;階層特徵供解碼時取多尺度。比 SAM 的 ViT 更小更快。</span><span data-lang="en">An <mark class="m-method" data-t="METHOD/IDEA">MAE-pretrained Hiera</mark> (hierarchical), run <b>once</b> per frame to give unconditioned features; multiscale features feed decoding. Smaller and faster than SAM's ViT.</span></td></tr>
+          <tr><td><b>Memory attention</b></td><td><span data-lang="zh">堆疊 \(L\) 個 transformer block,每塊 <mark class="m-method" data-t="METHOD/IDEA">self-attention → cross-attention(到記憶與 object pointers)→ MLP</mark>。用 vanilla attention 以享受 FlashAttention 等高效核。</span><span data-lang="en">\(L\) transformer blocks, each <mark class="m-method" data-t="METHOD/IDEA">self-attention → cross-attention (to memories &amp; object pointers) → MLP</mark>. Vanilla attention, to benefit from efficient kernels (FlashAttention).</span></td></tr>
+          <tr><td><b><span data-lang="zh">提示編碼器 + 遮罩解碼器</span><span data-lang="en">Prompt enc. + mask dec.</span></b></td><td><span data-lang="zh">提示編碼器<b>與 SAM 相同</b>。解碼器為 two-way blocks;對模糊提示<b>預測多個遮罩</b>取最高 IoU;新增 <mark class="m-method" data-t="METHOD/IDEA">occlusion head 預測「本幀是否有此物件」</mark>(遮擋/消失時);並用 skip connection 引入高解析特徵。</span><span data-lang="en">The prompt encoder is <b>identical to SAM</b>. The decoder uses two-way blocks; for ambiguous prompts it <b>predicts multiple masks</b> and keeps the highest-IoU one; a new <mark class="m-method" data-t="METHOD/IDEA">occlusion head predicts whether the object is present on this frame</mark> (occlusion/disappearance); skip connections inject high-res features.</span></td></tr>
+          <tr><td><b>Memory encoder</b></td><td><span data-lang="zh">把輸出遮罩<b>卷積降採樣</b>,與影像編碼器的無條件幀特徵<b>逐元素相加</b>,再經輕量卷積融合 —— 簡單而便宜。</span><span data-lang="en">Convolutionally <b>downsamples the output mask</b> and <b>element-wise sums</b> it with the encoder's unconditioned frame features, fused by light conv layers — simple and cheap.</span></td></tr>
+          <tr><td><b>Memory bank</b></td><td><span data-lang="zh">兩個 <mark class="m-method" data-t="METHOD/IDEA">FIFO 佇列</mark>:最近 \(N\) 幀 + 最多 \(M\) 個被提示幀(皆存為空間特徵圖);外加一串 <mark class="m-method" data-t="METHOD/IDEA">object pointers</mark>(來自解碼器輸出 token 的輕量語意向量)。只在最近 \(N\) 幀嵌入<b>時間位置</b>(表短期運動),被提示幀不嵌。</span><span data-lang="en">Two <mark class="m-method" data-t="METHOD/IDEA">FIFO queues</mark>: the last \(N\) frames + up to \(M\) prompted frames (both as spatial feature maps); plus a list of <mark class="m-method" data-t="METHOD/IDEA">object pointers</mark> (lightweight semantic vectors from decoder output tokens). <b>Temporal position</b> is embedded only into the \(N\) recent frames (short-term motion), not prompted frames.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">訓練與損失</span><span data-lang="en">Training &amp; loss</span></h3>
+        <p data-lang="zh">在影像與影片資料上<b>聯合訓練</b>,並<mark class="m-method" data-t="METHOD/IDEA">模擬互動</mark>:抽 8 幀序列、隨機選最多 2 幀給提示,並按 GT 與模型預測取樣<b>修正點擊</b>;初始提示為 GT 遮罩(0.5)、正點(0.25)或框(0.25)。監督用線性組合:</p>
+        <p data-lang="en"><b>Jointly trained</b> on image and video data with <mark class="m-method" data-t="METHOD/IDEA">simulated interaction</mark>: sample 8-frame sequences, randomly pick up to 2 frames to prompt, and sample <b>corrective clicks</b> from GT and model predictions; initial prompts are a GT mask (0.5), a positive click (0.25), or a box (0.25). The supervision is a linear combination:</p>
+        <div class="eq">$$\mathcal{L}=20\,\mathcal{L}_{\text{focal}}+1\,\mathcal{L}_{\text{dice}}+1\,\mathcal{L}_{\text{IoU}}+1\,\mathcal{L}_{\text{occl}}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">遮罩用 <b>focal + dice</b>(權重 20:1)、IoU 預測用 <b>ℓ1/MAE</b>、物件是否存在用 <b>cross-entropy</b>,比例 <b>20:1:1:1</b>。多遮罩時只監督「分割損失最低」的那個;某幀無 GT 遮罩時<b>不監督遮罩但仍監督 occlusion head</b>。先在 SA-1B 預訓練(~90k 步),再於 SA-1B+Internal+SA-V 全量訓練(~150k 步),解析度 1024、AdamW、bfloat16。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Masks use <b>focal + dice</b> (20:1), IoU prediction uses <b>ℓ1/MAE</b>, object-presence uses <b>cross-entropy</b> — a <b>20:1:1:1</b> ratio. With multiple masks, only the lowest-segmentation-loss one is supervised; on frames without a GT mask, masks are <b>not supervised but the occlusion head still is</b>. Pre-train on SA-1B (~90k steps), then full-train on SA-1B+Internal+SA-V (~150k steps) at resolution 1024, AdamW, bfloat16.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\((I_t)_{t=1}^{T}\)</td><td><span data-lang="zh">輸入影片的 \(T\) 幀;影像即 \(T=1\)。</span><span data-lang="en">The \(T\) input frames; an image is \(T=1\).</span></td></tr>
+          <tr><td>\((\mathbf{m}_t)_{t=1}^{T}\)</td><td><span data-lang="zh">masklet —— 目標物件在每一幀的分割遮罩(時空遮罩)。</span><span data-lang="en">The masklet — the target's per-frame segmentation (a spatio-temporal mask).</span></td></tr>
+          <tr><td>\(N,\ M\)</td><td><span data-lang="zh">記憶庫 FIFO 佇列長度:最近 \(N\) 幀(預設 6)+ 最多 \(M\) 個被提示幀。</span><span data-lang="en">Memory-bank FIFO lengths: last \(N\) frames (default 6) + up to \(M\) prompted frames.</span></td></tr>
+          <tr><td>\(L\)</td><td><span data-lang="zh">memory attention 的 transformer block 層數(self+cross+MLP)。</span><span data-lang="en">Number of memory-attention transformer blocks (self+cross+MLP).</span></td></tr>
+          <tr><td>\(\mathcal{J}\&\mathcal{F}\)</td><td><span data-lang="zh">影片分割標準指標:區域 IoU(\(\mathcal{J}\))與邊界 F-score(\(\mathcal{F}\))的平均,越高越好。</span><span data-lang="en">The standard VOS metric: mean of region IoU (\(\mathcal{J}\)) and boundary F-score (\(\mathcal{F}\)); higher is better.</span></td></tr>
+          <tr><td>object pointers</td><td><span data-lang="zh">從解碼器輸出 token 取的輕量向量,攜帶物件的高階語意,供 memory attention cross-attend。</span><span data-lang="en">Lightweight vectors from decoder output tokens carrying high-level object semantics, cross-attended by memory attention.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">把 SAM 原封不動搬來,<b>在編碼器和解碼器之間插一層「會查記憶的注意力」</b>:每處理一幀就把預測寫進記憶庫,下一幀先讀記憶再分割 —— 於是「時間」就進來了。</span>
+        <span data-lang="en">Take SAM almost verbatim and <b>insert a "memory-reading attention" between encoder and decoder</b>: each frame's prediction is written to the memory bank, and the next frame reads memory before segmenting — that's how "time" enters.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何用 self-attn?</span><span data-lang="en">Why FIFO, not GRU?</span></span>
+        <span data-lang="zh">記憶不進 GRU、直接存特徵到 FIFO 佇列 —— 消融顯示 <mark class="m-result" data-t="RESULT/EVIDENCE">GRU 幾乎沒幫助</mark>,直接存更簡單也更快。object pointers 則對 SA-V 與長片(LVOS)有明顯加分。</span>
+        <span data-lang="en">Memory is stored directly in a FIFO queue rather than a GRU — ablations show <mark class="m-result" data-t="RESULT/EVIDENCE">the GRU barely helps</mark>, and direct storage is simpler and faster. Object pointers, meanwhile, clearly boost SA-V and long videos (LVOS).</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">隱含設計</span><span data-lang="en">Implicit design</span></div>
+        <span data-lang="zh">SAM 2 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">對每個物件各跑一次</mark>,物件間只共用每幀影像特徵、<b>沒有物件間溝通</b>。多物件時是「同一影片跑 K 次」,這既是簡潔也是效率與混淆的隱憂(見 CRITIQUE)。</span>
+        <span data-lang="en">SAM 2 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">runs once per object</mark>, sharing only per-frame image features with <b>no inter-object communication</b>. Multi-object means "run the video K times" — elegant, but a source of inefficiency and confusion (see CRITIQUE).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">互動式影片分割(9 個 zero-shot 資料集,3-click)</span><span data-lang="en">Interactive video segmentation (9 zero-shot datasets, 3-click)</span></h3>
+        <figure class="fig"><img src="figs/SAMv2/fig5_benchmark.png" alt="Figure 5 interactive benchmark">
+          <figcaption data-lang="zh"><b>Fig.5</b> 9 個 zero-shot 資料集的平均 \(\mathcal{J}\&\mathcal{F}\),(a) offline、(b) online,橫軸為已互動的幀數(每幀 3 點)。<b>要注意</b>:SAM 2(藍)在<b>所有互動幀數上都明顯高於</b> SAM+XMem++(橘)與 SAM+Cutie(綠)——換言之,達到同等精度所需的互動<b>少 3× 以上</b>,且離線/線上皆然。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> Average \(\mathcal{J}\&\mathcal{F}\) over 9 zero-shot datasets, (a) offline and (b) online, vs. number of interacted frames (3 clicks each). <b>Notice</b>: SAM 2 (blue) sits <b>clearly above</b> SAM+XMem++ (orange) and SAM+Cutie (green) at every count — i.e. it needs <b>&gt;3× fewer interactions</b> to reach the same accuracy, both offline and online.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">半監督 VOS:17 資料集平均 \(\mathcal{J}\&\mathcal{F}\)(第一幀提示)</span><span data-lang="en">Semi-supervised VOS: avg \(\mathcal{J}\&\mathcal{F}\) over 17 datasets (first-frame prompt)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th>1-click</th><th>3-click</th><th>5-click</th><th>box</th><th>GT mask</th></tr>
+          <tr><td>SAM+XMem++</td><td>56.9</td><td>68.4</td><td>70.6</td><td>67.6</td><td>72.7</td></tr>
+          <tr><td>SAM+Cutie</td><td>56.7</td><td>70.1</td><td>72.2</td><td>69.4</td><td>74.1</td></tr>
+          <tr><td class="win">SAM 2</td><td class="win">64.7</td><td class="win">75.3</td><td class="win">77.6</td><td class="win">74.4</td><td class="win">79.3</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">不論用點、框、還是完整遮罩當提示,SAM 2 <mark class="m-result" data-t="RESULT/EVIDENCE">在各種提示型態上都全面領先</mark>;連對手最擅長的「GT 遮罩輸入」也贏 5 分以上。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Whether prompted by clicks, a box, or a full mask, SAM 2 <mark class="m-result" data-t="RESULT/EVIDENCE">leads across every prompt type</mark> — even by 5+ points on the "GT mask" input the baselines are built for.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">影像分割(SA task,SA-23,1-click mIoU)+ SOTA VOS</span><span data-lang="en">Image segmentation (SA task, SA-23, 1-click mIoU) + SOTA VOS</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">模型 / 設定</span><span data-lang="en">Model / setting</span></th><th>SA-23 All</th><th>FPS</th></tr>
+          <tr><td>SAM (SA-1B)</td><td>58.1</td><td>21.7</td></tr>
+          <tr><td>SAM 2 (SA-1B)</td><td class="ok">58.9</td><td class="win">130.1</td></tr>
+          <tr><td class="win">SAM 2 (our mix)</td><td class="win">61.9</td><td class="win">130.1</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin:6px 0 12px">即使只用 SA-1B(與 SAM 同資料),SAM 2 也<mark class="m-result" data-t="RESULT/EVIDENCE">更準且快 6×</mark>(58.9 vs 58.1,130 vs 22 FPS)——主要來自更有效的 Hiera 編碼器;加上影片資料混訓再升到 61.9。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin:6px 0 12px">Even on SA-1B alone (same data as SAM), SAM 2 is <mark class="m-result" data-t="RESULT/EVIDENCE">more accurate and 6× faster</mark> (58.9 vs 58.1; 130 vs 22 FPS) — mainly from the more effective Hiera encoder; mixing in video data lifts it to 61.9.</p>
+        <table>
+          <tr><th><span data-lang="zh">VOS SOTA(\(\mathcal{J}\&\mathcal{F}\))</span><span data-lang="en">VOS SOTA (\(\mathcal{J}\&\mathcal{F}\))</span></th><th>MOSE</th><th>DAVIS17</th><th>SA-V test</th><th>LVOS</th></tr>
+          <tr><td>Cutie-base+ <small><span data-lang="zh">(前最佳)</span><span data-lang="en">(prev best)</span></small></td><td>71.7</td><td>88.1</td><td>62.8</td><td>—</td></tr>
+          <tr><td class="win">SAM 2 (Hiera-L)</td><td class="win">77.9</td><td class="win">90.7</td><td class="win">78.4</td><td class="win">78.0</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:8px">在傳統 VOS 上也 SOTA,且<mark class="m-result" data-t="RESULT/EVIDENCE">在開放世界的 SA-V test 上把 62.8 拉到 78.4</mark>(前人多在此飽和,凸顯「segment anything」的差距)。速度:Hiera-B+ 43.8 FPS、Hiera-L 30.2 FPS,皆即時。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:8px">SOTA on classic VOS too, and <mark class="m-result" data-t="RESULT/EVIDENCE">it lifts open-world SA-V test from 62.8 to 78.4</mark> (where prior work plateaus — exposing the gap to "segment anything"). Speed: Hiera-B+ 43.8 FPS, Hiera-L 30.2 FPS, both real-time.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">資料引擎:越滾越快、資料越多越準</span><span data-lang="en">Data engine: faster loop, more data → more accuracy</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">階段</span><span data-lang="en">Phase</span></th><th><span data-lang="zh">每幀時間</span><span data-lang="en">Time/frame</span></th><th><span data-lang="zh">加速</span><span data-lang="en">Speedup</span></th><th><span data-lang="zh">SA-V val \(\mathcal{J}\&\mathcal{F}\)</span><span data-lang="en">SA-V val</span></th></tr>
+          <tr><td>1 · SAM only</td><td>37.8 s</td><td>1×</td><td>53.0</td></tr>
+          <tr><td>2 · SAM + SAM 2 Mask</td><td>7.4 s</td><td>5.1×</td><td>58.8</td></tr>
+          <tr><td class="win">3 · SAM 2</td><td class="win">4.5 s</td><td class="win">8.4×</td><td class="win">62.5</td></tr>
+          <tr><td>+ Auto</td><td>—</td><td>—</td><td class="ok">63.2</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">模型越強、標註越快、資料越好,<b>正向飛輪</b>成立。加入資料引擎資料使 9 個 zero-shot 資料集<mark class="m-result" data-t="RESULT/EVIDENCE">平均 +12.1%</mark>;資料量與精度呈<mark class="m-result" data-t="RESULT/EVIDENCE">冪律關係(power law)</mark>。最終 SA-V:50.9K 影片、642.6K masklets、35.5M masks(53× 大)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Stronger model → faster annotation → better data: the <b>flywheel</b> holds. Adding data-engine data gives <mark class="m-result" data-t="RESULT/EVIDENCE">+12.1% average</mark> on 9 zero-shot datasets; accuracy scales with data as a <mark class="m-result" data-t="RESULT/EVIDENCE">power law</mark>. Final SA-V: 50.9K videos, 642.6K masklets, 35.5M masks (53× larger).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融重點</span><span data-lang="en">Key ablations</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">拿掉/改動</span><span data-lang="en">Remove / change</span></th><th><span data-lang="zh">觀察</span><span data-lang="en">Observation</span></th></tr>
+          <tr><td><span data-lang="zh">只用 VOS 資料訓練</span><span data-lang="en">Train on VOS data only</span></td><td><span data-lang="zh">in-domain 尚可,但 9 zero-shot 掉到 59.7;<mark class="m-result" data-t="RESULT/EVIDENCE">加資料引擎資料 +12.1%</mark>。</span><span data-lang="en">OK in-domain but 9 zero-shot drops to 59.7; <mark class="m-result" data-t="RESULT/EVIDENCE">data-engine data adds +12.1%</mark>.</span></td></tr>
+          <tr><td>GRU recurrent memory</td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">幾乎無益</mark>;直接存 FIFO 更簡單快速。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Barely helps</mark>; direct FIFO storage is simpler/faster.</span></td></tr>
+          <tr><td><span data-lang="zh">去掉 object pointers</span><span data-lang="en">Drop object pointers</span></td><td><span data-lang="zh">9 zero-shot 幾乎不變,但 <mark class="m-result" data-t="RESULT/EVIDENCE">SA-V、長片 LVOS 明顯變差</mark> → 保留。</span><span data-lang="en">9 zero-shot ~flat, but <mark class="m-result" data-t="RESULT/EVIDENCE">SA-V and long-video LVOS clearly worsen</mark> → keep them.</span></td></tr>
+          <tr><td><span data-lang="zh">解析度 512→1024 / 幀數 4→8</span><span data-lang="en">Res 512→1024 / frames 4→8</span></td><td><span data-lang="zh">解析度與幀數<b>越多越好</b>,故選 1024 + 8 幀;記憶預設 6 幀。</span><span data-lang="en">More resolution and frames <b>both help</b>; hence 1024 + 8 frames; default 6 memories.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted);margin-top:10px">實驗證明了什麼:一個<b>統一、可提示、有記憶</b>的模型,配上<b>大規模多樣資料</b>,能同時在影像與影片、互動與非互動設定上勝出。沒證明的:在<b>極長影片</b>的累積漂移、<b>多物件同場景</b>的效率與相互干擾(見 CRITIQUE)。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted);margin-top:10px">What the experiments prove: a <b>unified, promptable, memory-equipped</b> model plus <b>large diverse data</b> wins across images and video, interactive and not. What they don't: drift over <b>very long videos</b>, and efficiency/interference with <b>many objects</b> in one scene (see CRITIQUE).</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">影片<b>少 3× 互動更準</b>、影像<b>更準且快 6×</b>、VOS 全面 SOTA、SA-V <b>大 53×</b> —— 「同一模型、又快又準又通用、還自帶資料引擎」是它最強的整體論述。</span>
+        <span data-lang="en"><b>3× fewer interactions</b> on video, <b>more accurate + 6× faster</b> on images, SOTA on VOS, and a <b>53×-larger</b> SA-V — "one model, fast + accurate + general, with its own data engine" is the strongest overall claim.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">「影像快 6×」很大程度來自<mark class="m-limit" data-t="LIMITATION/FUTURE">換了 Hiera 編碼器</mark>,而非記憶設計本身;論文也自承此點。把「方法的貢獻」與「換 backbone 的貢獻」分開看,較不會高估。</span>
+        <span data-lang="en">The "6× faster" on images largely comes from <mark class="m-limit" data-t="LIMITATION/FUTURE">swapping in the Hiera encoder</mark>, not the memory design — the paper says as much. Separate "method contribution" from "backbone swap" to avoid over-crediting.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">自動標註循環</span><span data-lang="en">auto-label loop</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">長片漂移</span><span data-lang="en">long-video drift</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>多物件是「跑 K 次」而非真正一起解</b>:SAM 2 <mark class="m-limit" data-t="LIMITATION/FUTURE">對每個物件各自處理、無物件間溝通</mark>(僅共用每幀影像特徵)。多物件場景既<b>不省算力</b>,也容易在外觀相近的物件間混淆(作者用「多顆一樣的雜耍球」為例)。這是架構層級的限制,非調參能解。</li>
+          <li data-lang="en"><b>Multi-object is "run K times," not a joint solve</b>: SAM 2 <mark class="m-limit" data-t="LIMITATION/FUTURE">processes each object separately with no inter-object communication</mark> (only shared per-frame features). Crowded scenes are neither compute-efficient nor robust to look-alike objects (the authors' own "identical juggling balls"). An architectural limit, not a tuning issue.</li>
+          <li data-lang="zh"><b>自動標註的循環風險</b>:642.6K masklets 中有 <mark class="m-limit" data-t="LIMITATION/FUTURE">451.7K 是 SAM 2 自己生成的「Auto」masklet</mark>。用模型標的資料再訓練同一模型,可能<mark class="m-assume" data-t="ASSUMPTION/CLAIM">自我強化既有偏好、低估失敗模式</mark>;雖有人工驗證關卡,但「+Auto」在部分 zero-shot 上的增益其實有限(63.2→63.2 級距)。</li>
+          <li data-lang="en"><b>Auto-annotation circularity</b>: of 642.6K masklets, <mark class="m-limit" data-t="LIMITATION/FUTURE">451.7K are "Auto" masklets generated by SAM 2 itself</mark>. Training a model on data it labeled can <mark class="m-assume" data-t="ASSUMPTION/CLAIM">self-reinforce existing biases and under-sample failure modes</mark>; despite a human-verification gate, the "+Auto" gain on some zero-shot sets is small.</li>
+          <li data-lang="zh"><b>基線是作者自建的拼裝組合</b>:SAM+XMem++ / SAM+Cutie 由作者組裝,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">是否為「最強可能的影片基線」可討論</mark>。統一模型天生較拼裝式有利,勝出有部分來自「架構整合」而非單純能力更高。</li>
+          <li data-lang="en"><b>Baselines are author-assembled combos</b>: SAM+XMem++ / SAM+Cutie were built by the authors; <mark class="m-assume" data-t="ASSUMPTION/CLAIM">whether they're the strongest possible video baselines is debatable</mark>. A unified model is inherently advantaged over a bolt-on, so part of the win is "integration," not raw capability.</li>
+          <li data-lang="zh"><b>長片精度/漂移未系統量化</b>:主打「串流可處理任意長影片」,但<mark class="m-limit" data-t="LIMITATION/FUTURE">記憶只保留最近 \(N=6\) 幀 + 被提示幀</mark>;超長影片的累積漂移、記憶遺忘只有 LVOS 一個間接指標,缺乏長度掃描曲線。</li>
+          <li data-lang="en"><b>Long-video accuracy/drift not systematically quantified</b>: it sells "streaming, arbitrarily long video," yet <mark class="m-limit" data-t="LIMITATION/FUTURE">memory keeps only the last \(N=6\) frames + prompted frames</mark>; drift and forgetting over very long videos rest on LVOS alone, with no length-sweep curve.</li>
+          <li data-lang="zh"><b>作者坦承的失敗模式</b>:<mark class="m-limit" data-t="LIMITATION/FUTURE">鏡頭切換、擁擠場景、長時間遮擋、細長快速物件</mark>會掉分,靠「多點幾下修正」緩解——但這把負擔轉回使用者,與「省互動」的賣點有張力。</li>
+          <li data-lang="en"><b>Author-acknowledged failure modes</b>: <mark class="m-limit" data-t="LIMITATION/FUTURE">shot changes, crowded scenes, long occlusions, thin/fast objects</mark> degrade it, mitigated by "a few more clicks" — which shifts the burden back to the user, in tension with the "fewer interactions" pitch.</li>
+          <li data-lang="zh"><b>Meta 規模的算力與資料</b>:數十億遮罩、內部授權資料、大量標註人力,<mark class="m-limit" data-t="LIMITATION/FUTURE">學術界難以複現或公平對照</mark>;多少增益來自模型、多少來自資料規模難以拆解。</li>
+          <li data-lang="en"><b>Meta-scale compute and data</b>: billions of masks, internal licensed data, heavy annotation labor — <mark class="m-limit" data-t="LIMITATION/FUTURE">hard for academia to reproduce or compare fairly</mark>; model-vs-data-scale contributions are hard to disentangle.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>基線公平性</b>:若換上更強的一體式 iVOS 方法(而非 SAM+tracker 拼裝),SAM 2 的領先幅度還剩多少?勝在能力還是勝在整合?</li>
+          <li data-lang="en"><b>Baseline fairness</b>: against a stronger end-to-end iVOS method (not a SAM+tracker bolt-on), how much of SAM 2's lead remains? Capability or integration?</li>
+          <li data-lang="zh"><b>自動標註的循環偏差</b>:451.7K 條 Auto masklet 是否讓模型在「SAM 2 本來就會的物件」上被過度強化?若只用人工 190.9K,zero-shot 泛化差多少?</li>
+          <li data-lang="en"><b>Circular self-labeling</b>: do the 451.7K Auto masklets over-reinforce objects SAM 2 already handles? With only the 190.9K manual masklets, how much zero-shot generalization is lost?</li>
+          <li data-lang="zh"><b>多物件的真實成本</b>:同場景 10 個物件時,per-object 推理的延遲與記憶體如何?相互遮擋/混淆的錯誤率有無系統評測?</li>
+          <li data-lang="en"><b>True multi-object cost</b>: with 10 objects in a scene, what are per-object latency and memory? Is mutual-occlusion/confusion error rate ever benchmarked?</li>
+          <li data-lang="zh"><b>長片漂移</b>:把影片拉到數分鐘、上千幀,\(N=6\) 的記憶是否足夠?精度隨長度如何衰減、需要多密的修正點才能維持?</li>
+          <li data-lang="en"><b>Long-video drift</b>: over minutes / thousands of frames, is \(N=6\) memory enough? How does accuracy decay with length, and how dense must corrections be to hold it?</li>
+          <li data-lang="zh"><b>記憶 vs 運動建模</b>:作者說「加入顯式運動建模」可改善相似物件混淆——那目前純靠 appearance 記憶的設計,是否在快速運動下有系統性弱點?</li>
+          <li data-lang="en"><b>Memory vs motion modeling</b>: the authors suggest explicit motion modeling would help look-alike confusion — is the current appearance-only memory systematically weak under fast motion?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 SAM 2 讀成「影片全自動分割解決了」。它真正解決的是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「可提示、可互動、可即時修正」的分割工具</mark>;困難場景仍需人補點。它降低的是<b>每次互動的成本</b>,不是消滅互動。</span>
+        <span data-lang="en">Reading SAM 2 as "automatic video segmentation, solved." What it actually delivers is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a promptable, interactive, real-time-correctable</mark> segmentation tool; hard scenes still need human clicks. It lowers the <b>cost per interaction</b>, not the need for interaction.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">限制寫得坦白(鏡頭切換、擁擠、細長物、per-object 無溝通),且做了<b>公平性評估</b>(不同性別/年齡的表現差異小)。SA-V、模型、訓練碼、demo 全部開源,對社群貢獻實在。</span>
+        <span data-lang="en">Limitations are candid (shot changes, crowds, thin objects, no per-object communication), and a <b>fairness evaluation</b> is included (small gaps across perceived gender/age). SA-V, the model, training code and demo are all open-sourced — a real community contribution.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「任務 + 模型 + 資料引擎」是可複製的基礎模型配方</b>:想在新模態建基礎模型時,先定義一個<b>可提示的通用任務</b>,再用<b>模型在環路中</b>的資料引擎滾出大規模資料——SAM→SAM 2 證明這套能跨模態遷移。</li>
+          <li data-lang="en"><b>"Task + model + data engine" is a reusable foundation-model recipe</b>: to build one in a new modality, first define a <b>promptable general task</b>, then grow large data with a <b>model-in-the-loop</b> engine — SAM→SAM 2 shows the recipe transfers across modalities.</li>
+          <li data-lang="zh"><b>把「時間/序列」接進既有模型的最小改動 = 一層記憶</b>:memory bank(FIFO)+ memory attention(cross-attn)是相當通用的模式,可借用到任何「需要跨影格/跨步驟一致性」的任務,而不必重造架構。</li>
+          <li data-lang="en"><b>The minimal way to add "time/sequence" to an existing model = a memory layer</b>: a FIFO memory bank + cross-attention memory attention is a general pattern, borrowable for any task needing cross-frame/cross-step consistency — no architecture rebuild.</li>
+          <li data-lang="zh"><b>互動範式的設計值得學</b>:與其追求「一次到位」,不如設計成「可提示、可修正、每次互動邊際效益最大」。這對任何 human-in-the-loop 系統(標註、編輯、輔助決策)都適用。</li>
+          <li data-lang="en"><b>The interaction paradigm is worth copying</b>: rather than "one-shot perfect," design for "promptable, correctable, max marginal value per interaction." This applies to any human-in-the-loop system (annotation, editing, decision support).</li>
+          <li data-lang="zh"><b>直接拿來用</b>:SAM 2 開源(權重/訓練碼/資料),可當影片分割與追蹤的<b>即用工具或預訓練 backbone</b>,SA-V 也是現成的大規模訓練/評測資源。</li>
+          <li data-lang="en"><b>Use it directly</b>: SAM 2 is open (weights/training code/data) as a <b>ready tool or pretrained backbone</b> for video segmentation and tracking; SA-V is an off-the-shelf large-scale training/eval resource.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「可提示分割可統一影像與影片」</span><span data-lang="en">"Promptable segmentation can unify images and video"</span></td><td><span data-lang="zh">代表性正面證據(PVS 任務 + 單一模型雙域 SOTA)。</span><span data-lang="en">A flagship example (the PVS task + one model, SOTA on both domains).</span></td></tr>
+          <tr><td><span data-lang="zh">「串流記憶讓即時互動影片分割成為可能」</span><span data-lang="en">"Streaming memory enables real-time interactive video segmentation"</span></td><td><span data-lang="zh">引 memory bank / memory attention / object pointers 設計與消融。</span><span data-lang="en">Cite the memory bank / memory attention / object-pointer design and ablations.</span></td></tr>
+          <tr><td><span data-lang="zh">「模型在環路資料引擎大幅加速標註」</span><span data-lang="en">"Model-in-the-loop data engines accelerate annotation"</span></td><td><span data-lang="zh">引三階段 8.4× 加速與 SA-V 規模(53×)。</span><span data-lang="en">Cite the three-phase 8.4× speedup and SA-V scale (53×).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">SAM 2 把 SAM 的可提示分割<b>加上一層 streaming memory</b> 就推廣到影片,用同一個模型在影像與影片、互動與非互動上同時 SOTA,並用模型在環路的資料引擎造出 53× 大的 SA-V。它不是「全自動影片分割」,而是<b>把互動分割做成又快又準又通用的即用工具</b>,並示範了基礎模型配方如何跨模態複製。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">SAM 2 extends SAM's promptable segmentation to video by <b>adding one streaming-memory layer</b>, hitting SOTA across images/video and interactive/non-interactive with a single model, and building the 53×-larger SA-V via a model-in-the-loop data engine. It is not "automatic video segmentation" but <b>interactive segmentation turned into a fast, accurate, general tool</b> — and a demonstration of how the foundation-model recipe transfers across modalities.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀 / 系譜</span><span data-lang="en">Further reading / lineage</span></span>
+        <span data-lang="zh"><b>承先:</b>直接建於 <b>SAM(Kirillov 2023)</b> 之上——SA 任務→PVS、SAM 架構→+記憶、SA-1B→SA-V,並把 ViT 換成 <b>Hiera</b>;記憶與追蹤思路呼應 <b>XMem / Cutie / CoTracker</b>。<b>啟後:</b><span class="add">[導讀補充]</span> <b>SAM 3(2025)</b> 延續 SAM 2 的影片+記憶骨幹,並把「提示」從幾何點/框/遮罩擴展到<b>開放詞彙的文字/概念提示</b>(promptable concept segmentation,一次分割某概念的所有實例)——SAM 2 提供的正是它所複用的串流影片基礎。</span>
+        <span data-lang="en"><b>Builds on:</b> directly on <b>SAM (Kirillov 2023)</b> — SA→PVS, SAM architecture→+memory, SA-1B→SA-V, and ViT→<b>Hiera</b>; its memory/tracking ideas echo <b>XMem / Cutie / CoTracker</b>. <b>Leads to:</b> <span class="add">[guide note]</span> <b>SAM 3 (2025)</b> keeps SAM 2's video+memory backbone and extends "prompts" from geometric clicks/boxes/masks to <b>open-vocabulary text/concept prompts</b> (promptable concept segmentation — segment all instances of a concept at once); SAM 2 supplies exactly the streaming-video foundation it reuses.</span>
+        <div class="chips" style="margin-top:8px">
+          <span class="chip">SAM (SA-1B)</span><span class="chip">Hiera / MAE</span>
+          <span class="chip">XMem++ / Cutie</span><span class="chip">CoTracker</span><span class="chip">SAM 3 →</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Ravi et al. 2024 (SAM 2) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'SAM 2 reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

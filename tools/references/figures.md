@@ -54,6 +54,12 @@ robust method below crops **page regions**, which captures raster and vector ali
   land around 20–80 KB each, which is fine for a local library.
 - Store crops under `papers/figs/<PaperKey>/` (one folder per paper) so guides
   never clash and the index folder stays tidy.
+- **Parallel/batch runs: give each paper its own render output dir**
+  (`render ... -o pages_<key>`). The default `-o pages` is shared, so concurrent
+  agents rendering different papers clobber each other's preview PNGs — you may
+  inspect the wrong paper's page. Crops read from the source PDF (not the preview),
+  so final figures stay correct **as long as you verify each crop by reading it
+  back** (the loop above) — but wrong previews can still mislead your crop-box choice.
 - If you truly want a single portable file (email-able, no folder), embed images
   as base64 `data:` URIs instead of paths — at the cost of a much larger, harder-
   to-edit HTML. Default to relative paths for a library; switch to base64 only on

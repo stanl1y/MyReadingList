@@ -48,6 +48,26 @@ CLUSTERS = [
         ],
     },
     {
+        "id": "sam", "emoji": "✂️", "accent": "#0f9b8e",
+        "title_zh": "Segment Anything 系列",
+        "title_en": "The Segment Anything Series",
+        "blurb_zh": ("主線是把「分割」做成<b>可提示的 foundation model</b>,然後一代一代<b>擴張「可提示 / 可輸出」的維度</b>——"
+                     "SAM 用空間提示(點/框/遮罩)在單張影像分割任意物體(靠 SA-1B 資料引擎);SAM 2 加<b>時間</b>(streaming memory 推廣到影片);"
+                     "SAM 3 加<b>語意</b>(文字概念/範例提示,一次找出並追蹤某概念的所有實例 PCS);SAM 3D 加<b>維度</b>(單張影像生成完整 per-object 3D:形狀+紋理+layout)。"
+                     "共同配方:每一代都配一個 model-in-the-loop 資料引擎,讓模型自產大部分標註。SAM 3D 與下面「3D 視覺」串的 VGGT 是姊妹——前者生成完整物體 3D,後者回復可視場景幾何。"),
+        "blurb_en": ("The throughline: make segmentation a <b>promptable foundation model</b>, then <b>widen the promptable / output space</b> generation by generation—"
+                     "SAM segments any object in one image via spatial prompts (points/boxes/masks), powered by the SA-1B data engine; SAM 2 adds <b>time</b> (streaming memory extends it to video); "
+                     "SAM 3 adds <b>semantics</b> (text-concept / exemplar prompts that find &amp; track every instance of a concept — PCS); SAM 3D adds <b>dimension</b> (full per-object 3D — shape+texture+layout — from one image). "
+                     "Shared recipe: every generation pairs with a model-in-the-loop data engine so the model annotates most of its own data. SAM 3D is a sibling to VGGT in the 3D-vision thread below — the former generates full object 3D, the latter recovers visible scene geometry."),
+        "context": None,
+        "lineages": [
+            {"label_zh": "Meta FAIR / Superintelligence Labs", "label_en": "Meta FAIR / Superintelligence Labs",
+             "chain": ["SAMv1", "SAMv2", "SAMv3", "SAM3D"],
+             "edges_zh": ["+影片・記憶", "+概念・文字", "+3D 維度"],
+             "edges_en": ["+video · memory", "+concepts · text", "+3D lifting"]},
+        ],
+    },
+    {
         "id": "vision3d", "emoji": "🧊", "accent": "#9a5bd1",
         "title_zh": "3D 視覺與重建",
         "title_en": "3D Vision &amp; Reconstruction",
