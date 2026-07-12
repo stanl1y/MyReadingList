@@ -23,6 +23,11 @@ Method · Results · Critique · Takeaway** — with:
 - **Umbrella** — *Robots Need More Than VLAs & World Models* (position paper, 2026)
 - 🧵 **[Synthesis](papers/Synthesis_ForceManipulation.html)** — head-to-head comparison of the two lines
 
+### ✂️ The Segment Anything Series
+*One promptable machine, four dimension expansions: space → time → semantics → 3D.*
+- **SAM** (2023) → **SAM 2** (2024) → **SAM 3** (2025) → **SAM 3D** (2025) — Meta FAIR
+- 🧵 **[Synthesis](papers/Synthesis_SegmentAnything.html)** — the four-generation comparison & the invariant recipe
+
 ### 🧊 3D Vision & Reconstruction
 - **VGGT** — Visual Geometry Grounded Transformer (CVPR 2025)
 

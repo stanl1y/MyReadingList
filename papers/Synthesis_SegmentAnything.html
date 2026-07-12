@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>綜合導讀 · Segment Anything 系列</title>
+<meta name="paper-meta" content='{"kind":"synthesis","title":"Synthesis · The Segment Anything Series","authors":"4 papers · Meta FAIR (2023–2025)","year":"2023–2025","venue":"綜合導讀 / Synthesis","tags":["Synthesis","Segment Anything"],"tldr":"把 SAM→SAM2→SAM3→SAM3D 串成一條線:同一台「可提示分割機器」沿空間→時間→語意→3D 四個維度擴張;每一代的真正產品是自我加速的資料引擎。","tldr_en":"Threads SAM→SAM2→SAM3→SAM3D into one line: a single promptable segmentation machine expanding along space → time → semantics → 3D, where the real product of each generation is a self-accelerating data engine."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --gen:#0f9b8e;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50; box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.16em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28); border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0; font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 16px; cursor:pointer; letter-spacing:.06em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 340px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 11px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em; padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none; border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method); border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:10.5px; letter-spacing:.06em; border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase; vertical-align:bottom}
+  td{padding:10px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ctable{overflow-x:auto; border:1px solid var(--line); border-radius:10px}
+  .ctable table{margin:0; min-width:860px}
+  .ctable td:first-child, .ctable th:first-child{position:sticky; left:0; background:var(--card)}
+  .gen{color:var(--gen); font-weight:700}
+  .pkey{font-weight:700; white-space:nowrap; color:var(--gen)}
+  .yb{font-family:ui-monospace,Menlo,monospace; font-size:10px; color:var(--muted); display:block; font-weight:400}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+
+  .tl2{position:relative; margin:10px 0 4px; padding-left:8px}
+  .trow{display:grid; grid-template-columns:64px 1fr; gap:14px; padding:8px 0; border-left:2px solid var(--line); margin-left:8px; padding-left:18px; position:relative}
+  .trow:before{content:""; position:absolute; left:-7px; top:16px; width:12px; height:12px; border-radius:50%; background:var(--gold); border:2px solid var(--paper)}
+  .tyr{font-family:ui-monospace,Menlo,monospace; font-weight:700; color:var(--navy); font-size:15px}
+  .titem{font-size:13.5px}
+  .badge{font-size:10px; padding:2px 7px; border-radius:10px; margin-left:6px; font-weight:700; background:rgba(15,155,142,.13); color:var(--gen)}
+
+  .steps{counter-reset:st; list-style:none; padding:0; margin:0}
+  .steps li{position:relative; padding:12px 0 12px 46px; border-bottom:1px dashed var(--line)}
+  .steps li:last-child{border:none}
+  .steps li:before{counter-increment:st; content:counter(st); position:absolute; left:0; top:12px; width:30px; height:30px; background:var(--navy); color:var(--gold); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700}
+  .steps b.t{color:var(--gen)}
+
+  .flow{display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; margin:8px 0}
+  .flow b{background:#f2efe6; border:1px solid var(--line); border-radius:8px; padding:4px 8px}
+  .flow .ar{color:var(--gold); font-weight:700}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold); border-radius:8px; padding:6px 14px; margin:10px 0; overflow-x:auto}
+  .katex{font-size:1.02em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4; padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .backlink{color:var(--gold); text-decoration:none; font-size:12px}
+  .backlink:hover{text-decoration:underline}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">SYNTHESIS · 綜合導讀</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 OVERVIEW</button>
+    <button data-p="1">02 COMPARISON</button>
+    <button data-p="2">03 RECIPE</button>
+    <button data-p="3">04 PATTERNS</button>
+    <button data-p="4">05 OPEN PROBLEMS</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ============ 01 OVERVIEW ============ -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">One Machine, Four Expansions</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">這 4 篇是同一台「<b>可提示分割機器</b>」的四次維度擴張:<span class="gen">SAM</span> 用空間提示把分割做成 foundation model;<span class="gen">SAM 2</span> 加<b>時間</b>(streaming memory → 影片);<span class="gen">SAM 3</span> 加<b>語意</b>(概念提示 → 所有實例);<span class="gen">SAM 3D</span> 加<b>維度</b>(單圖 → 完整 3D)。介面一直在變,<mark class="m-method" data-t="METHOD/IDEA">配方從未變:任務可提示化 + 最小架構增量 + model-in-the-loop 資料引擎 + 隨附新 benchmark</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">These 4 papers are four dimension-expansions of one <b>promptable segmentation machine</b>: <span class="gen">SAM</span> turns segmentation into a foundation model via spatial prompts; <span class="gen">SAM 2</span> adds <b>time</b> (streaming memory → video); <span class="gen">SAM 3</span> adds <b>semantics</b> (concept prompts → every instance); <span class="gen">SAM 3D</span> adds <b>dimension</b> (one image → full 3D). The interface keeps changing; <mark class="m-method" data-t="METHOD/IDEA">the recipe never does: promptable task + minimal architecture delta + a model-in-the-loop data engine + a shipped benchmark</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">四次維度擴張</span><span data-lang="en">The four expansions</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">代</span><span data-lang="en">Gen</span></th><th><span data-lang="zh">新維度</span><span data-lang="en">New dimension</span></th><th><span data-lang="zh">新任務</span><span data-lang="en">New task</span></th><th><span data-lang="zh">一句話</span><span data-lang="en">In one line</span></th></tr>
+          <tr><td class="pkey">SAM</td><td><span data-lang="zh">空間</span><span data-lang="en">space</span></td><td>SA</td><td><span data-lang="zh">點/框/mask → 任一物體的 valid mask</span><span data-lang="en">point/box/mask → a valid mask for any object</span></td></tr>
+          <tr><td class="pkey">SAM 2</td><td><span data-lang="zh">時間</span><span data-lang="en">time</span></td><td>PVS</td><td><span data-lang="zh">任一幀提示 → 全片時空 masklet(影像=空記憶特例)</span><span data-lang="en">prompt on any frame → a spatio-temporal masklet (image = empty-memory special case)</span></td></tr>
+          <tr><td class="pkey">SAM 3</td><td><span data-lang="zh">語意</span><span data-lang="en">semantics</span></td><td>PCS</td><td><span data-lang="zh">名詞片語/範例 → 概念的所有實例+追蹤</span><span data-lang="en">noun phrase / exemplar → every instance of the concept, tracked</span></td></tr>
+          <tr><td class="pkey">SAM 3D</td><td><span data-lang="zh">維度</span><span data-lang="en">dimension</span></td><td>3Dfy</td><td><span data-lang="zh">單圖+mask → 形狀+紋理+layout 的完整 3D</span><span data-lang="en">one image + mask → full 3D shape + texture + layout</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">時間軸(2023 → 2025)</span><span data-lang="en">Timeline (2023 → 2025)</span></h3>
+        <div class="tl2">
+          <div class="trow"><div class="tyr">2023</div><div class="titem"><b class="gen">SAM</b><span class="badge">ICCV</span><br><span data-lang="zh">可提示分割 + SA-1B(11M 圖 / 1.1B masks,99.1% 全自動)</span><span data-lang="en">promptable segmentation + SA-1B (11M images / 1.1B masks, 99.1% fully automatic)</span></div></div>
+          <div class="trow"><div class="tyr">2024</div><div class="titem"><b class="gen">SAM 2</b><span class="badge">→ ICLR 2025</span><br><span data-lang="zh">streaming memory 推廣到影片;SA-V(35.5M masks),標註加速 8.4×</span><span data-lang="en">streaming memory extends it to video; SA-V (35.5M masks), annotation 8.4× faster</span></div></div>
+          <div class="trow"><div class="tyr">2025</div><div class="titem"><b class="gen">SAM 3</b> · <b class="gen">SAM 3D</b><span class="badge">2025.11 · <span data-lang="zh">同步發布</span><span data-lang="en">joint release</span></span><br><span data-lang="zh">概念提示(SA-Co 基準 207K 概念,>50×)+ 單圖 3D(MITL 引擎 ~80% 自產標註)</span><span data-lang="en">concept prompts (SA-Co benchmark, 207K concepts, >50×) + single-image 3D (MITL engine, ~80% self-annotated)</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag"><span data-lang="zh">這串包含</span><span data-lang="en">In this bunch</span></span>
+        <p style="font-size:13px;margin:6px 0 0;line-height:1.9">
+          <a class="backlink" href="SAMv1_SegmentAnything.html">SAM (2023)</a><br>
+          <a class="backlink" href="SAMv2_ImagesVideos.html">SAM 2 (2024)</a><br>
+          <a class="backlink" href="SAMv3_Concepts.html">SAM 3 (2025)</a><br>
+          <a class="backlink" href="SAM3D_3Dfy.html">SAM 3D (2025)</a>
+        </p>
+      </div>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話抓住整串</span><span data-lang="en">The line in one line</span></span>
+        <span data-lang="zh">模型是介面,<b>資料引擎才是產品</b>——四代的自產標註比例一路升高(99.1% 自動 → 模型迴圈 → AI 驗證器 → ~80% 自產),這才是「anything」規模化的引擎。</span>
+        <span data-lang="en">The model is the interface; <b>the data engine is the product</b> — the self-annotation ratio climbs generation after generation (99.1% auto → model-in-the-loop → AI verifiers → ~80% self-made). That engine is what scales "anything."</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">怎麼讀這篇</span><span data-lang="en">How to read this</span></div>
+        <span data-lang="zh" style="font-size:13px">02 是四代橫向比較表;03 拆「不變的配方」;04 是家族反覆出現的設計模式與循環性批判;05 是整條線的坑;06 是選型與可借之處。</span>
+        <span data-lang="en" style="font-size:13px">02 is the cross-generation table; 03 unpacks the invariant recipe; 04 covers recurring design patterns and the circularity critique; 05 the shared pitfalls; 06 which model to use and what to borrow.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 02 COMPARISON ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Cross-Generation Comparison</h2></div>
+  <div class="ctable">
+    <table>
+      <tr>
+        <th><span data-lang="zh">論文</span><span data-lang="en">Paper</span></th>
+        <th><span data-lang="zh">任務 &amp; 提示</span><span data-lang="en">Task &amp; prompt</span></th>
+        <th><span data-lang="zh">架構要點</span><span data-lang="en">Architecture</span></th>
+        <th><span data-lang="zh">資料引擎 → 資料集</span><span data-lang="en">Data engine → dataset</span></th>
+        <th><span data-lang="zh">頭號結果</span><span data-lang="en">Headline result</span></th>
+      </tr>
+      <tr>
+        <td class="pkey">SAM<span class="yb">2023 · ICCV</span></td>
+        <td><span data-lang="zh"><b>SA</b>:對任意提示回傳「valid mask」;點/框/mask/(初步)文字 → <b>單物體</b></span><span data-lang="en"><b>SA</b>: return a "valid mask" for any prompt; point/box/mask/(proto) text → <b>one object</b></span></td>
+        <td><span data-lang="zh">重 ViT-H 影像編碼器(每圖一次)+ 輕 prompt encoder + two-way mask decoder(~50ms/prompt);歧義 → <mark class="m-method" data-t="METHOD/IDEA">3 masks + IoU 自評分</mark></span><span data-lang="en">heavy ViT-H image encoder (once/image) + light prompt encoder + two-way mask decoder (~50ms/prompt); ambiguity → <mark class="m-method" data-t="METHOD/IDEA">3 masks + self-scored IoU</mark></span></td>
+        <td><span data-lang="zh">三階段(輔助→半自動→全自動)→ <b>SA-1B</b>:11M 圖、1.1B masks、<mark class="m-assume" data-t="ASSUMPTION/CLAIM">99.1% 全自動</mark></span><span data-lang="en">3 stages (assisted→semi→fully automatic) → <b>SA-1B</b>: 11M images, 1.1B masks, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">99.1% automatic</mark></span></td>
+        <td><span data-lang="zh">單點分割 <mark class="m-result" data-t="RESULT/EVIDENCE">16/23 資料集勝 RITM</mark>(oracle 23/23);SA-1B = 既有最大的 400×(masks)</span><span data-lang="en">1-click beats RITM on <mark class="m-result" data-t="RESULT/EVIDENCE">16/23 datasets</mark> (23/23 oracle); SA-1B = 400× the masks of the largest prior set</span></td>
+      </tr>
+      <tr>
+        <td class="pkey">SAM 2<span class="yb">2024 · ICLR 2025</span></td>
+        <td><span data-lang="zh"><b>PVS</b>:任一幀點/框/mask → 時空 masklet,可迭代修正;影像 = <mark class="m-method" data-t="METHOD/IDEA">空記憶特例</mark></span><span data-lang="en"><b>PVS</b>: point/box/mask on any frame → a refinable spatio-temporal masklet; image = <mark class="m-method" data-t="METHOD/IDEA">empty-memory special case</mark></span></td>
+        <td><span data-lang="zh">Hiera(MAE)+ memory attention + FIFO memory bank(\(N{=}6\) 近幀 + 提示幀 + object pointers)+ occlusion head</span><span data-lang="en">Hiera (MAE) + memory attention + FIFO memory bank (\(N{=}6\) recent + prompted frames + object pointers) + occlusion head</span></td>
+        <td><span data-lang="zh">模型迴圈 3 期,標註 37.8→4.5 s/frame(<mark class="m-result" data-t="RESULT/EVIDENCE">8.4×</mark>)→ <b>SA-V</b>:50.9K 影片、642.6K masklets、35.5M masks(53×)</span><span data-lang="en">3-phase model-in-the-loop, annotation 37.8→4.5 s/frame (<mark class="m-result" data-t="RESULT/EVIDENCE">8.4×</mark>) → <b>SA-V</b>: 50.9K videos, 642.6K masklets, 35.5M masks (53×)</span></td>
+        <td><span data-lang="zh">互動影片分割用 <mark class="m-result" data-t="RESULT/EVIDENCE">3× 更少互動</mark>達更高精度;SA-V test J&amp;F 78.4(前 SOTA ~62.8);影像上勝 SAM 且 6× 快</span><span data-lang="en">interactive video segmentation with <mark class="m-result" data-t="RESULT/EVIDENCE">3× fewer interactions</mark>; SA-V test J&amp;F 78.4 (prior ~62.8); beats SAM on images at 6× speed</span></td>
+      </tr>
+      <tr>
+        <td class="pkey">SAM 3<span class="yb">2025 · arXiv:2511.16719</span></td>
+        <td><span data-lang="zh"><b>PCS</b>:名詞片語/影像範例 → 找出+分割+<b>追蹤所有實例</b>(同時保留 PVS)</span><span data-lang="en"><b>PCS</b>: noun phrase / image exemplars → detect + segment + <b>track every instance</b> (PVS kept)</span></td>
+        <td><span data-lang="zh">~848M;共享 Perception Encoder 的 DETR 偵測器 + SAM2 式追蹤器;<mark class="m-method" data-t="METHOD/IDEA">presence token 解耦「有沒有」與「在哪」</mark></span><span data-lang="en">~848M; DETR detector + SAM2-style tracker on a shared Perception Encoder; <mark class="m-method" data-t="METHOD/IDEA">a presence token decouples "is it here" from "where"</mark></span></td>
+        <td><span data-lang="zh">人+AI 驗證器(MLLM,~2× 吞吐)→ <b>SA-Co</b>:4M 概念 / 52M masks(HQ)+ 1.4B 合成;隨附 SA-Co 基準(207K 概念,>50×)</span><span data-lang="en">human + AI verifiers (MLLMs, ~2× throughput) → <b>SA-Co</b>: 4M concepts / 52M masks (HQ) + 1.4B synthetic; ships the SA-Co benchmark (207K concepts, >50×)</span></td>
+        <td><span data-lang="zh">SA-Co/Gold cgF1 <mark class="m-result" data-t="RESULT/EVIDENCE">54.1 vs OWLv2 24.6(2.2×)</mark>,人類的 74%;LVIS zero-shot mask AP 48.8;VOS 勝 SAM2(MOSEv2 +6.5)</span><span data-lang="en">SA-Co/Gold cgF1 <mark class="m-result" data-t="RESULT/EVIDENCE">54.1 vs OWLv2 24.6 (2.2×)</mark>, 74% of human; LVIS zero-shot mask AP 48.8; beats SAM2 on VOS (MOSEv2 +6.5)</span></td>
+      </tr>
+      <tr>
+        <td class="pkey">SAM 3D<span class="yb">2025 · arXiv:2511.16624</span></td>
+        <td><span data-lang="zh"><b>3Dfy</b>:單圖 + mask → 完整 3D \(p(S,T,R,t,s\mid I,M)\);<mark class="m-method" data-t="METHOD/IDEA">mask 來源不限</mark>(SAM/SAM2/SAM3)</span><span data-lang="en"><b>3Dfy</b>: one image + mask → full 3D \(p(S,T,R,t,s\mid I,M)\); <mark class="m-method" data-t="METHOD/IDEA">mask-source agnostic</mark> (SAM/SAM2/SAM3)</span></td>
+        <td><span data-lang="zh">兩階段 latent flow matching(Trellis 基):1.2B MoT 幾何(64³ voxel + layout)+ 600M 紋理/細化;DINOv2 條件;mesh / 3DGS 輸出</span><span data-lang="en">two-stage latent flow matching (on Trellis): 1.2B MoT geometry (64³ voxel + layout) + 600M texture/refinement; DINOv2 conditioning; mesh / 3DGS out</span></td>
+        <td><span data-lang="zh">MITL「<mark class="m-method" data-t="METHOD/IDEA">驗證代替創作</mark>」(best-of-8 + 對位;<mark class="m-assume" data-t="ASSUMPTION/CLAIM">~80% 自產</mark>)→ ~1M 圖 / 3.14M mesh / 7M+ 偏好對;訓練 LLM 化(pretrain→midtrain→SFT→DPO→蒸餾 NFE 25→4)</span><span data-lang="en">MITL "<mark class="m-method" data-t="METHOD/IDEA">verify instead of author</mark>" (best-of-8 + alignment; <mark class="m-assume" data-t="ASSUMPTION/CLAIM">~80% self-made</mark>) → ~1M images / 3.14M meshes / 7M+ preference pairs; LLM-style training (pretrain→midtrain→SFT→DPO→distill, NFE 25→4)</span></td>
+        <td><span data-lang="zh">人類偏好 <mark class="m-result" data-t="RESULT/EVIDENCE">≥5:1</mark>;SA-3DAO F1 0.2344(對手 ~0.16)、Chamfer 0.0400(對手 0.08–0.11);joint layout ADD-S 2%→77%</span><span data-lang="en">human preference <mark class="m-result" data-t="RESULT/EVIDENCE">≥5:1</mark>; SA-3DAO F1 0.2344 (rivals ~0.16), Chamfer 0.0400 (rivals 0.08–0.11); joint layout ADD-S 2%→77%</span></td>
+      </tr>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin-top:10px"><span data-lang="zh">💡 表格橫向可捲動,第一欄固定。</span><span data-lang="en">💡 The table scrolls horizontally; the first column is pinned.</span></p>
+</section>
+
+<!-- ============ 03 RECIPE ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">The Invariant Recipe</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">每一代都走同樣四步</span><span data-lang="en">Every generation takes the same four steps</span></h3>
+        <ol class="steps">
+          <li><span data-lang="zh"><b class="t">重定義任務</b> — 把新能力寫成「可提示任務」:SA → PVS → PCS → 3Dfy。同一個模型因此既是<b>下游介面</b>,也是資料引擎裡的<b>標註工具</b>。</span><span data-lang="en"><b class="t">Redefine the task</b> — write the new capability as a "promptable task": SA → PVS → PCS → 3Dfy. The same model is thus both the <b>downstream interface</b> and the <b>annotation tool</b> inside the data engine.</span></li>
+          <li><span data-lang="zh"><b class="t">最小架構增量</b> — 不重造,只加一個關鍵模組:SAM 2 = SAM + streaming memory;SAM 3 = SAM 2 追蹤器 + DETR 偵測器 + presence token;SAM 3D = flow-matching 幾何/紋理 + MoT layout。</span><span data-lang="en"><b class="t">Minimal architecture delta</b> — do not rebuild; add one key module: SAM 2 = SAM + streaming memory; SAM 3 = SAM 2 tracker + DETR detector + presence token; SAM 3D = flow-matching geometry/texture + MoT layout.</span></li>
+          <li><span data-lang="zh"><b class="t">Model-in-the-loop 資料引擎</b> — 人只做模型不會的,模型做人嫌慢的:SA-1B(99.1% 全自動)→ SA-V(標註 8.4× 快)→ SA-Co(MLLM AI 驗證器)→ MITL-3DO(<b>驗證代替創作</b>,~80% 自產)。</span><span data-lang="en"><b class="t">Model-in-the-loop data engine</b> — humans do only what the model cannot; the model does what humans find slow: SA-1B (99.1% automatic) → SA-V (8.4× faster annotation) → SA-Co (MLLM AI verifiers) → MITL-3DO (<b>verify instead of author</b>, ~80% self-made).</span></li>
+          <li><span data-lang="zh"><b class="t">隨附新 benchmark</b> — SA-23 → SA-V → SA-Co(207K 概念)→ SA-3DAO:自己定義賽道。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">但 provenance 與訓練資料同源</mark>(見 05)。</span><span data-lang="en"><b class="t">Ship the benchmark</b> — SA-23 → SA-V → SA-Co (207K concepts) → SA-3DAO: define your own racetrack. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">But its provenance is shared with the training data</mark> (see 05).</span></li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">嚴格泛化:新一代「包含」上一代</span><span data-lang="en">Strict generalization: each generation contains the last</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>SAM 2 空記憶 = SAM</b>(影像被當成單幀影片)——介面完全向後相容,還 <mark class="m-result" data-t="RESULT/EVIDENCE">6× 快、更準</mark>(SA-23 58.9 vs 58.1)。</li>
+          <li data-lang="en"><b>SAM 2 with empty memory = SAM</b> (an image is a one-frame video) — fully backward-compatible, and <mark class="m-result" data-t="RESULT/EVIDENCE">6× faster and more accurate</mark> (SA-23 58.9 vs 58.1).</li>
+          <li data-lang="zh"><b>SAM 3 同時支援 PCS + PVS</b>,且在舊賽道 VOS 上<mark class="m-result" data-t="RESULT/EVIDENCE">反超 SAM 2(MOSEv2 +6.5)</mark>——升級不丟舊能力。</li>
+          <li data-lang="en"><b>SAM 3 supports both PCS + PVS</b>, and <mark class="m-result" data-t="RESULT/EVIDENCE">beats SAM 2 on the old VOS track (MOSEv2 +6.5)</mark> — upgrading loses nothing.</li>
+          <li data-lang="zh"><b>SAM 3D 對 mask 來源不可知</b>(SAM/SAM2/SAM3 皆可)且對過/欠分割穩健——家族內部鬆耦合、可自由組裝。</li>
+          <li data-lang="en"><b>SAM 3D is mask-source agnostic</b> (SAM/SAM2/SAM3 all work) and robust to over/under-segmentation — loosely coupled, freely composable within the family.</li>
+        </ul>
+        <div class="divzh"><span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:8px">這不是巧合,是<b>產品紀律</b>:每代發布時,舊介面使用者零成本升級;對研究者,「同介面、換引擎」等於天然的控制變因。學術論文很少這樣自我約束——這是把 foundation model 當<b>產品線</b>在經營。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:8px">Not a coincidence but <b>product discipline</b>: at each release, users of the old interface upgrade for free; for researchers, "same interface, new engine" is a natural controlled variable. Academic papers rarely self-constrain like this — the family is run as a <b>product line</b>. <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">最小增量一覽</span><span data-lang="en">The deltas at a glance</span></span>
+        <div class="flow"><b>SAM</b><span class="ar">→</span><b>+ memory</b><span class="ar">→</span><b>+ detector · presence</b><span class="ar">→</span><b>+ 3D flow matching</b></div>
+        <span data-lang="zh" style="font-size:13px">每一步都只加「一個新器官」,其餘沿用——所以每代的增益可以歸因。</span>
+        <span data-lang="en" style="font-size:13px">Each step grafts exactly one new organ onto the last body — so每 generation gains stay attributable.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">別誤讀成「越做越大」</span><span data-lang="en">Not "ever bigger models"</span></div>
+        <span data-lang="zh">參數其實克制:SAM 3 全模型 ~848M、SAM 3D 1.2B+600M——遠小於同期 LLM。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">重的是資料引擎與人力迴圈</mark>,不是模型。</span>
+        <span data-lang="en">Parameters stay modest: SAM 3 is ~848M total, SAM 3D 1.2B+600M — tiny next to contemporary LLMs. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">The heavy investment is the data engine and human loop</mark>, not the model.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 04 PATTERNS ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Recurring Patterns &amp; the Circularity Critique</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">家族恆等式:不確定 → 多候選 + 學會打分</span><span data-lang="en">The family identity: uncertain → multiple candidates + learned scoring</span></h3>
+        <p data-lang="zh">「一個提示可能對應多個合法答案」是整個系列的核心難題,四代給出同構的解:</p>
+        <p data-lang="en">"One prompt may admit several valid answers" is the series-wide difficulty; all four generations answer isomorphically:</p>
+        <table>
+          <tr><th><span data-lang="zh">代</span><span data-lang="en">Gen</span></th><th><span data-lang="zh">歧義機制</span><span data-lang="en">Ambiguity mechanism</span></th></tr>
+          <tr><td class="pkey">SAM</td><td><span data-lang="zh">一次輸出 3 個 mask(整體/部件/子部件)+ IoU 自評分</span><span data-lang="en">outputs 3 masks (whole/part/subpart) + self-scored IoU</span></td></tr>
+          <tr><td class="pkey">SAM 2</td><td><span data-lang="zh">occlusion / presence head:物體「在不在這一幀」</span><span data-lang="en">occlusion / presence head: is the object even in this frame</span></td></tr>
+          <tr><td class="pkey">SAM 3</td><td><span data-lang="zh">presence token,\(s=s_{\text{loc}}\times s_{\text{pres}}\):把「認出概念」與「定位實例」解耦</span><span data-lang="en">presence token, \(s=s_{\text{loc}}\times s_{\text{pres}}\): decouples recognizing the concept from localizing instances</span></td></tr>
+          <tr><td class="pkey">SAM 3D</td><td><span data-lang="zh">生成式 best-of-\(N{=}8\) + 人類挑選 + DPO——把歧義變成分佈取樣</span><span data-lang="en">generative best-of-\(N{=}8\) + human choice + DPO — ambiguity becomes distribution sampling</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">資料飛輪:自產比例逐代升高</span><span data-lang="en">The data flywheel: self-annotation keeps climbing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">資料集</span><span data-lang="en">Dataset</span></th><th><span data-lang="zh">規模</span><span data-lang="en">Scale</span></th><th><span data-lang="zh">自產程度</span><span data-lang="en">Self-made share</span></th></tr>
+          <tr><td><b>SA-1B</b><span class="yb">SAM</span></td><td><span data-lang="zh">11M 圖 / 1.1B masks</span><span data-lang="en">11M images / 1.1B masks</span></td><td><mark class="m-assume" data-t="ASSUMPTION/CLAIM">99.1%</mark> <span data-lang="zh">全自動</span><span data-lang="en">automatic</span></td></tr>
+          <tr><td><b>SA-V</b><span class="yb">SAM 2</span></td><td>642.6K masklets / 35.5M masks</td><td><span data-lang="zh">451.7K masklets(~70%)由 SAM 2 產生</span><span data-lang="en">451.7K masklets (~70%) generated by SAM 2</span></td></tr>
+          <tr><td><b>SA-Co</b><span class="yb">SAM 3</span></td><td><span data-lang="zh">4M 概念 / 52M masks(+1.4B 合成)</span><span data-lang="en">4M concepts / 52M masks (+1.4B synthetic)</span></td><td><span data-lang="zh">MLLM AI 驗證器 ~2× 吞吐、近人類精度</span><span data-lang="en">MLLM AI verifiers, ~2× throughput at near-human accuracy</span></td></tr>
+          <tr><td><b>MITL-3DO</b><span class="yb">SAM 3D</span></td><td><span data-lang="zh">3.14M mesh / 7M+ 偏好對</span><span data-lang="en">3.14M meshes / 7M+ preference pairs</span></td><td><mark class="m-assume" data-t="ASSUMPTION/CLAIM">~80%</mark> <span data-lang="zh">由 SAM 3D 自產</span><span data-lang="en">produced by SAM 3D itself</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">效率一路坍縮成本;但「<mark class="m-limit" data-t="LIMITATION/FUTURE">模型驗自己的作業</mark>」的循環性也一路加深——自動標註若有系統性偏差(邊界風格、物體粒度),飛輪會放大而非清洗它。四代都沒有正面量化這個風險。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Costs collapse — but the circularity of "<mark class="m-limit" data-t="LIMITATION/FUTURE">the model grading its own homework</mark>" deepens too: systematic biases in auto-annotation (boundary style, object granularity) get amplified, not cleaned. None of the four papers quantifies this risk head-on.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">跨串連結:SAM 3D × VGGT</span><span data-lang="en">Cross-thread: SAM 3D × VGGT</span></span>
+        <span data-lang="zh">同在你的庫裡的 <a class="backlink" href="Wang2025_VGGT.html">VGGT</a> 是 3D 的另一條正交路線:VGGT <b>量測</b>可視幾何(多視角前饋回歸),SAM 3D <b>生成</b>完整物體(含看不見的背面,靠先驗腦補),甚至可吃 pointmap 當條件——一測一生,互補可組合。</span>
+        <span data-lang="en"><a class="backlink" href="Wang2025_VGGT.html">VGGT</a>, also in this library, is the orthogonal 3D route: VGGT <b>measures</b> visible geometry (feed-forward multi-view regression) while SAM 3D <b>generates</b> complete objects (unseen backs included, via priors) — and can even take a pointmap as conditioning. One measures, one imagines; they compose.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">Benchmark provenance</span><span data-lang="en">Benchmark provenance</span></div>
+        <span data-lang="zh">四代都「自帶 benchmark」且與訓練資料同源(SA-23/SA-V/SA-Co/SA-3DAO)。在第三方基準上優勢常縮小——<mark class="m-result" data-t="RESULT/EVIDENCE">SAM 3D 在乾淨的 ISO3D 上僅與最佳前作打平(~0.37)</mark>,最亮眼的數字都出自自建賽道。</span>
+        <span data-lang="en">Every generation ships its own benchmark sharing provenance with its training data (SA-23/SA-V/SA-Co/SA-3DAO). On third-party tracks the lead shrinks — <mark class="m-result" data-t="RESULT/EVIDENCE">SAM 3D merely ties the best prior on clean ISO3D (~0.37)</mark>; the flashiest numbers come from home turf.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 05 OPEN PROBLEMS ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Open Problems Across the Series</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">整條線共同的坑</span><span data-lang="en">Pitfalls shared by the whole series</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>語意天花板</b>:v1 完全 class-agnostic;到 v3 也只到「<mark class="m-limit" data-t="LIMITATION/FUTURE">短名詞片語</mark>」——長指涉句與推理要外掛 MLLM(SAM 3 Agent)。語言端始終是「別人的」。</li>
+          <li data-lang="en"><b>The semantics ceiling</b>: v1 is fully class-agnostic; even v3 stops at <mark class="m-limit" data-t="LIMITATION/FUTURE">short noun phrases</mark> — long referring expressions and reasoning need an external MLLM (SAM 3 Agent). The language side is always borrowed.</li>
+          <li data-lang="zh"><b>「所有實例」的代價</b>:SAM 2 每物體獨立跑、無跨物體溝通;SAM 3 影片延遲<mark class="m-limit" data-t="LIMITATION/FUTURE">隨物體數線性增長</mark>。百物體場景的效率未解。</li>
+          <li data-lang="en"><b>The cost of "every instance"</b>: SAM 2 runs per-object with no cross-object communication; SAM 3 video latency <mark class="m-limit" data-t="LIMITATION/FUTURE">grows linearly with object count</mark>. Hundred-object scenes remain unsolved.</li>
+          <li data-lang="zh"><b>循環性</b>(見 04):自產標註的系統性錯誤模式可能被放大;<mark class="m-assume" data-t="ASSUMPTION/CLAIM">benchmark 與訓練資料同源</mark>,外部驗證偏弱。</li>
+          <li data-lang="en"><b>Circularity</b> (see 04): systematic error modes in self-annotation may amplify; <mark class="m-assume" data-t="ASSUMPTION/CLAIM">benchmarks share provenance with training data</mark>, external validation is thin.</li>
+          <li data-lang="zh"><b>重現性</b>:配方的核心是 Meta 規模的資料引擎與人力迴圈——學界能微調權重,<mark class="m-limit" data-t="LIMITATION/FUTURE">無法複現方法論本身</mark>。</li>
+          <li data-lang="en"><b>Reproducibility</b>: the heart of the recipe is a Meta-scale data engine and human loop — academia can fine-tune the weights but <mark class="m-limit" data-t="LIMITATION/FUTURE">cannot reproduce the methodology</mark>.</li>
+          <li data-lang="zh"><b>3D 側</b>:64³ voxel 解析度讓細結構/手/臉變形;一次一物體、無物理一致性(互穿);<mark class="m-limit" data-t="LIMITATION/FUTURE">輸出是先驗樣本,不是量測</mark>。</li>
+          <li data-lang="en"><b>On the 3D side</b>: 64³ voxels distort thin structures/hands/faces; one object at a time with no physical consistency (interpenetration); <mark class="m-limit" data-t="LIMITATION/FUTURE">outputs are prior samples, not measurements</mark>.</li>
+          <li data-lang="zh"><b>「anything」有邊界</b>:細粒度(機型)、醫療、熱影像等跨域 zero-shot 仍弱(SAM 3 自承)。</li>
+          <li data-lang="en"><b>"Anything" has borders</b>: fine-grained (aircraft types), medical, and thermal cross-domain zero-shot remain weak (SAM 3 admits this).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會的犀利問題</span><span data-lang="en">Sharp questions for a reading group</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>架構 vs 資料</b>:把四代資料引擎的產出餵給非 SAM 架構(Mask2Former 系、純 DETR),差距還剩多少?功勞從未被拆開。</li>
+          <li data-lang="en"><b>Architecture vs data</b>: feed the four data engines&#8217; output to a non-SAM architecture (Mask2Former-style, plain DETR) — how much gap remains? The credit has never been split.</li>
+          <li data-lang="zh"><b>飛輪的錯誤模式</b>:自動標註的偏差(邊界風格、粒度偏好)是否已滲進 SA-1B→SA-V→SA-Co 每一代?能否設計實驗量測?</li>
+          <li data-lang="en"><b>Flywheel error modes</b>: have auto-annotation biases (boundary style, granularity preference) already seeped through SA-1B→SA-V→SA-Co? Can an experiment measure this?</li>
+          <li data-lang="zh"><b>語言邊界</b>:PCS 停在短名詞片語是能力限制,還是任務設計選擇?把組合語意外包給 MLLM,等不等於承認「開放詞彙分割」不該是獨立模型?</li>
+          <li data-lang="en"><b>The language boundary</b>: is stopping at short noun phrases a capability limit or a task-design choice? Does outsourcing compositional semantics to an MLLM concede that open-vocabulary segmentation should not be a standalone model?</li>
+          <li data-lang="zh"><b>偏好評測的偏誤</b>:SAM 3D 的 5:1 人類偏好由作者方執行,而第三方 ISO3D 上僅打平——哪個更接近真實能力?</li>
+          <li data-lang="en"><b>Preference-test bias</b>: SAM 3D&#8217;s 5:1 human preference was run by the authors, while it merely ties on third-party ISO3D — which is closer to true capability?</li>
+          <li data-lang="zh"><b>下一個維度</b>:照「空間→時間→語意→3D」的軌跡,下一步是物理/互動嗎?在人類難以驗證的物理量上,「驗證代替創作」的資料引擎還走得通嗎?</li>
+          <li data-lang="en"><b>The next dimension</b>: after space→time→semantics→3D, is physics/interaction next? Does "verify instead of author" still work for physical quantities humans cannot eyeball?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">別過度外推</span><span data-lang="en">Don&#8217;t over-extrapolate</span></div>
+        <span data-lang="zh">這串證明的是「<b>介面 + 資料引擎</b>」路線在感知任務上的威力;它沒有證明這條路能直接通向理解、推理或物理——那些正是它一路外包(MLLM)或迴避(物理一致性)的部分。</span>
+        <span data-lang="en">The series proves the power of the <b>interface + data engine</b> route for perception; it does not prove the route leads to understanding, reasoning, or physics — precisely the parts it outsources (MLLMs) or sidesteps (physical consistency).</span>
+      </div>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">與其他串的對照</span><span data-lang="en">Against the other threads</span></span>
+        <span data-lang="zh">力覺串在解「訊號怎麼用」、VGGT 在解「幾何怎麼回歸」,SAM 系列在解「<b>標註怎麼自我複製</b>」——三串合起來剛好是感知系統的三個瓶頸。</span>
+        <span data-lang="en">The force thread tackles "how to use a signal," VGGT "how to regress geometry," and the SAM series "<b>how annotation replicates itself</b>" — together the three threads map three bottlenecks of perception systems.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 06 TAKEAWAY ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">選型:什麼需求用哪一代</span><span data-lang="en">Which generation for which need</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">你要做的事</span><span data-lang="en">Your task</span></th><th><span data-lang="zh">用</span><span data-lang="en">Use</span></th></tr>
+          <tr><td><span data-lang="zh">互動摳圖(單張,點/框)</span><span data-lang="en">interactive masking (single image, click/box)</span></td><td><span class="gen">SAM</span> <span data-lang="zh">或更快的</span><span data-lang="en">or the faster</span> <span class="gen">SAM 2</span><span data-lang="zh">(影像模式 6×)</span><span data-lang="en"> (image mode, 6×)</span></td></tr>
+          <tr><td><span data-lang="zh">影片物體分割/追蹤(給幾個點)</span><span data-lang="en">video object segmentation/tracking (a few clicks)</span></td><td><span class="gen">SAM 2</span></td></tr>
+          <tr><td><span data-lang="zh">「找出所有 X」開放詞彙(圖或影片)</span><span data-lang="en">"find every X," open vocabulary (image or video)</span></td><td><span class="gen">SAM 3</span><span data-lang="zh">;長句推理再包 MLLM(SAM 3 Agent)</span><span data-lang="en">; wrap an MLLM for long queries (SAM 3 Agent)</span></td></tr>
+          <tr><td><span data-lang="zh">單圖 → 可用的 3D 資產(遊戲/AR/機器人)</span><span data-lang="en">one image → usable 3D asset (games/AR/robotics)</span></td><td><span class="gen">SAM 3D</span><span data-lang="zh">(先用 SAM 家 mask 指定物體)</span><span data-lang="en"> (designate the object with any SAM-family mask)</span></td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可借的配方</span><span data-lang="en">What to borrow</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>任務可提示化</b>:把新能力定義成「對任意提示回傳有效輸出」,模型就同時是產品介面與標註工具。</li>
+          <li data-lang="en"><b>Promptable-ize the task</b>: define the capability as "valid output for any prompt," and the model doubles as product interface and annotation tool.</li>
+          <li data-lang="zh"><b>資料引擎優先於架構</b>:設計「人只做驗證」的迴圈,讓自產比例逐代上升——這比換 backbone 值錢。</li>
+          <li data-lang="en"><b>Data engine before architecture</b>: build loops where humans only verify, and let the self-made share climb — worth more than a new backbone.</li>
+          <li data-lang="zh"><b>嚴格泛化紀律</b>:新版本必須「包含」舊介面(空記憶 = SAM 是典範)——使用者零成本升級,研究可歸因。</li>
+          <li data-lang="en"><b>Strict-generalization discipline</b>: each version must contain the old interface (empty memory = SAM is the exemplar) — free upgrades for users, attributable gains for research.</li>
+          <li data-lang="zh"><b>隨附 benchmark,但補外部驗證</b>:定義賽道的同時,主動在第三方基準上報數,並揭露 provenance。</li>
+          <li data-lang="en"><b>Ship the benchmark, add external validation</b>: define the track, but also report on third-party benchmarks and disclose provenance.</li>
+        </ul>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">Segment Anything 系列的真正產品不是四個模型,而是<b>一台逐代自我加速的資料引擎</b>——模型只是它對外的介面。維度沿「空間→時間→語意→3D」擴張,而循環性與語意天花板是它一路帶著的兩道陰影。<span class="add">[導讀補充] 照這條軌跡,下一站很可能是物理與互動。</span></p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">The real product of the Segment Anything series is not four models but <b>one self-accelerating data engine</b> — the models are merely its interface. The dimensions expand along space → time → semantics → 3D, with circularity and the semantics ceiling as its two travelling shadows. <span class="add">[guide note] On this trajectory, the next stop is likely physics and interaction.</span></p>
+      </div>
+    </div>
+    <aside>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">單篇導讀</span><span data-lang="en">Individual guides</span></span>
+        <p style="font-size:13px;margin:6px 0 0;line-height:1.9">
+          <a class="backlink" href="SAMv1_SegmentAnything.html">→ SAM</a><br>
+          <a class="backlink" href="SAMv2_ImagesVideos.html">→ SAM 2</a><br>
+          <a class="backlink" href="SAMv3_Concepts.html">→ SAM 3</a><br>
+          <a class="backlink" href="SAM3D_3Dfy.html">→ SAM 3D</a><br>
+          <a class="backlink" href="index.html">← 回論文庫首頁 / back to library</a>
+        </p>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁生成方式</span><span data-lang="en">How this was made</span></span>
+        <span data-lang="zh">由 4 篇單篇導讀的摘要綜合而成(paper-reading-guide skill)。標 <span class="add">[導讀補充]</span> 者為導讀者推論。</span>
+        <span data-lang="en">Synthesized from the 4 individual guides&#8217; digests (paper-reading-guide skill). Items marked <span class="add">[guide note]</span> are the author&#8217;s inference.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">SYNTHESIS · The Segment Anything Series · 4 papers, one data engine · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en'); wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  btns.forEach(b=>b.onclick=()=>{const i=+b.dataset.p; btns.forEach((x,k)=>x.classList.toggle('on',k===i)); pages.forEach((p,k)=>p.classList.toggle('on',k===i)); window.scrollTo({top:0,behavior:'smooth'});});
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [{left:"$$",right:"$$",display:true},{left:"\\[",right:"\\]",display:true},{left:"\\(",right:"\\)",display:false}],
+      throwOnError:false
+    });
+  });
+</script>

@@ -25,6 +25,8 @@ CLUSTERS = [
     {
         "id": "force", "emoji": "🖐️", "accent": "#3b6fd4",
         "synthesis": "Synthesis_ForceManipulation.html",
+        "synthesis_note_zh": "：兩條線的橫向比較表 + 演進脈絡 →",
+        "synthesis_note_en": ": head-to-head table + evolution of the two lines →",
         "title_zh": "力覺 × 接觸豐富操作",
         "title_en": "Force-Aware Contact-Rich Manipulation",
         "blurb_zh": ("這串的共同敵人:<b>力訊號稀疏又吵</b>——大多數時間接觸力≈0,天真地把力丟進 policy 只會讓它更黏視覺、甚至更糟。"
@@ -49,6 +51,9 @@ CLUSTERS = [
     },
     {
         "id": "sam", "emoji": "✂️", "accent": "#0f9b8e",
+        "synthesis": "Synthesis_SegmentAnything.html",
+        "synthesis_note_zh": "：四代橫向比較表 + 不變的配方 →",
+        "synthesis_note_en": ": the four-generation comparison + the invariant recipe →",
         "title_zh": "Segment Anything 系列",
         "title_en": "The Segment Anything Series",
         "blurb_zh": ("主線是把「分割」做成<b>可提示的 foundation model</b>,然後一代一代<b>擴張「可提示 / 可輸出」的維度</b>——"
@@ -150,11 +155,13 @@ def render_clusters(by_key, present=frozenset()):
         parts.append(f'<p class="blurb"><span data-lang="zh">{c["blurb_zh"]}</span>'
                      f'<span data-lang="en">{c["blurb_en"]}</span></p>')
         if c.get("synthesis") and c["synthesis"] in present:
+            note_zh = c.get("synthesis_note_zh", "：橫向比較表 + 演進脈絡 →")
+            note_en = c.get("synthesis_note_en", ": head-to-head comparison + lineage evolution →")
             parts.append(f'<a class="synbanner" href="{html.escape(c["synthesis"])}">'
                          '<span class="sb-emoji">🧵</span><span class="sb-txt">'
                          '<b><span data-lang="zh">綜合導讀</span><span data-lang="en">Synthesis</span></b> '
-                         '<span data-lang="zh">：兩條線的橫向比較表 + 演進脈絡 →</span>'
-                         '<span data-lang="en">: head-to-head table + evolution of the two lines →</span>'
+                         f'<span data-lang="zh">{note_zh}</span>'
+                         f'<span data-lang="en">{note_en}</span>'
                          '</span></a>')
         if c.get("context") and c["context"] in by_key:
             parts.append('<div class="ctxwrap">')
