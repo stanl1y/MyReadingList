@@ -84,12 +84,35 @@ CLUSTERS = [
     },
     {
         "id": "rl", "emoji": "🎯", "accent": "#3aa564",
-        "title_zh": "Unsupervised / Zero-shot RL",
-        "title_en": "Unsupervised / Zero-shot RL",
-        "blurb_zh": "先無監督學一個表徵,<b>事後任給 reward 都能不重訓、不規劃</b>即時求最優策略——zero-shot RL 這條線的奠基。",
-        "blurb_en": "Learn one representation unsupervised, then <b>for any reward given later, get the optimal policy instantly—no retraining, no planning</b>. A foundation of the zero-shot RL line.",
+        "title_zh": "RL:為控制而生的表徵",
+        "title_en": "RL: Representations for Control",
+        "blurb_zh": ("同一個底層問題——<b>用 TD 學一個「為控制而生」的 latent 表徵</b>——兩篇下了相反的注。"
+                     "FB(2021)走 <b>task-free</b>:表徵一次編碼「所有 reward 的最優策略」,事後零規劃直接讀出;"
+                     "TD-MPC(2022)走 <b>task-oriented</b>:latent 只為單一任務的 reward/value 服務(TOLD),配上 MPPI 規劃,"
+                     "首次解掉 DMControl Dog(38 維動作)。通用性 vs 單任務效率——這對「對照組」圈出控制表徵光譜的兩端。"),
+        "blurb_en": ("One underlying question — <b>learn a control-born latent via TD</b> — and two opposite bets. "
+                     "FB (2021) goes <b>task-free</b>: one representation encodes optimal policies for every reward, read out later with zero planning. "
+                     "TD-MPC (2022) goes <b>task-oriented</b>: the latent serves a single task (TOLD) and pairs with MPPI planning, "
+                     "first to solve DMControl Dog (38-D actions). Generality vs single-task efficiency — a contrast pair spanning the spectrum of control representations."),
         "context": None, "lineages": [
-            {"label_zh": "", "label_en": "", "chain": ["Touati2021"], "edges_zh": [], "edges_en": []},
+            {"label_zh": "", "label_en": "",
+             "chain": ["Touati2021", "Hansen2022"],
+             "edges_zh": ["對照:task-free ↔ task-oriented"],
+             "edges_en": ["contrast: task-free ↔ task-oriented"]},
+        ],
+    },
+    {
+        "id": "llm", "emoji": "🧠", "accent": "#d9822b",
+        "title_zh": "LLM 持續學習與自我改進",
+        "title_en": "LLM Continual Learning &amp; Self-Improvement",
+        "blurb_zh": ("部署後的 LLM 是靜態的:重訓太貴、微調會災難性遺忘、ICL 出了 context 就忘。"
+                     "這篇提出仿腦的 <b>Wake/Sleep 範式</b>:醒著吸收,睡著鞏固——用「向上蒸餾」把知識種進<b>更大的自己</b>(新長出的 low-rank MoE expert),"
+                     "再加 <b>Dreaming</b>(自生成資料的自我改進);並把災難性遺忘重新框成<b>容量問題</b>而非取樣問題。"),
+        "blurb_en": ("Deployed LLMs are static: retraining is costly, fine-tuning forgets catastrophically, ICL forgets outside the context. "
+                     "This work proposes a brain-inspired <b>Wake/Sleep paradigm</b>: absorb while awake, consolidate while asleep — seeding knowledge into a <b>strictly larger self</b> "
+                     "(a newly grown low-rank MoE expert) via upward distillation — plus <b>Dreaming</b> (self-generated self-improvement), reframing catastrophic forgetting as a <b>capacity problem</b> rather than a sampling one."),
+        "context": None, "lineages": [
+            {"label_zh": "", "label_en": "", "chain": ["Behrouz2026"], "edges_zh": [], "edges_en": []},
         ],
     },
 ]

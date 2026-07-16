@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>TD-MPC — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Temporal Difference Learning for Model Predictive Control","authors":"Nicklas Hansen, Xiaolong Wang, Hao Su","year":"2022","venue":"ICML","tags":["Model-based RL","MPC","TD Learning","Continuous Control","Latent Dynamics"],"tldr":"用 TD-learning 聯合學「只建模與報酬有關的部分」的 latent 動力模型 + 終端價值函數:MPC 管短視野規劃、價值管長期回報,在 92 個 DMControl/Meta-World 任務上比 SAC/LOOP 更省樣本,並首度解掉 38 維動作的 Dog。","tldr_en":"Jointly TD-learn a reward-centric latent dynamics model plus a terminal value function: MPC plans the short horizon, the value covers the long term — more sample-efficient than SAC/LOOP across 92 DMControl/Meta-World tasks, and the first documented solve of the 38-D Dog."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:110px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">TD-MPC 把 <b>model-based 規劃(MPC)</b>和 <b>model-free TD-learning</b> 接在一起:用一個<b>只建模「與報酬有關的部分」的 latent 動力模型(TOLD)</b>做短視野軌跡優化,再用<b>同一套 TD-learning 聯合學出的終端價值函數</b>估計視野之外的長期回報。在 DMControl 與 Meta-World 共 <b>92 個連續控制任務</b>上,<mark class="m-result" data-t="RESULT/EVIDENCE">樣本效率與最終表現都優於此前的 model-based 與 model-free 方法</mark>,並且是<mark class="m-result" data-t="RESULT/EVIDENCE">第一個有記錄解掉 DMControl Dog(38 維動作)的方法</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">TD-MPC couples <b>model-based planning (MPC)</b> with <b>model-free TD-learning</b>: a <b>Task-Oriented Latent Dynamics (TOLD) model that only models what is predictive of reward</b> drives short-horizon trajectory optimization, while a <b>terminal value function learned jointly by the same TD objective</b> estimates return beyond the horizon. Across <b>92 continuous-control tasks</b> from DMControl and Meta-World it <mark class="m-result" data-t="RESULT/EVIDENCE">beats prior model-based and model-free methods on sample efficiency and asymptotic performance</mark>, and is <mark class="m-result" data-t="RESULT/EVIDENCE">the first documented method to solve DMControl Dog (38-D actions)</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Hansen2022/fig1_overview.png" alt="Figure 1 overview">
+        <figcaption data-lang="zh"><b>Fig.1</b> 上:TD-MPC 框架——觀測編碼成 \(z_0\),在 learned model 裡展開多條想像軌跡(細線),用「短期 reward + 終端 value」挑出最好的一條(粗線)執行第一步。下:Humanoid(21 維)與 Dog(38 維)六個任務,<b>紅線(TD-MPC)全面壓過 SAC(藍)</b>,Dog 系列 SAC 幾乎學不起來;黑虛線是用真模擬器的 MPC。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> Top: the TD-MPC loop — encode the observation into \(z_0\), roll out imagined trajectories in the learned model (thin lines), score them by short-term reward + terminal value, execute the first action of the best one (bold line). Bottom: on six Humanoid (21-D) and Dog (38-D) tasks, <b>TD-MPC (red) dominates SAC (blue)</b>; SAC barely learns the Dog tasks at all. Black dashed = MPC with the ground-truth simulator.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — model-based RL 有兩個賣點(模型帶來樣本效率、算力愈多規劃愈好),但<mark class="m-problem" data-t="PROBLEM/GAP">長視野規劃太貴、模型又難學準(誤差會沿 rollout 累積)</mark>,所以歷史上常輸給簡單的 model-free 方法。</li>
+          <li data-lang="en"><b>Problem</b> — model-based RL promises sample efficiency and compute-scalable planning, but <mark class="m-problem" data-t="PROBLEM/GAP">long-horizon planning is costly and accurate models are hard to learn (errors compound along rollouts)</mark>, so it has historically lost to simpler model-free methods.</li>
+          <li data-lang="zh"><b>方法</b> — <mark class="m-method" data-t="METHOD/IDEA">短視野 MPC + 終端價值函數</mark>:模型只負責前 \(H=5\) 步,之後交給 \(Q_\theta\)。模型不做像素/狀態重建,<mark class="m-method" data-t="METHOD/IDEA">只從 reward、value 與 latent 一致性三個訊號學</mark>,五個元件全是確定性 MLP,端到端 BPTT 聯合訓練。</li>
+          <li data-lang="en"><b>Method</b> — <mark class="m-method" data-t="METHOD/IDEA">short-horizon MPC + a terminal value function</mark>: the model covers only \(H=5\) steps, then hands off to \(Q_\theta\). No pixel/state reconstruction — the model <mark class="m-method" data-t="METHOD/IDEA">learns purely from reward, value, and a latent-consistency signal</mark>; all five components are deterministic MLPs trained jointly with BPTT.</li>
+          <li data-lang="zh"><b>結果</b> — 92 個任務(state、pixel、多模態、稀疏獎勵、multi-task):<mark class="m-result" data-t="RESULT/EVIDENCE">state-based DMControl 全面領先 SAC/LOOP</mark>;Humanoid/Dog 約 1–3M 步就解掉(以前的工作要 30M);牆鐘時間追平 SAC、比同類 LOOP 快 16 倍解掉 Walker Walk。</li>
+          <li data-lang="en"><b>Results</b> — 92 tasks (state, pixels, multi-modal, sparse reward, multi-task): <mark class="m-result" data-t="RESULT/EVIDENCE">clear lead over SAC/LOOP on state-based DMControl</mark>; Humanoid/Dog solved within ~1–3M steps (prior work used 30M); wall-clock matches SAC and solves Walker Walk 16x faster than the closest hybrid, LOOP.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">Model-based RL 走兩條路:(a) <mark class="m-method" data-t="METHOD/IDEA">拿模型來規劃</mark>(PlaNet、PETS、POLO),(b) <mark class="m-method" data-t="METHOD/IDEA">拿模型生假資料餵給 model-free 學習器</mark>(Dreamer、MBPO)。兩條路的模型多半靠<mark class="m-problem" data-t="PROBLEM/GAP">狀態/影像重建</mark>來學——這逼網路連陰影、背景這種與任務無關的東西都要建模,學得又慢又容易偏。另一頭,model-free 的 TD 方法(DDPG、SAC)簡單穩定,長年霸榜連續控制。</p>
+        <p data-lang="en">Model-based RL splits into (a) <mark class="m-method" data-t="METHOD/IDEA">planning with the model</mark> (PlaNet, PETS, POLO) and (b) <mark class="m-method" data-t="METHOD/IDEA">generating imagined data for a model-free learner</mark> (Dreamer, MBPO). Both usually learn the model by <mark class="m-problem" data-t="PROBLEM/GAP">state/image reconstruction</mark> — forcing the network to model task-irrelevant nuisances like shading — slow to learn and prone to bias. Meanwhile model-free TD methods (DDPG, SAC) are simple, stable, and have long ruled continuous control.</p>
+        <p data-lang="zh">MuZero / EfficientZero 已示範「<mark class="m-method" data-t="METHOD/IDEA">模型只需對 reward/value 等價</mark>」的哲學威力,但它們靠 MCTS 選動作,<mark class="m-problem" data-t="PROBLEM/GAP">動作空間必須離散化,高維連續控制根本不可行</mark>。TD-MPC 可以視為:把 MuZero 的任務導向模型哲學,搬到<b>連續控制的取樣式 MPC(MPPI)</b>上,並第一次讓模型與價值函數在連續控制中由 TD-learning 聯合學出。</p>
+        <p data-lang="en">MuZero / EfficientZero demonstrated the power of <mark class="m-method" data-t="METHOD/IDEA">models that only need to be reward/value-equivalent</mark>, but their MCTS action selection <mark class="m-problem" data-t="PROBLEM/GAP">requires discretized actions — infeasible in high-dimensional continuous control</mark>. TD-MPC can be read as porting the MuZero philosophy to <b>sampling-based MPC (MPPI) for continuous control</b>, and as the first to jointly learn the model and value function by TD-learning there.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">[導讀補充] 這篇的核心賭注是「<b>模型的任務是幫規劃打分,不是重建世界</b>」。一旦接受這點,模型可以小到 150 萬參數的純 MLP,還天生對輸入模態(state/pixel/多模態)無感。它也是後來 TD-MPC2(2024,多任務 5B 級 world model agent)的直接前身,值得當成這條路線的起點來讀。</p>
+          <p data-lang="en" style="margin-top:6px">[guide note] The core bet: <b>the job of the model is to score plans, not to reconstruct the world</b>. Accept that, and the model can be a ~1.5M-parameter pure MLP, inherently agnostic to input modality (state/pixels/multi-modal). It is also the direct ancestor of TD-MPC2 (2024, the multi-task world-model agent line) — worth reading as the origin of that lineage.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是「又贏了 SAC」,而是這幾個設計觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">The takeaways are design principles, not just another win over SAC:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">模型只建模「會影響報酬的東西」。</b>不做狀態/影像預測,latent 表徵純粹由 reward、TD-value、latent 一致性三個損失塑形——<mark class="m-method" data-t="METHOD/IDEA">建模無關細節是浪費,還會放大誤差</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Model only what affects reward.</b> No state/image prediction; the latent representation is shaped purely by reward, TD-value, and latent-consistency losses — <mark class="m-method" data-t="METHOD/IDEA">modeling irrelevant detail is wasteful and amplifies error</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">短的交給規劃,長的交給價值。</b>MPC 只展開 \(H=5\) 步(精細的關節動作),\(\gamma^H Q_\theta\) 接手視野外的長期方向(往哪邊跑)——<b>兩邊的弱點恰好互補</b>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Planning for the short term, value for the long term.</b> MPC unrolls only \(H=5\) steps (fine-grained joint motion) and \(\gamma^H Q_\theta\) covers everything beyond (which way to run) — <b>their weaknesses are complementary</b>.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">模型、價值、策略一起學,梯度穿過 rollout。</b>reward/value 的梯度沿多步 latent rollout 反傳(BPTT),直接抑制 compounding error;和「先學模型、再學策略」的解耦式 pipeline 相反。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Learn model, value, and policy jointly, with gradients through the rollout.</b> Reward/value gradients back-propagate through multi-step latent rollouts (BPTT), directly suppressing compounding error — the opposite of decoupled "learn model first, then policy" pipelines.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">Latent 一致性取代重建。</b>\(d_\theta(z_i,a_i)\) 去逼近 target encoder 的 \(h_{\theta^-}(s_{i+1})\)——不用 decoder、<mark class="m-result" data-t="RESULT/EVIDENCE">比重建與對比損失都更穩定</mark>,而且讓方法天生模態無關(state/pixel/多模態同一套超參數)。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Latent consistency instead of reconstruction.</b> \(d_\theta(z_i,a_i)\) regresses the target-encoder embedding \(h_{\theta^-}(s_{i+1})\) — no decoder, <mark class="m-result" data-t="RESULT/EVIDENCE">more consistent than reconstruction or contrastive losses</mark>, and inherently modality-agnostic (same hyperparameters for state/pixels/multi-modal).</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">推論時算力是可調的旋鈕。</b>規劃預算(視野、迭代數)愈多表現愈好,不夠時可砍半、甚至退化成只用學到的 \(\pi_\theta\)(快 6 倍但較弱)——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">這是 model-free 方法根本沒有的自由度</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Inference compute becomes a tunable knob.</b> More planning budget (horizon, iterations) gives better performance; it can be halved, or collapsed to the learned \(\pi_\theta\) alone (6x faster, weaker) — <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a degree of freedom model-free methods simply lack</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">簡單到令人意外。</b>五個元件全是確定性 MLP(Walker 版總共約 150 萬參數),沒有 RNN、沒有機率模型、沒有 ensemble——卻贏過帶著這些裝備的前人。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Surprisingly simple.</b> All five components are deterministic MLPs (~1.5M parameters total for Walker) — no RNNs, no probabilistic models, no ensembles — yet it beats predecessors carrying all that machinery.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Temporal Difference Learning for Model Predictive Control</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Nicklas Hansen, Xiaolong Wang, Hao Su</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>UC San Diego</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2022 · ICML(PMLR 162,arXiv:2203.04955)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.LG · Model-based RL / Continuous Control</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>nicklashansen.github.io/td-mpc</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它給了 model-based RL 一個「終於穩定贏過 model-free」的配方:<b>任務導向 latent 模型 + TD 價值 + 取樣式 MPC</b>,單 GPU 一小時可解多數任務、推論 50Hz 可上實機。後續 TD-MPC2 直接沿用此骨架做 multi-task 基礎模型。<span class="add">[導讀補充] TD-MPC2 為同作者 2024 的後續工作。</span></span>
+        <span data-lang="en">It gave model-based RL a recipe that finally beats model-free reliably: <b>task-oriented latent model + TD value + sampling-based MPC</b> — most tasks solved in an hour on one GPU, 50Hz inference viable on real robots. TD-MPC2 reuses this skeleton for multi-task foundation-style agents. <span class="add">[guide note] TD-MPC2 is the 2024 follow-up by the same authors.</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">TOLD model</span><span class="chip">MPPI / CEM</span>
+          <span class="chip">Terminal value</span><span class="chip">Latent consistency</span>
+          <span class="chip">DMControl</span><span class="chip">Meta-World</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b>Model-free TD</b><br><small>(DDPG / SAC)</small></td><td><span data-lang="zh">簡單、漸近表現好,但<mark class="m-problem" data-t="PROBLEM/GAP">樣本飢渴</mark>,而且推論時<mark class="m-problem" data-t="PROBLEM/GAP">沒有「多給算力就變強」的旋鈕</mark>;在 Dog(38 維動作)這種難題上幾乎學不動。</span><span data-lang="en">Simple with strong asymptotics, but <mark class="m-problem" data-t="PROBLEM/GAP">sample-hungry</mark> and with <mark class="m-problem" data-t="PROBLEM/GAP">no knob to trade compute for performance</mark> at inference; barely learns hard tasks like Dog (38-D actions).</span></td></tr>
+          <tr><td><b><span data-lang="zh">重建式模型</span><span data-lang="en">Reconstruction models</span></b><br><small>(PlaNet / Dreamer / LOOP)</small></td><td><span data-lang="zh">用狀態/影像預測學模型 → <mark class="m-problem" data-t="PROBLEM/GAP">被迫建模陰影、背景等任務無關細節</mark>;模型偏差沿 rollout <mark class="m-problem" data-t="PROBLEM/GAP">複利式累積</mark>,還會滲進策略。</span><span data-lang="en">Models learned by state/image prediction are <mark class="m-problem" data-t="PROBLEM/GAP">forced to model task-irrelevant nuisances</mark> (shading, background); model bias <mark class="m-problem" data-t="PROBLEM/GAP">compounds along rollouts</mark> and leaks into the policy.</span></td></tr>
+          <tr><td><b>MuZero / EfficientZero</b></td><td><span data-lang="zh">模型只學 reward/value(好哲學),但 MCTS 需要<mark class="m-problem" data-t="PROBLEM/GAP">離散動作</mark>——連 \(\mathcal{A}\in\mathbb{R}^{6}\) 的 Cheetah 都因維度爆炸做不了。</span><span data-lang="en">Reward/value-only models (the right philosophy), but MCTS needs <mark class="m-problem" data-t="PROBLEM/GAP">discrete actions</mark> — even Cheetah with \(\mathcal{A}\in\mathbb{R}^{6}\) is infeasible due to dimensionality explosion.</span></td></tr>
+          <tr><td><b><span data-lang="zh">MPC 配真模擬器</span><span data-lang="en">MPC with ground-truth sim</span></b><br><small>(MPC:sim / POLO)</small></td><td><span data-lang="zh">要有模擬器才行、每步規劃昂貴;<mark class="m-problem" data-t="PROBLEM/GAP">短視野沒有價值函數 → 短視</mark>,稀疏獎勵任務直接失敗。</span><span data-lang="en">Needs a simulator and per-step planning is costly; <mark class="m-problem" data-t="PROBLEM/GAP">short horizons without a value function are myopic</mark> — fails outright on sparse-reward tasks.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>能不能把 model-based 的兩個優點(樣本效率、算力換表現)拿到手,同時保留 model-free 的簡單與速度?</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>can we capture both model-based advantages (sample efficiency, compute-for-performance) while keeping model-free simplicity and speed?</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,TD-MPC 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how TD-MPC fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">TD-MPC 如何補上</span><span data-lang="en">How TD-MPC fills it</span></th></tr>
+          <tr>
+            <td><b>SAC / DDPG</b></td>
+            <td><span data-lang="zh">無模型、無規劃。</span><span data-lang="en">No model, no planning.</span></td>
+            <td><span data-lang="zh">保留 TD 價值學習,加上 <mark class="m-method" data-t="METHOD/IDEA">latent 模型 + MPPI 規劃</mark>當「執行器」。</span><span data-lang="en">Keeps TD value learning, adds a <mark class="m-method" data-t="METHOD/IDEA">latent model + MPPI planning</mark> as the actor.</span></td>
+          </tr>
+          <tr>
+            <td><b>LOOP</b><br><small><span data-lang="zh">SAC + 規劃</span><span data-lang="en">SAC + planning</span></small></td>
+            <td><span data-lang="zh">模型仍是<b>狀態預測</b>、與價值學習解耦;要 ensemble。</span><span data-lang="en">Model is still <b>state prediction</b>, decoupled from value learning; needs an ensemble.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">reward-centric latent 模型與價值聯合訓練</mark>,單一確定性 MLP 即可,快 3.3 倍/500k 步。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Reward-centric latent model trained jointly with the value</mark>; one deterministic MLP suffices — 3.3x less compute per 500k steps.</span></td>
+          </tr>
+          <tr>
+            <td><b>PlaNet / Dreamer</b></td>
+            <td><span data-lang="zh">重建損失綁死在影像上;RNN/機率模型笨重。</span><span data-lang="en">Reconstruction ties them to pixels; heavy RNN/probabilistic machinery.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">latent 一致性損失</mark>——無 decoder、模態無關,state/pixel/多模態同一套設定。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Latent-consistency loss</mark> — decoder-free, modality-agnostic; same recipe for state/pixels/multi-modal.</span></td>
+          </tr>
+          <tr>
+            <td><b>MuZero / EfficientZero</b></td>
+            <td><span data-lang="zh">MCTS → 只能離散動作。</span><span data-lang="en">MCTS → discrete actions only.</span></td>
+            <td><span data-lang="zh">改用 <mark class="m-method" data-t="METHOD/IDEA">MPPI(取樣式連續優化)+ 策略引導取樣</mark>,原生支援連續動作,直上 \(\mathcal{A}\in\mathbb{R}^{38}\)。</span><span data-lang="en">Uses <mark class="m-method" data-t="METHOD/IDEA">MPPI (sampling-based continuous optimization) + policy-guided samples</mark> — native continuous actions, scaling to \(\mathcal{A}\in\mathbb{R}^{38}\).</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">[導讀補充] 注意作者的定位:每一個零件(終端價值的 MPC、reward-centric 模型、CEM 規劃、策略引導)<b>個別都有前人</b>,貢獻在「第一次把它們組成一個全由 TD-learning 聯合訓練的完整框架」並大規模驗證。讀的時候別找單一神來之筆,要看的是<b>組合為什麼剛好互補</b>。</p>
+          <p data-lang="en" style="margin-top:6px">[guide note] Note the positioning: every ingredient (MPC with terminal value, reward-centric models, CEM planning, policy guidance) <b>has precedents</b>; the contribution is composing them into one framework trained jointly by TD-learning, validated at scale. Read for <b>why the combination is complementary</b>, not for a single magic trick.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 TD-MPC 的模型當成 world model:它<b>學不出、也不打算學出</b>環境的完整動態,只保證「沿著 rollout 的 reward 與 value 打分是準的」。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">這是 value-equivalent 模型,不是生成式世界模型</mark>——不能拿來渲染、也未必能遷移到報酬結構完全不同的任務。</span>
+        <span data-lang="en">Do not mistake the TOLD model for a world model: it <b>cannot and does not try to</b> capture full environment dynamics — it only guarantees accurate reward/value scoring along rollouts. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">It is a value-equivalent model, not a generative world model</mark> — it cannot render, and need not transfer to tasks with different reward structure.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">連續控制是機器人學的主場。一個 50Hz 可推論、單 GPU 一小時可訓練、還能吃多模態輸入的規劃式 agent,是把 model-based RL 從論文帶向實機的重要一步。</span>
+        <span data-lang="en">Continuous control is the home turf of robotics. A planning agent that runs at 50Hz, trains in an hour on one GPU, and ingests multi-modal inputs is a real step from paper to robot for model-based RL.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">稀疏獎勵下的表徵</span><span data-lang="en">sparse-reward repr.</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">baseline 公平性</span><span data-lang="en">baseline fairness</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">TOLD:五個元件,一個 latent 空間</span><span data-lang="en">TOLD: five components, one latent space</span></h3>
+        <p data-lang="zh">TOLD(<b>T</b>ask-<b>O</b>riented <b>L</b>atent <b>D</b>ynamics)由五個確定性 MLP 組成,全部活在 latent 空間 \(z\)(state 版維度僅 50–100):</p>
+        <p data-lang="en">TOLD (<b>T</b>ask-<b>O</b>riented <b>L</b>atent <b>D</b>ynamics) consists of five deterministic MLPs, all living in a latent space \(z\) (dimension just 50–100 for states):</p>
+        <div class="eq">$$z_t=h_\theta(s_t),\quad z_{t+1}=d_\theta(z_t,a_t),\quad \hat r_t=R_\theta(z_t,a_t),\quad \hat q_t=Q_\theta(z_t,a_t),\quad \hat a_t\sim\pi_\theta(z_t)$$</div>
+        <p data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">編碼器 \(h_\theta\)</mark> 把觀測壓進 latent;<mark class="m-method" data-t="METHOD/IDEA">動力 \(d_\theta\)</mark> 在 latent 裡往前走;\(R_\theta,Q_\theta\) 給每個 \((z,a)\) 打分;<mark class="m-method" data-t="METHOD/IDEA">策略 \(\pi_\theta\)</mark> 是輔助角色——替 TD-target 提供 \(\arg\max\) 的便宜近似,並在規劃時貢獻引導樣本。</p>
+        <p data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Encoder \(h_\theta\)</mark> compresses observations into the latent; <mark class="m-method" data-t="METHOD/IDEA">dynamics \(d_\theta\)</mark> steps forward in latent space; \(R_\theta,Q_\theta\) score each \((z,a)\); the <mark class="m-method" data-t="METHOD/IDEA">policy \(\pi_\theta\)</mark> plays a supporting role — a cheap surrogate for the \(\arg\max\) in TD targets, and a source of guided samples during planning.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">訓練:一條軌跡、三個損失、梯度穿過時間</span><span data-lang="en">Training: one trajectory, three losses, gradients through time</span></h3>
+        <figure class="fig"><img src="figs/Hansen2022/fig2_told_training.png" alt="Figure 2 TOLD training">
+          <figcaption data-lang="zh"><b>Fig.2</b> TOLD 訓練。只有 \(s_0\) 用線上編碼器 \(h_\theta\) 編碼,之後全靠 \(d_\theta\) 在 latent 裡遞迴展開(藍);後續觀測改用 target 網路 \(h_{\theta^-}\)(灰)當「一致性目標」。注意:<b>每個 latent 狀態都要同時預測 value、reward、action</b>,三路梯度一路反傳回 \(z_0\)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> TOLD training. Only \(s_0\) goes through the online encoder \(h_\theta\); all later latents are unrolled recurrently by \(d_\theta\) (blue). Subsequent observations pass through the target net \(h_{\theta^-}\) (gray) to serve as consistency targets. Note: <b>every latent state must predict value, reward, and action</b>, with all three gradients flowing back to \(z_0\).</figcaption></figure>
+        <p data-lang="zh">從 replay buffer 取一段長 \(H\) 的軌跡 \(\Gamma\),最小化時間加權目標(近期權重高,\(\lambda=0.5\)):</p>
+        <p data-lang="en">Sample a length-\(H\) trajectory \(\Gamma\) from the replay buffer and minimize a temporally weighted objective (near-term weighted higher, \(\lambda=0.5\)):</p>
+        <div class="eq">$$\mathcal{J}(\theta;\Gamma)=\sum_{i=t}^{t+H}\lambda^{\,i-t}\,\mathcal{L}(\theta;\Gamma_i)$$</div>
+        <div class="eq">$$\mathcal{L}(\theta;\Gamma_i)=c_1\underbrace{\|R_\theta(z_i,a_i)-r_i\|_2^2}_{\text{reward}}+c_2\underbrace{\|Q_\theta(z_i,a_i)-\big(r_i+\gamma Q_{\theta^-}(z_{i+1},\pi_\theta(z_{i+1}))\big)\|_2^2}_{\text{value (TD)}}+c_3\underbrace{\|d_\theta(z_i,a_i)-h_{\theta^-}(s_{i+1})\|_2^2}_{\text{latent consistency}}$$</div>
+        <p data-lang="zh">三個關鍵設計:(1) <mark class="m-method" data-t="METHOD/IDEA">latent 全由 reward/value 塑形</mark>——沒有任何觀測重建;(2) rollout 中<mark class="m-method" data-t="METHOD/IDEA">只有第一個觀測走 \(h_\theta\)</mark>,其餘 \(z\) 由 \(d_\theta\) 遞迴產生,梯度 BPTT 回傳,逼模型在多步之後仍準;(3) <mark class="m-method" data-t="METHOD/IDEA">一致性項用 target encoder \(h_{\theta^-}\) 當回歸目標</mark>,提供密集訊號又不必建模無關細節(獎勵稀疏時尤其重要)。策略則另外用停梯度目標 \(\mathcal{J}_\pi=-\sum_i\lambda^{i-t}Q_\theta(z_i,\pi_\theta(\mathrm{sg}(z_i)))\) 最大化 \(Q\)(DDPG 式,確定性 + 線性退火的高斯噪聲)。</p>
+        <p data-lang="en">Three key choices: (1) <mark class="m-method" data-t="METHOD/IDEA">the latent is shaped entirely by reward/value</mark> — zero observation reconstruction; (2) <mark class="m-method" data-t="METHOD/IDEA">only the first observation passes through \(h_\theta\)</mark>; later latents come from recurrent \(d_\theta\) rollouts with gradients back-propagated through time, forcing multi-step accuracy; (3) the <mark class="m-method" data-t="METHOD/IDEA">consistency term regresses the target encoder \(h_{\theta^-}\)</mark>, a dense signal without modeling nuisances (crucial when rewards are sparse). The policy separately maximizes \(Q\) via the stop-gradient objective \(\mathcal{J}_\pi=-\sum_i\lambda^{i-t}Q_\theta(z_i,\pi_\theta(\mathrm{sg}(z_i)))\) (DDPG-style: deterministic + linearly annealed Gaussian noise).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">推論:MPPI 規劃迴圈</span><span data-lang="en">Inference: the MPPI planning loop</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STEP 1</span><b data-lang="zh">編碼</b><b data-lang="en">Encode</b><small data-lang="zh">\(z_t=h_\theta(s_t)\),之後全程在 latent 空間。</small><small data-lang="en">\(z_t=h_\theta(s_t)\); everything else happens in latent space.</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 2</span><b data-lang="zh">取樣軌跡</b><b data-lang="en">Sample</b><small data-lang="zh">從 \(\mathcal{N}(\mu,\sigma^2 I)\) 抽 \(N{=}512\) 條動作序列,另加 5% 由 \(\pi_\theta\) 生成的引導軌跡。</small><small data-lang="en">Draw \(N{=}512\) action sequences from \(\mathcal{N}(\mu,\sigma^2 I)\), plus 5% guided rollouts from \(\pi_\theta\).</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 3</span><b data-lang="zh">模型打分</b><b data-lang="en">Score</b><small data-lang="zh">用 \(d_\theta,R_\theta\) 展開 \(H{=}5\) 步,終端接 \(\gamma^H Q_\theta\)。</small><small data-lang="en">Roll out \(H{=}5\) steps with \(d_\theta,R_\theta\); cap with \(\gamma^H Q_\theta\).</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 4</span><b data-lang="zh">加權更新</b><b data-lang="en">Reweight</b><small data-lang="zh">取 top-64 條,依 \(\Omega_i=e^{\tau\phi_i^\star}\) 加權更新 \(\mu,\sigma\);迭代 6 次(Humanoid 12)。</small><small data-lang="en">Keep top-64; update \(\mu,\sigma\) with weights \(\Omega_i=e^{\tau\phi_i^\star}\); 6 iterations (12 for Humanoid).</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 5</span><b data-lang="zh">執行第一步</b><b data-lang="en">Act</b><small data-lang="zh">只執行 \(a_t\),下一步重新規劃(receding horizon);\(\mu\) 平移一步暖啟動。</small><small data-lang="en">Execute only \(a_t\); replan next step (receding horizon), warm-starting from the 1-step-shifted \(\mu\).</small></div>
+        </div>
+        <p data-lang="zh">每條軌跡的分數 = <b>短期用模型、長期用價值</b>:</p>
+        <p data-lang="en">Each trajectory is scored by <b>model for the short term, value for the long term</b>:</p>
+        <div class="eq">$$\phi_\Gamma \triangleq \mathbb{E}_\Gamma\Big[\gamma^H Q_\theta(z_H,a_H)+\sum_{t=0}^{H-1}\gamma^t R_\theta(z_t,a_t)\Big]$$</div>
+        <p data-lang="zh">探索靠兩個小技巧:\(\sigma\) 設下限 \(\epsilon\)(0.5 線性退火到 0.05,避免過早收斂),訓練初期規劃視野從 1 線性升到 5(<mark class="m-assume" data-t="ASSUMPTION/CLAIM">初期模型不準,規劃會被 model bias 帶偏</mark>)。</p>
+        <p data-lang="en">Exploration rests on two tricks: a floor \(\epsilon\) on \(\sigma\) (annealed 0.5 to 0.05, preventing premature convergence), and a horizon schedule from 1 up to 5 early in training (<mark class="m-assume" data-t="ASSUMPTION/CLAIM">an inaccurate early model would let model bias dominate planning</mark>).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(h_\theta\)</td><td><span data-lang="zh">編碼器:觀測 → latent \(z\)(state 用 1 層 MLP;pixel 用 4 層 CNN)。</span><span data-lang="en">Encoder: observation → latent \(z\) (1-layer MLP for states; 4-layer CNN for pixels).</span></td></tr>
+          <tr><td>\(d_\theta(z,a)\)</td><td><span data-lang="zh">latent 動力模型:預測下一個 latent 狀態,規劃時的「想像引擎」。</span><span data-lang="en">Latent dynamics: predicts the next latent state — the imagination engine for planning.</span></td></tr>
+          <tr><td>\(R_\theta,\;Q_\theta\)</td><td><span data-lang="zh">單步報酬預測器與狀態-動作價值(雙 Q 網路取小,抗高估)。</span><span data-lang="en">One-step reward predictor and state-action value (double Q, min-taken, fighting overestimation).</span></td></tr>
+          <tr><td>\(\pi_\theta\)</td><td><span data-lang="zh">輔助策略:近似 \(\arg\max_a Q\),供 TD-target 與引導取樣;比規劃弱但快 6 倍。</span><span data-lang="en">Auxiliary policy: approximates \(\arg\max_a Q\) for TD targets and guided sampling; weaker than planning but 6x faster.</span></td></tr>
+          <tr><td>\(\theta^-\)</td><td><span data-lang="zh">target 網路(EMA,\(\zeta=0.99\)):供 value target 與 latent 一致性 target。</span><span data-lang="en">Target network (EMA, \(\zeta=0.99\)): provides both the value target and the latent-consistency target.</span></td></tr>
+          <tr><td>\(H,\;\lambda\)</td><td><span data-lang="zh">規劃/訓練視野 \(H=5\);時間衰減權重 \(\lambda=0.5\)(近步比遠步重要)。</span><span data-lang="en">Planning/training horizon \(H=5\); temporal weight \(\lambda=0.5\) (near steps matter more).</span></td></tr>
+          <tr><td>\(\phi_\Gamma,\;\Omega_i\)</td><td><span data-lang="zh">軌跡分數與其 softmax 型權重 \(\Omega_i=e^{\tau\phi^\star_i}\)(\(\tau\) 控制銳利度)。</span><span data-lang="en">Trajectory score and its softmax-style weight \(\Omega_i=e^{\tau\phi^\star_i}\) (\(\tau\) controls sharpness).</span></td></tr>
+        </table>
+        <p style="font-size:13px;color:var(--muted);margin-top:8px" data-lang="zh">實作規模感:Walker 版 TOLD 總參數約 <b>150 萬</b>;\(\gamma=0.99\)、\(c_{1:3}=(0.5,0.1,2)\)、PER 取樣、多數任務單 GPU 一小時內可解。</p>
+        <p style="font-size:13px;color:var(--muted);margin-top:8px" data-lang="en">Scale check: the Walker TOLD totals ~<b>1.5M parameters</b>; \(\gamma=0.99\), \(c_{1:3}=(0.5,0.1,2)\), PER sampling; most tasks solve within an hour on one GPU.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">與其學一個什麼都會的世界模型,不如學一個<b>只會算分數的小模型</b>:它唯一的工作,是在 5 步想像裡把「這串動作值多少」估準——剩下的未來,交給 TD 學出來的 \(Q\)。</span>
+        <span data-lang="en">Instead of a world model that knows everything, learn a <b>small model that only knows how to score</b>: its sole job is to price an action sequence over 5 imagined steps — the rest of the future is delegated to the TD-learned \(Q\).</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何一致性損失是巧勁</span><span data-lang="en">Why the consistency loss is clever</span></span>
+        <span data-lang="zh">reward 訊號可能很稀疏,只靠它 latent 會學不動;重建又太重。<mark class="m-method" data-t="METHOD/IDEA">「\(d_\theta\) 預測 target encoder 的下一步嵌入」</mark>給了密集訊號、免 decoder、模態無關,還把表徵和動力綁在同一個空間裡。<span class="add">[導讀補充] 形式上接近 BYOL/SimSiam 的「線上網路追 target 網路」,但用途是把動力模型錨住,而非自監督預訓練。</span></span>
+        <span data-lang="en">Reward alone can be too sparse to shape the latent; reconstruction is too heavy. <mark class="m-method" data-t="METHOD/IDEA">Making \(d_\theta\) predict the target-encoder embedding of the next step</mark> gives a dense, decoder-free, modality-agnostic signal that also ties representation and dynamics into one space. <span class="add">[guide note] Formally close to the BYOL/SimSiam online-chases-target pattern, but used to anchor the dynamics model, not for self-supervised pretraining.</span></span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">整套模型是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">確定性的</mark>:沒有機率動力、沒有 ensemble、不量化模型不確定性。在 MuJoCo 這種確定性模擬器裡沒問題,但<mark class="m-limit" data-t="LIMITATION/FUTURE">隨機性強或部分可觀測的環境,確定性 rollout 可能系統性偏差</mark>。</span>
+        <span data-lang="en">The whole model is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">deterministic</mark>: no stochastic dynamics, no ensembles, no model-uncertainty estimates. Fine in deterministic MuJoCo sims, but <mark class="m-limit" data-t="LIMITATION/FUTURE">in stochastic or partially observable environments deterministic rollouts may be systematically biased</mark>.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果:15 個 state-based DMControl 任務(500k 步)</span><span data-lang="en">Main result: 15 state-based DMControl tasks (500k steps)</span></h3>
+        <figure class="fig"><img src="figs/Hansen2022/fig3_dmcontrol.png" alt="Figure 3 DMControl results">
+          <figcaption data-lang="zh"><b>Fig.3</b> 紅線(TD-MPC)在多數任務領先;左上角 Average 給全局圖像。注意三件事:(1) <b>Quadruped、Acrobot 這種動力複雜的任務差距最大</b>;(2) 綠/棕虛線是內建消融——拿掉 latent(改狀態預測)或拿掉一致性正則都明顯掉;(3) <b>Finger Turn Hard 上 TD-MPC 反而輸 SAC/LOOP</b>——難探索任務是它的弱點,作者自己點名。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> TD-MPC (red) leads on most tasks; the top-left Average panel gives the global picture. Notice three things: (1) <b>the gap is largest on complex-dynamics tasks (Quadruped, Acrobot)</b>; (2) green/brown dashes are built-in ablations — removing the latent (state prediction) or the consistency regularizer clearly hurts; (3) <b>TD-MPC loses to SAC/LOOP on Finger Turn Hard</b> — hard exploration is its weak spot, flagged by the authors themselves.</figcaption></figure>
+        <p data-lang="zh">用 rliable 聚合(5 seeds):TD-MPC 的 median / IQM / mean 全高於 SAC 與 LOOP。<mark class="m-result" data-t="RESULT/EVIDENCE">Humanoid(\(\mathcal{A}\in\mathbb{R}^{21}\))與 Dog(\(\mathcal{A}\in\mathbb{R}^{38}\))六個任務約 1–3M 步解掉,是第一個有記錄解 Dog 的方法</mark>;此前工作在 Humanoid 上通常要 30M 步。</p>
+        <p data-lang="en">Aggregated with rliable (5 seeds): TD-MPC exceeds SAC and LOOP on median / IQM / mean. <mark class="m-result" data-t="RESULT/EVIDENCE">The six Humanoid (\(\mathcal{A}\in\mathbb{R}^{21}\)) and Dog (\(\mathcal{A}\in\mathbb{R}^{38}\)) tasks are solved within ~1–3M steps — the first documented solve of Dog</mark>; prior work typically needed 30M steps on Humanoid.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">影像輸入:DMControl 100k(Tab.1,10 seeds)</span><span data-lang="en">From pixels: DMControl 100k (Tab.1, 10 seeds)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">任務</span><span data-lang="en">Task</span></th><th>TD-MPC</th><th>DrQ</th><th>EfficientZero*</th></tr>
+          <tr><td>Finger Spin</td><td class="win">943±59</td><td>901±104</td><td>—</td></tr>
+          <tr><td>Cup Catch</td><td class="win">933±24</td><td>913±53</td><td>942±17</td></tr>
+          <tr><td>Cartpole Swingup</td><td>770±70</td><td>759±92</td><td class="win">813±19</td></tr>
+          <tr><td>Reacher Easy</td><td>628±105</td><td>601±213</td><td class="win">952±34</td></tr>
+          <tr><td>Walker Walk</td><td>577±208</td><td class="win">612±164</td><td>—</td></tr>
+          <tr><td>Cheetah Run</td><td>222±88</td><td class="win">344±67</td><td>—</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">*EfficientZero 動作離散化、評測前多跑 20k 梯度步,且<mark class="m-problem" data-t="PROBLEM/GAP">因維度爆炸做不了 Walker/Cheetah(\(\mathcal{A}\in\mathbb{R}^{6}\))</mark>。誠實解讀:TD-MPC <b>沒特別為影像調參</b>下大致與 SOTA 打平(贏 Finger Spin,輸 Cheetah),賣點是「同一套配方通吃」而非全面領先。3M 步的 Dreamer benchmark 上,它<mark class="m-result" data-t="RESULT/EVIDENCE">穩定勝過 CURL/DrQ,與 DrQ-v2/Dreamer-v2 相當</mark>——且全任務共用同一組超參數。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">*EfficientZero discretizes actions, runs 20k extra gradient steps before eval, and <mark class="m-problem" data-t="PROBLEM/GAP">cannot handle Walker/Cheetah (\(\mathcal{A}\in\mathbb{R}^{6}\)) due to dimensionality explosion</mark>. Honest read: with <b>no pixel-specific tuning</b>, TD-MPC is roughly on par with SOTA (wins Finger Spin, loses Cheetah) — the selling point is one recipe for everything, not universal dominance. On the 3M-step Dreamer benchmark it <mark class="m-result" data-t="RESULT/EVIDENCE">consistently beats CURL/DrQ and matches DrQ-v2/Dreamer-v2</mark> — with a single hyperparameter set across all tasks.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">其他證據一覽</span><span data-lang="en">Other evidence at a glance</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">實驗</span><span data-lang="en">Experiment</span></th><th><span data-lang="zh">發現</span><span data-lang="en">Finding</span></th></tr>
+          <tr><td><b>Meta-World</b><br><small><span data-lang="zh">50 個 goal-conditioned 操作任務</span><span data-lang="en">50 goal-conditioned manipulation tasks</span></small></td><td><span data-lang="zh">整體成功率高於 SAC;<mark class="m-result" data-t="RESULT/EVIDENCE">複雜操作(Bin Picking、Box Close、Hammer、Basketball)樣本效率大幅領先</mark>;MT10 多任務同時學 10 個任務也更好。</span><span data-lang="en">Higher overall success than SAC; <mark class="m-result" data-t="RESULT/EVIDENCE">far more sample-efficient on complex manipulation (Bin Picking, Box Close, Hammer, Basketball)</mark>; also better on MT10 multi-task (10 tasks at once).</span></td></tr>
+          <tr><td><b><span data-lang="zh">多模態輸入</span><span data-lang="en">Multi-modal input</span></b></td><td><span data-lang="zh">本體感覺 + 第一人稱相機的 Quadruped Corridor/Obstacles:TD-MPC 成功融合兩模態,<mark class="m-result" data-t="RESULT/EVIDENCE">盲眼版(只有本體感覺)失敗</mark>——證明表徵真的用上了視覺。</span><span data-lang="en">Proprioception + egocentric camera on Quadruped Corridor/Obstacles: TD-MPC fuses both modalities; <mark class="m-result" data-t="RESULT/EVIDENCE">the blind variant (proprioception only) fails</mark> — the representation genuinely uses vision.</span></td></tr>
+          <tr><td><b><span data-lang="zh">遷移(Walk→Run)</span><span data-lang="en">Transfer (Walk→Run)</span></b></td><td><span data-lang="zh">微調整個 TOLD 收斂快很多;<mark class="m-result" data-t="RESULT/EVIDENCE">凍結 \(h_\theta\) 幾乎不掉,凍結 \(h_\theta{+}d_\theta\) 明顯變慢</mark> → 編碼器學到可遷移特徵,動力模型偏任務特定。</span><span data-lang="en">Fine-tuning the full TOLD converges much faster; <mark class="m-result" data-t="RESULT/EVIDENCE">freezing \(h_\theta\) barely hurts, freezing \(h_\theta{+}d_\theta\) degrades clearly</mark> → the encoder transfers, the dynamics are task-specific.</span></td></tr>
+          <tr><td><b><span data-lang="zh">牆鐘時間(RTX3090)</span><span data-lang="en">Wall-clock (RTX3090)</span></b></td><td><span data-lang="zh">Walker Walk 解題時間:TD-MPC <b>0.47h</b> ≈ SAC 0.41h,<mark class="m-result" data-t="RESULT/EVIDENCE">比 LOOP(7.72h)快 16 倍</mark>;每 500k 步耗時 5.60h(SAC 1.41h、LOOP 18.5h)——比 model-free 貴,但把 model-based 的時間成本壓到同一量級。</span><span data-lang="en">Time-to-solve Walker Walk: TD-MPC <b>0.47h</b> ≈ SAC 0.41h, <mark class="m-result" data-t="RESULT/EVIDENCE">16x faster than LOOP (7.72h)</mark>; 5.60h per 500k steps (SAC 1.41h, LOOP 18.5h) — pricier than model-free, but pulls model-based cost into the same ballpark.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融怎麼讀</span><span data-lang="en">Reading the ablations</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">拿掉什麼</span><span data-lang="en">What is removed</span></th><th><span data-lang="zh">變成誰</span><span data-lang="en">What it becomes</span></th><th><span data-lang="zh">結果證明</span><span data-lang="en">What it proves</span></th></tr>
+          <tr><td><span data-lang="zh">latent(\(h_\theta\)= identity)</span><span data-lang="en">the latent (\(h_\theta\)= identity)</span></td><td><span data-lang="zh">近似「狀態預測式」model-based RL</span><span data-lang="en">≈ state-prediction model-based RL</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">明顯變差</mark> → 在 latent 空間建模是關鍵,不只是壓維度。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Clearly worse</mark> → modeling in latent space is essential, not just dimensionality reduction.</span></td></tr>
+          <tr><td><span data-lang="zh">一致性正則(\(c_3{=}0\))</span><span data-lang="en">consistency regularizer (\(c_3{=}0\))</span></td><td><span data-lang="zh">近似 MuZero 式「純 reward/value 模型」</span><span data-lang="en">≈ MuZero-style pure reward/value model</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">不穩、多數任務掉分</mark> → 只靠 reward/value 訊號太稀,表徵需要密集錨點。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Unstable, drops on most tasks</mark> → reward/value alone is too sparse; the representation needs a dense anchor.</span></td></tr>
+          <tr><td><span data-lang="zh">一致性 → 重建 / 對比損失</span><span data-lang="en">consistency → reconstruction / contrastive</span></td><td><span data-lang="zh">PlaNet/Dreamer 式、EfficientZero 式</span><span data-lang="en">PlaNet/Dreamer-style, EfficientZero-style</span></td><td><span data-lang="zh">兩者都比無正則好,但<mark class="m-result" data-t="RESULT/EVIDENCE">一致性損失最穩定</mark>(Fig.10,15 任務平均)。</span><span data-lang="en">Both beat no-regularization, but <mark class="m-result" data-t="RESULT/EVIDENCE">the consistency loss is the most consistent</mark> (Fig.10, 15-task average).</span></td></tr>
+        </table>
+        <figure class="fig"><img src="figs/Hansen2022/fig6_budget.png" alt="Figure 6 variable budget">
+          <figcaption data-lang="zh"><b>Fig.6</b> 規劃預算 vs 表現(Quadruped Walk,訓練完成後)。看三點:視野或迭代數增加,回報單調上升;灰色 ✕ 是<b>只用 \(\pi_\theta\) 不規劃</b>——明顯低一截,證明表現真的來自規劃;橘星是訓練用的預設值,推論時砍半迭代也不掉分。</figcaption>
+          <figcaption data-lang="en"><b>Fig.6</b> Planning budget vs performance (Quadruped Walk, fully trained). Three things: return rises monotonically with horizon or iterations; the gray ✕ is <b>the policy \(\pi_\theta\) alone, no planning</b> — clearly lower, proving the gains come from planning; the orange star is the training default, and halving iterations at inference costs nothing.</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">一句話:<b>實驗證明了「省樣本 + 可用算力換表現」,但沒證明「每個單項任務都是 SOTA」</b>——影像任務上它是「打平但更通用」,難探索任務上它會輸。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">In one line: <b>the experiments prove sample efficiency + compute-for-performance, not per-task SOTA everywhere</b> — on pixels it ties while being more general, and on hard-exploration tasks it loses.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">92 個任務、state/pixel/多模態/稀疏獎勵/multi-task 一套配方通吃,<b>複雜動力任務差距最大</b>(Dog 首解);牆鐘時間拉到與 model-free 同級。</span>
+        <span data-lang="en">One recipe across 92 tasks — state/pixels/multi-modal/sparse/multi-task — with <b>the biggest gaps on complex dynamics</b> (first Dog solve), at model-free-class wall-clock cost.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">全部評測都在<mark class="m-limit" data-t="LIMITATION/FUTURE">確定性的 MuJoCo 模擬器</mark>裡,5 seeds(影像 100k 為 10);<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有隨機動力、真實機器人或明顯部分可觀測的環境</mark>。確定性模型的極限沒被真正測到。</span>
+        <span data-lang="en">All evaluation lives in <mark class="m-limit" data-t="LIMITATION/FUTURE">deterministic MuJoCo simulators</mark>, 5 seeds (10 for 100k pixels); <mark class="m-limit" data-t="LIMITATION/FUTURE">no stochastic dynamics, real robots, or strongly partially observable settings</mark>. The limits of the deterministic model are never truly probed.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">value 的分布偏移</span><span data-lang="en">value dist. shift</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">確定性模型</span><span data-lang="en">deterministic model</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>任務導向是雙面刃</b>:表徵完全由當前任務的 reward 塑形,<mark class="m-limit" data-t="LIMITATION/FUTURE">遷移實驗只做了高度相關的 Walk→Run(同域)</mark>;作者自己承認「無關任務之間,通用模型應該收益更大」。報酬結構一換,TOLD 的 latent 可能整組作廢。</li>
+          <li data-lang="en"><b>Task orientation cuts both ways</b>: the representation is shaped entirely by the current reward; <mark class="m-limit" data-t="LIMITATION/FUTURE">transfer is only tested on the highly related Walk→Run (same domain)</mark> — the authors themselves concede general models should benefit more across unrelated tasks. Change the reward structure and the TOLD latent may be worthless.</li>
+          <li data-lang="zh"><b>探索是弱項而非亮點</b>:探索全靠 \(\sigma\) 下限的線性退火這種啟發式;<mark class="m-result" data-t="RESULT/EVIDENCE">Finger Turn Hard 上輸給 SAC 和 LOOP</mark>(作者有揭露)。規劃「集中火力」的特性,在需要廣度探索時反而礙事。</li>
+          <li data-lang="en"><b>Exploration is a weakness, not a feature</b>: it rests on the heuristic annealed floor on \(\sigma\); <mark class="m-result" data-t="RESULT/EVIDENCE">it loses to SAC and LOOP on Finger Turn Hard</mark> (disclosed by the authors). The focusing nature of planning works against breadth when exploration is the bottleneck.</li>
+          <li data-lang="zh"><b>Baseline 公平性可再追問</b>:LOOP <mark class="m-assume" data-t="ASSUMPTION/CLAIM">此前從未在 DMControl/Meta-World 上跑過</mark>,超參數是作者代調(batch、\(\zeta\)、seed steps);SAC 的 batch 從 1024 降到 512「以求公平」。影像結果多數直接引用他人論文數字,評測協定未必對齊(EfficientZero 額外 20k 梯度步、動作離散化,作者有標註)。</li>
+          <li data-lang="en"><b>Baseline fairness invites scrutiny</b>: LOOP <mark class="m-assume" data-t="ASSUMPTION/CLAIM">had never been benchmarked on DMControl/Meta-World</mark> — its hyperparameters were adapted by the authors (batch, \(\zeta\), seed steps); SAC batch was lowered 1024→512 "for fairness." Most pixel numbers are imported from other papers with possibly misaligned protocols (EfficientZero: 20k extra gradient steps, discretized actions — flagged by the authors).</li>
+          <li data-lang="zh"><b>影像任務其實沒贏</b>:100k benchmark 上 DrQ 在 Walker Walk(612 vs 577)、Cheetah Run(344 vs 222)領先;abstract 的說法是「match state-of-the-art」——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「打平」是靠聚合閱讀撐起來的主張</mark>,逐任務看有輸有贏。</li>
+          <li data-lang="en"><b>It does not actually win on pixels</b>: on the 100k benchmark DrQ leads on Walker Walk (612 vs 577) and Cheetah Run (344 vs 222); the abstract says "match state-of-the-art" — <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a claim carried by aggregate reading</mark>; per task it wins some, loses some.</li>
+          <li data-lang="zh"><b>每步推論成本高於 model-free</b>:預設規劃 512×6 次迭代的 latent rollout,~20ms/步(50Hz);每 500k 步 5.60h 是 SAC 的 4 倍。50Hz 對操作夠用,<mark class="m-limit" data-t="LIMITATION/FUTURE">對高頻控制(力控、靈巧手)或無 GPU 的嵌入式平台仍是門檻</mark>。</li>
+          <li data-lang="en"><b>Per-step inference costs more than model-free</b>: default planning runs 512×6 iterations of latent rollouts, ~20ms/step (50Hz); 5.60h per 500k steps is 4x SAC. Fine for manipulation, but <mark class="m-limit" data-t="LIMITATION/FUTURE">a barrier for high-rate control (force control, dexterous hands) or GPU-less embedded platforms</mark>.</li>
+          <li data-lang="zh"><b>確定性一切</b>:動力、策略全確定性、無 ensemble;<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有任何機制表達「模型不知道」</mark>。規劃器會恰好利用模型最樂觀的錯誤(optimizer exploitation),論文靠短視野 + 價值截斷緩解,但未正面分析。</li>
+          <li data-lang="en"><b>Deterministic everything</b>: dynamics and policy are deterministic, no ensembles; <mark class="m-limit" data-t="LIMITATION/FUTURE">there is no mechanism to express model ignorance</mark>. Planners exploit precisely the most optimistic model errors; the short horizon + value cutoff mitigates this, but it is never analyzed head-on.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>獎勵全零時表徵學什麼?</b>探索到第一個 reward 之前,塑形 latent 的只剩一致性損失——它會不會塌縮(target encoder 也在動)?稀疏任務的成功是否其實靠 PER 與 \(\epsilon\) 排程救回來?</li>
+          <li data-lang="en"><b>What does the representation learn before any reward is seen?</b> Until the first reward, only the consistency loss shapes the latent — can it collapse (the target encoder moves too)? Do sparse-reward successes actually ride on PER and the \(\epsilon\) schedule?</li>
+          <li data-lang="zh"><b>\(Q\) 的分布偏移</b>:資料由規劃器 \(\Pi_\theta\) 收集,TD-target 卻用 \(\pi_\theta\) 的動作 bootstrapping。兩者在難任務上差距明顯(Fig.6 的 ✕ vs 星),這個 off-policy 缺口為什麼沒炸?何時會炸?</li>
+          <li data-lang="en"><b>Distribution shift in \(Q\)</b>: data is collected by the planner \(\Pi_\theta\), but TD targets bootstrap with \(\pi_\theta\) actions. The two differ markedly on hard tasks (✕ vs star in Fig.6). Why does this off-policy gap not blow up — and when would it?</li>
+          <li data-lang="zh"><b>把環境變隨機呢?</b>在動力有噪聲或部分可觀測時,確定性 latent rollout 的估分會偏;需要多大的隨機性才會讓 TD-MPC 掉回 SAC 之下?</li>
+          <li data-lang="en"><b>What if the environment is stochastic?</b> With noisy dynamics or partial observability, deterministic latent rollouts score with bias. How much stochasticity does it take for TD-MPC to fall below SAC?</li>
+          <li data-lang="zh"><b>增益來自規劃還是表徵?</b>若拿 TOLD 的 \(h_\theta\) 特徵直接餵 SAC(不規劃),能吃到多少好處?Fig.6 顯示 policy-only 明顯較弱,暗示規劃是主力——但表徵的貢獻沒被單獨定量。</li>
+          <li data-lang="en"><b>Planning or representation — where is the gain?</b> Feed TOLD features \(h_\theta\) to SAC without planning: how much benefit remains? Fig.6 shows policy-only is clearly weaker, hinting planning is the main engine — but the representation contribution is never isolated.</li>
+          <li data-lang="zh"><b>調參預算對齊了嗎?</b>TD-MPC 自身有不少敏感旋鈕(\(H\)、迭代數、\(\epsilon\)/視野排程、\(c_{1:3}\)、PER)。若給 SAC/LOOP 同等的 per-benchmark 調參預算,Fig.3 的差距會縮多少?</li>
+          <li data-lang="en"><b>Was tuning budget aligned?</b> TD-MPC has its own sensitive knobs (\(H\), iterations, \(\epsilon\)/horizon schedules, \(c_{1:3}\), PER). Given SAC/LOOP the same per-benchmark tuning budget, how much of the Fig.3 gap survives?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">「比 LOOP 快 16 倍」≠「比 model-free 便宜」。每 500k 環境步,TD-MPC 要 5.60h、SAC 只要 1.41h——<b>單步成本它是貴的</b>;贏在樣本效率把總時間拉回來。部署時真正的帳是:你的瓶頸是「環境互動次數」還是「計算」?前者選 TD-MPC,後者未必。</span>
+        <span data-lang="en">"16x faster than LOOP" ≠ "cheaper than model-free." Per 500k env steps TD-MPC takes 5.60h vs SAC 1.41h — <b>per-step it is expensive</b>; sample efficiency is what wins back total time. The real deployment question: is your bottleneck environment interactions or compute? Pick TD-MPC for the former; maybe not for the latter.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">少見的誠實:自曝 Finger Turn Hard 輸給 SAC/LOOP、老實報牆鐘時間(包括自己每步較貴)、用 rliable 聚合統計、92 個任務共用超參數、開源。這些都讓主結論更可信。</span>
+        <span data-lang="en">Unusually honest: it discloses losing Finger Turn Hard to SAC/LOOP, reports wall-clock including its own per-step cost, uses rliable aggregate statistics, shares hyperparameters across 92 tasks, and open-sources. All of this makes the headline claims more credible.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「模型為用而學」的原則可以到處搬</b>:表徵/模型不必忠於世界,只需忠於下游用途(這裡是規劃打分)。做機器人操作或 world model 相關題目時,先問「這個模型的消費者是誰」,再決定損失函數。</li>
+          <li data-lang="en"><b>The learn-the-model-for-its-use principle travels</b>: a representation/model owes fidelity to its downstream consumer (here, plan scoring), not to the world. For manipulation or world-model projects, first ask who consumes the model, then choose the losses.</li>
+          <li data-lang="zh"><b>「短規劃 + 學到的終端價值」是個可重用的控制骨架</b>:任何有低階模型(解析或學到)的系統,都能用 TD 學一個價值當視野延伸,而不是硬拉長規劃視野。與 library 中 FB representation(Touati 2021)恰成對照:<b>FB 學「所有任務」的價值結構(任務無關),TOLD 學「單一任務」的最小充分模型(任務導向)</b>——兩個極端之間是很好的研究地帶。[導讀補充]</li>
+          <li data-lang="en"><b>Short planning + learned terminal value is a reusable control skeleton</b>: any system with a low-level model (analytic or learned) can TD-learn a value to extend the horizon instead of lengthening the plan. A neat contrast with FB representations (Touati 2021, in this library): <b>FB learns value structure for all tasks (task-free); TOLD learns a minimal sufficient model for one task (task-oriented)</b> — the space between the two extremes is fertile ground. [guide note]</li>
+          <li data-lang="zh"><b>latent 一致性損失是便宜又通用的模型正則</b>:要在自己的 pipeline 裡學動力模型(例如 force-aware 操作的接觸動力),可先試「預測 target encoder 嵌入」再考慮重建/對比。</li>
+          <li data-lang="en"><b>The latent-consistency loss is a cheap, general model regularizer</b>: when learning dynamics in your own pipeline (say, contact dynamics for force-aware manipulation), try predict-the-target-embedding before reaching for reconstruction/contrastive.</li>
+          <li data-lang="zh"><b>推論算力可調</b>是規劃式方法被低估的優點:同一個 agent,離線評估用大預算、實機部署砍半、極端即時退回 policy-only。設計系統時可以把這個旋鈕顯式暴露出來。</li>
+          <li data-lang="en"><b>Tunable inference compute</b> is an underrated perk of planning methods: one agent, big budget for offline eval, half for deployment, policy-only for hard real-time. Worth exposing this knob explicitly in your own systems.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What is worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「不必重建觀測也能學出可規劃的模型」</span><span data-lang="en">"Plannable models need no observation reconstruction"</span></td><td><span data-lang="zh">TOLD:reward + value + latent 一致性三損失塑形的任務導向模型。</span><span data-lang="en">TOLD: a task-oriented model shaped by reward + value + latent-consistency losses.</span></td></tr>
+          <tr><td><span data-lang="zh">「MPC 的視野可以用 TD 價值補完」</span><span data-lang="en">"A TD value can complete the MPC horizon"</span></td><td><span data-lang="zh">連續控制中第一個模型與價值由 TD-learning 聯合學出的完整框架。</span><span data-lang="en">The first complete framework jointly TD-learning model and value in continuous control.</span></td></tr>
+          <tr><td><span data-lang="zh">「model-based 能同時省樣本又不犧牲牆鐘時間」</span><span data-lang="en">"Model-based can be sample-efficient without wall-clock pain"</span></td><td><span data-lang="zh">Table 2:時間追平 SAC、16 倍快於 LOOP;Dog 首解、Humanoid 1/10 樣本。</span><span data-lang="en">Table 2: matches SAC time, 16x faster than LOOP; first Dog solve, Humanoid at 1/10 the samples.</span></td></tr>
+          <tr><td><span data-lang="zh">「推論算力 ↔ 表現可以連續交換」</span><span data-lang="en">"Inference compute trades continuously for performance"</span></td><td><span data-lang="zh">Fig.6/8:視野與迭代數的單調增益曲線 + policy-only 退化模式。</span><span data-lang="en">Fig.6/8: monotone gain curves over horizon/iterations + the policy-only fallback.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">TD-MPC 把 MuZero 的「模型只需對價值等價」哲學帶進連續控制:<b>五個小 MLP、一個 TD 目標,短視野規劃管精細動作、終端價值管長期方向</b>——在 92 個任務上證明 model-based 終於可以又準、又省樣本、又不拖時間。它不是世界模型的勝利,而是「為規劃量身訂做的最小模型」的勝利。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">TD-MPC brings the MuZero value-equivalence philosophy to continuous control: <b>five small MLPs, one TD objective — short-horizon planning for fine motion, a terminal value for long-term direction</b> — proving across 92 tasks that model-based RL can finally be accurate, sample-efficient, and fast at once. Not a victory for world models, but for the minimal model tailored to planning.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">TD-MPC2 (2024)</span>
+          <span class="chip">MuZero / EfficientZero</span>
+          <span class="chip">Dreamer / PlaNet</span>
+          <span class="chip">LOOP (Sikchi 2022)</span>
+          <span class="chip">MPPI (Williams 2015)</span>
+          <span class="chip">FB repr. (Touati 2021)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Hansen et al. 2022 (TD-MPC) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'TD-MPC reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Language Models Need Sleep — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Language Models Need Sleep: Learning to Self-Modify and Consolidate Memories","authors":"Ali Behrouz, Farnoosh Hashemi, Adel Javanmard, Vahab Mirrokni","year":"2026","venue":"arXiv preprint (Google)","tags":["Continual Learning","Catastrophic Forgetting","Knowledge Distillation","Self-Improvement","Memory Consolidation"],"tldr":"把人類「睡眠鞏固記憶」搬進 LLM:清醒時吸收新知,睡眠時用向上蒸餾(Knowledge Seeding)把短期記憶固化進新長出的長期參數,再用 Dreaming 自我改進,對抗災難性遺忘。","tldr_en":"Brings human sleep-based memory consolidation to LLMs: a wake phase absorbs data, a sleep phase uses upward distillation (Knowledge Seeding) to fix short-term memories into newly grown long-term parameters, then Dreaming self-improves, fighting catastrophic forgetting."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:118px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.05em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">本文主張:LLM 也<b>需要睡覺</b>。作者把人腦「睡眠鞏固記憶」的機制搬進 LLM,提出 <b>Sleep 範式</b>:模型的生命週期不再分「訓練 / 測試」,而是交替<b>清醒(Wake)</b>吸收新知,與<b>睡眠(Sleep)</b>整理內部知識。睡眠含兩階段——<mark class="m-method" data-t="METHOD/IDEA">記憶鞏固(Knowledge Seeding 向上蒸餾)</mark>把短期記憶固化進<b>新長出的</b>長期參數,以及 <mark class="m-method" data-t="METHOD/IDEA">Dreaming</mark>(自產合成資料自我改進),藉此<mark class="m-result" data-t="RESULT/EVIDENCE">對抗災難性遺忘、強化長脈絡與持續學習</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">The thesis: LLMs also <b>need sleep</b>. The authors port the brain&#39;s sleep-based memory consolidation into LLMs as a <b>Sleep paradigm</b>: a model&#39;s lifecycle is no longer split into train / test, but alternates a <b>Wake</b> phase (absorbing new data) with a <b>Sleep</b> phase (reorganizing internal knowledge). Sleep has two stages—<mark class="m-method" data-t="METHOD/IDEA">Memory Consolidation (Knowledge Seeding, an upward distillation)</mark> that fixes short-term memories into <b>newly grown</b> long-term parameters, and <mark class="m-method" data-t="METHOD/IDEA">Dreaming</mark> (self-generated synthetic data for self-improvement)—together <mark class="m-result" data-t="RESULT/EVIDENCE">fighting catastrophic forgetting and boosting long-context and continual learning</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Behrouz2026/fig1_concept.png" alt="Figure 1 concept">
+        <figcaption data-lang="zh"><b>Fig.1</b> 核心概念圖。<b>左上</b>:傳統機器學習把生命切成「訓練 / 測試」;<b>右上</b>:持續學習沒有這種切分,而是「清醒(Active/Wake)⇄ 睡眠(Sleep)」交替。<b>右側</b>:本文採用的 Hope 架構——Sequence Layer 之上疊 High / Mid / Low Frequency FFN(不同更新頻率的記憶)。中間文字框說明:睡眠不是被動狀態,而是把高頻(短期)記憶固化到低頻(長期、更大、更穩)元件。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> The core concept. <b>Top-left</b>: conventional ML splits a lifecycle into train / test; <b>top-right</b>: continual learning has no such split, instead alternating Active/Wake ⇄ Sleep. <b>Right</b>: the Hope architecture used here—a Sequence Layer topped by High / Mid / Low Frequency FFNs (memories updated at different rates). The middle boxes note that sleep is not passive: it consolidates high-frequency (short-term) memories into low-frequency (long-term, larger, more stable) components.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — LLM 部署後<mark class="m-problem" data-t="PROBLEM/GAP">基本是靜態的</mark>:知識停在「knowledge cutoff」。要更新則兩難——重訓太貴,微調 / LoRA 迭代又造成<mark class="m-problem" data-t="PROBLEM/GAP">災難性遺忘(CF)</mark>;ICL 雖能持續適應,但知識<b>出了 context 就消失</b>。</li>
+          <li data-lang="en"><b>Problem</b> — After deployment LLMs are <mark class="m-problem" data-t="PROBLEM/GAP">largely static</mark>: knowledge frozen at a cutoff. Updating is a dilemma—re-training is costly, while fine-tuning / LoRA iterations cause <mark class="m-problem" data-t="PROBLEM/GAP">catastrophic forgetting (CF)</mark>; ICL adapts continually but its knowledge <b>vanishes once out of context</b>.</li>
+          <li data-lang="zh"><b>類比</b> — 像人類的<mark class="m-assume" data-t="ASSUMPTION/CLAIM">順向失憶症</mark>:能用當下 context,也保有久遠的預訓練知識,卻無法把「短期」轉成「長期」。人腦靠<b>睡眠</b>解決;那 LLM 呢?</li>
+          <li data-lang="en"><b>Analogy</b> — Like human <mark class="m-assume" data-t="ASSUMPTION/CLAIM">anterograde amnesia</mark>: the model can use the present context and retains distant pre-training knowledge, but cannot turn short-term into long-term. Humans solve this via <b>sleep</b>—what about LLMs?</li>
+          <li data-lang="zh"><b>方法</b> — <mark class="m-method" data-t="METHOD/IDEA">Sleep 範式</mark>:清醒吸收、睡眠整理。睡眠 = 記憶鞏固(<b>向上蒸餾 Knowledge Seeding</b> + 參數擴增 + 模仿學習)+ Dreaming(自產資料 + RL 自我改進)。建立在 Nested Learning 的 <b>Continuum Memory System(多頻率記憶鏈)</b> 之上。</li>
+          <li data-lang="en"><b>Method</b> — The <mark class="m-method" data-t="METHOD/IDEA">Sleep paradigm</mark>: wake to absorb, sleep to reorganize. Sleep = Memory Consolidation (<b>upward distillation / Knowledge Seeding</b> + parameter growth + imitation learning) + Dreaming (self-generated data + RL self-improvement). Built on the <b>Continuum Memory System</b> (a multi-frequency memory chain) from Nested Learning.</li>
+          <li data-lang="zh"><b>結果</b> — 在數學推理、事實知識注入、few-shot、持續學習與長脈絡上<mark class="m-result" data-t="RESULT/EVIDENCE">全面優於 SFT / GRPO / SEAL / OPSD / ICL</mark>(例:Qwen3-8B 數學 79.2 vs GRPO 76.4;ARC few-shot 80% vs SEAL 72.5%;BABILong 穩定到 10M tokens)。</li>
+          <li data-lang="en"><b>Results</b> — Across math reasoning, factual knowledge incorporation, few-shot, continual learning and long context, it <mark class="m-result" data-t="RESULT/EVIDENCE">beats SFT / GRPO / SEAL / OPSD / ICL</mark> (e.g. Qwen3-8B math 79.2 vs GRPO 76.4; ARC few-shot 80% vs SEAL 72.5%; BABILong stable to 10M tokens).</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">要讓 LLM「終身學習」,過去有三條路:<mark class="m-method" data-t="METHOD/IDEA">(1) 擴大資料重訓</mark>——有效但太貴;<mark class="m-method" data-t="METHOD/IDEA">(2) 持續微調 / LoRA</mark>——迭代更新常帶來<mark class="m-problem" data-t="PROBLEM/GAP">災難性遺忘</mark>;<mark class="m-method" data-t="METHOD/IDEA">(3) In-Context Learning(ICL)</mark>——被視為高效的持續學習,可視為一種「元學習 / 短期記憶壓縮」,但受限於 context window,<mark class="m-problem" data-t="PROBLEM/GAP">會話一結束知識就丟失</mark>。</p>
+        <p data-lang="en">Three prior routes to lifelong LLMs: <mark class="m-method" data-t="METHOD/IDEA">(1) re-training on expanded data</mark>—effective but costly; <mark class="m-method" data-t="METHOD/IDEA">(2) continual fine-tuning / LoRA</mark>—iterative updates tend to cause <mark class="m-problem" data-t="PROBLEM/GAP">catastrophic forgetting</mark>; <mark class="m-method" data-t="METHOD/IDEA">(3) In-Context Learning (ICL)</mark>—an efficient form of continual learning, readable as meta-learning / short-term memory compression, yet bounded by the context window, so <mark class="m-problem" data-t="PROBLEM/GAP">knowledge is lost when the session ends</mark>.</p>
+        <p data-lang="zh">本文建立在同組先前的 <b>Nested Learning(NL)</b> 與 <b>Hope</b> 架構上。NL 把 Transformer 看成「<b>連續體記憶系統(CMS)</b>」:attention 是無限更新頻率的短期記憶,MLP 是零頻率的長期記憶;中間可以插入不同更新頻率的 MLP 區塊構成一條記憶鏈。NL 已處理「線上(清醒)鞏固」,本文則補上缺的另一半:<mark class="m-method" data-t="METHOD/IDEA">離線(睡眠)鞏固</mark>。</p>
+        <p data-lang="en">This work builds on the same group&#39;s prior <b>Nested Learning (NL)</b> and <b>Hope</b> architecture. NL views a Transformer as a <b>Continuum Memory System (CMS)</b>: attention is an infinite-frequency short-term memory, the MLP a zero-frequency long-term memory, with MLP blocks of intermediate update frequencies forming a memory chain. NL already handled &#34;online (wake) consolidation&#34;; this paper adds the missing half: <mark class="m-method" data-t="METHOD/IDEA">offline (sleep) consolidation</mark>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這是一篇「<b>範式 + 具體實作</b>」的論文:大論述(LLM 該有睡眠週期)訴諸神經科學的說服力,小論述(Knowledge Seeding、Dreaming)給出可跑的演算法。它的野心是把「持續學習」從一個<b>後訓練目標</b>,重新定義成一個<b>記憶系統設計問題</b>——遺忘的根因不是取樣分佈,而是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">容量不足</mark>,因此解法是「睡覺時長出新參數並向上蒸餾」。</p>
+          <p data-lang="en" style="margin-top:6px">This is a &#34;<b>paradigm + concrete instantiation</b>&#34; paper: the grand claim (LLMs should have a sleep cycle) leans on neuroscience for persuasion; the concrete claims (Knowledge Seeding, Dreaming) supply runnable algorithms. Its ambition is to reframe continual learning from a <b>post-training objective</b> into a <b>memory-system design problem</b>—recasting forgetting not as a sampling-distribution issue but as <mark class="m-assume" data-t="ASSUMPTION/CLAIM">insufficient capacity</mark>, hence the fix: &#34;grow new parameters during sleep and distill upward into them.&#34;</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的觀念轉變:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">The mindset shifts worth taking away:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">用「清醒 / 睡眠」取代「訓練 / 測試」。</b> 對持續學習者而言,兩種狀態不該有邊界;睡眠是<b>主動</b>的內部整理,不是停機。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Replace &#34;train / test&#34; with &#34;wake / sleep.&#34;</b> For a continual learner the two should not be sharply bordered; sleep is an <b>active</b> internal-reorganization phase, not downtime.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">向上蒸餾(Knowledge Seeding)。</b> 反常規:<b>小模型當老師、大模型當學生</b>。先在慢區塊長出新的低秩 expert,再把快區塊(短期)知識蒸餾進去——用「長容量」而非「覆寫舊參數」來吸收新知,從源頭避開 CF。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Upward distillation (Knowledge Seeding).</b> Counter to the norm: the <b>smaller model teaches, the larger model learns</b>. First grow a new low-rank expert in a slower block, then distill fast-block (short-term) knowledge into it—absorbing new knowledge by <b>added capacity</b> rather than overwriting old parameters, sidestepping CF at the source.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">兩階段分工對應 NREM / REM。</b> 先「記憶鞏固」(慢波睡眠 → 穩定新知)再「Dreaming」(REM → 探索式自我改進);<mark class="m-result" data-t="RESULT/EVIDENCE">先穩再改</mark>,比直接迭代自我改進更抗遺忘。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Two stages mirror NREM / REM.</b> First Memory Consolidation (slow-wave → stabilize new knowledge), then Dreaming (REM → exploratory self-improvement); <mark class="m-result" data-t="RESULT/EVIDENCE">stabilize-then-modify</mark> is more forgetting-resistant than iterating self-improvement directly.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">遺忘 = 容量問題,不是取樣問題。</b> 這個重新框定是全篇的立論支點——因此「長參數 + 週期性擴增 + 蒸餾後修剪(synaptic pruning)」是自然解法。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Forgetting is a capacity problem, not a sampling one.</b> This reframing is the paper&#39;s load-bearing premise—so &#34;grow parameters + periodic expansion + post-distillation pruning (synaptic pruning)&#34; becomes the natural remedy.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Language Models Need Sleep: Learning to Self-Modify and Consolidate Memories</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Behrouz, Hashemi, Javanmard, Mirrokni</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Google · Cornell University</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2026 · arXiv:2606.03979 (cs.LG)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>Continual Learning · LLM Memory</span>
+          <b><span data-lang="zh">前置</span><span data-lang="en">Prereq</span></b><span>Nested Learning / Hope (Behrouz+ 2025)</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「LLM 部署後就靜止」這個根本缺陷,重新定義成「<b>缺少睡眠週期</b>」的記憶系統問題。若成立,通往「終身學習模型」的路不是更大的預訓練,而是<b>會定期自我整理與自我改進</b>的架構。<span class="add">[導讀補充] 本文一版自 2025 年 9 月起公開於 OpenReview,晚近才更新 arXiv;作者反覆強調早於後續 OPSD 系列工作。</span></span>
+        <span data-lang="en">Reframes &#34;LLMs freeze after deployment&#34; as a memory-system problem of &#34;<b>missing a sleep cycle</b>.&#34; If it holds, the road to lifelong-learning models is not bigger pre-training but architectures that <b>periodically self-consolidate and self-improve</b>. <span class="add">[guide note] A version was public on OpenReview from Sept 2025 with a later arXiv update; the authors repeatedly stress priority over the subsequent OPSD line of work.</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Sleep paradigm</span><span class="chip">Knowledge Seeding</span>
+          <span class="chip">Dreaming</span><span class="chip">CMS / frequency</span>
+          <span class="chip">Upward distillation</span><span class="chip">MoE experts</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">重新預訓練</span><span data-lang="en">Re-pretraining</span></b><br><small><span data-lang="zh">擴大資料集</span><span data-lang="en">expanded dataset</span></small></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">計算成本極高</mark>,無法頻繁更新以跟上新事實。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Prohibitively expensive</mark>; impractical for frequent updates to keep up with new facts.</span></td></tr>
+          <tr><td><b><span data-lang="zh">持續微調 / LoRA</span><span data-lang="en">Continual fine-tuning / LoRA</span></b></td><td><span data-lang="zh">迭代更新導致<mark class="m-problem" data-t="PROBLEM/GAP">災難性遺忘(CF)</mark>:學新任務時舊任務能力崩壞。</span><span data-lang="en">Iterative updates cause <mark class="m-problem" data-t="PROBLEM/GAP">catastrophic forgetting (CF)</mark>: proficiency on old tasks degrades as new ones are learned.</span></td></tr>
+          <tr><td><b>In-Context Learning</b><br><small><span data-lang="zh">ICL</span><span data-lang="en">ICL</span></small></td><td><span data-lang="zh">高效但受限於 context window;<mark class="m-problem" data-t="PROBLEM/GAP">會話結束新知識即消失</mark>,無法沉澱為長期參數。</span><span data-lang="en">Efficient but bounded by the context window; <mark class="m-problem" data-t="PROBLEM/GAP">new knowledge vanishes when the session ends</mark>, never settling into long-term parameters.</span></td></tr>
+          <tr><td><b><span data-lang="zh">線上鞏固(NL / Hope)</span><span data-lang="en">Online consolidation (NL / Hope)</span></b></td><td><span data-lang="zh">端到端把快區塊知識傳給慢區塊,但<mark class="m-problem" data-t="PROBLEM/GAP">用同樣容量、無額外壓縮</mark>;且僅依賴主動檢索、只看 context,缺乏高階抽象。</span><span data-lang="en">End-to-end transfer from fast to slow blocks, but <mark class="m-problem" data-t="PROBLEM/GAP">at the same capacity with no extra compression</mark>; retrieval-dependent and context-bound, missing higher-level abstraction.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心兩難:<b>「知識過時」 vs 「災難性遺忘 + 更新的高昂或破壞性代價」</b>。核心問題:<b>如何把脆弱的短期記憶,有效轉成穩定的長期知識?</b></p>
+        <p data-lang="en" style="margin-top:14px">The core dilemma: <b>&#34;knowledge obsolescence&#34; vs &#34;catastrophic forgetting + the costly or destructive nature of updates.&#34;</b> The core question: <b>how to effectively transfer fragile short-term memories into stable long-term knowledge?</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,Sleep 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how Sleep fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">Sleep 如何補上</span><span data-lang="en">How Sleep fills it</span></th></tr>
+          <tr>
+            <td><b>ICL</b></td>
+            <td><span data-lang="zh">知識停在 context,<mark class="m-problem" data-t="PROBLEM/GAP">出了 context 就忘</mark>。</span><span data-lang="en">Knowledge lives in context, <mark class="m-problem" data-t="PROBLEM/GAP">forgotten once out of it</mark>.</span></td>
+            <td><span data-lang="zh">睡眠時<mark class="m-method" data-t="METHOD/IDEA">向上蒸餾成參數</mark>,把 prompt 級適應變成持久參數記憶。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Upward-distills into parameters</mark> during sleep, turning prompt-level adaptation into durable parametric memory.</span></td>
+          </tr>
+          <tr>
+            <td><b>SEAL</b><br><small><span data-lang="zh">自我改進</span><span data-lang="en">self-edits</span></small></td>
+            <td><span data-lang="zh">SFT 內圈昂貴、自我編輯數受限;<mark class="m-problem" data-t="PROBLEM/GAP">迭代自我改進易 CF</mark>;取樣只在既有知識空間。</span><span data-lang="en">Costly SFT inner loop caps self-edits; <mark class="m-problem" data-t="PROBLEM/GAP">iterating self-improvement risks CF</mark>; sampling stays within existing knowledge.</span></td>
+            <td><span data-lang="zh">先鞏固再 Dreaming(<mark class="m-method" data-t="METHOD/IDEA">先穩後改</mark>);MoE 隨機 expert 注入新奇性以探索。</span><span data-lang="en">Consolidate first, then Dream (<mark class="m-method" data-t="METHOD/IDEA">stabilize-then-modify</mark>); a random MoE expert injects novelty to explore.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">OPSD 系列</span><span data-lang="en">OPSD line</span></b><br><small><span data-lang="zh">on-policy 自蒸餾</span><span data-lang="en">on-policy self-distill</span></small></td>
+            <td><span data-lang="zh">師生<mark class="m-problem" data-t="PROBLEM/GAP">同一 backbone、僅換 conditioning</mark>,固定容量;多為單一目標的後訓練。</span><span data-lang="en">Teacher/student <mark class="m-problem" data-t="PROBLEM/GAP">share one backbone, differ only in conditioning</mark>; fixed capacity, single-objective post-training.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">學生嚴格更大</mark>(新增低秩 expert),沿多頻率記憶鏈逐對鞏固。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">The student is strictly larger</mark> (new low-rank experts), consolidating pairwise along a multi-frequency memory chain.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">Sleep-time compute</span><span data-lang="en">Sleep-time compute</span></b><br><small>(Lin+ 2025)</small></td>
+            <td><span data-lang="zh">名字像,但只在<mark class="m-problem" data-t="PROBLEM/GAP">文字空間</mark>摘要 context 供下次會話用。</span><span data-lang="en">Similar name, but only summarizes context in <mark class="m-problem" data-t="PROBLEM/GAP">text space</mark> for the next session.</span></td>
+            <td><span data-lang="zh">Sleep 把知識<mark class="m-method" data-t="METHOD/IDEA">蒸餾成參數權重更新</mark>,而非文字摘要。</span><span data-lang="en">Sleep <mark class="m-method" data-t="METHOD/IDEA">distills knowledge into parametric weight updates</mark>, not text summaries.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意本文的核心區隔是「<b>向上</b>蒸餾 + <b>成長</b>容量」。幾乎所有同期 OPSD 工作都是「同容量、換 conditioning」的平面師生蒸餾;Sleep 主張把 CF 當成<b>容量問題</b>來解——這是它與整條 OPSD 熱潮切割的關鍵論點,也是後面 CRITIQUE 要壓測的地方。</p>
+          <p data-lang="en" style="margin-top:6px">Note the key differentiator: &#34;<b>upward</b> distillation + <b>growing</b> capacity.&#34; Nearly all concurrent OPSD works are flat, same-capacity teacher/student distillation that only swaps conditioning; Sleep insists on treating CF as a <b>capacity problem</b>—the pivotal claim separating it from the OPSD wave, and exactly what the CRITIQUE tab stress-tests.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把「睡眠」讀成只是「離線再訓練一輪」。關鍵差異有二:(1) 睡眠<b>長出新參數</b>再蒸餾(向上),不是覆寫舊參數;(2) 鞏固發生在<mark class="m-assume" data-t="ASSUMPTION/CLAIM">更新快區塊之前</mark>——先把要被覆蓋的短期知識固化到慢區塊,才允許快區塊更新。順序是設計核心。</span>
+        <span data-lang="en">Do not read &#34;sleep&#34; as merely &#34;an offline retraining round.&#34; Two key differences: (1) sleep <b>grows new parameters</b> then distills into them (upward), rather than overwriting old ones; (2) consolidation happens <mark class="m-assume" data-t="ASSUMPTION/CLAIM">before a fast block updates</mark>—fixing the about-to-be-overwritten short-term knowledge into a slower block first. The ordering is the crux.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">若持續學習能被拆成「清醒吸收 + 睡眠鞏固」,則模型可在部署後<b>長期演進</b>而不崩壞舊能力——這對個人化助理、隨時間積累知識的 agent 是關鍵能力。</span>
+        <span data-lang="en">If continual learning decomposes into &#34;wake to absorb + sleep to consolidate,&#34; a model can <b>evolve long after deployment</b> without wrecking old skills—crucial for personalized assistants and agents that accrue knowledge over time.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">神經科學類比</span><span data-lang="en">neuro analogy</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">增益幅度</span><span data-lang="en">gain size</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">地基:連續體記憶系統(CMS)與更新頻率</span><span data-lang="en">Foundation: the Continuum Memory System (CMS) and update frequency</span></h3>
+        <p data-lang="zh">把語言模型的參數依<mark class="m-method" data-t="METHOD/IDEA">更新頻率</mark>排序:\(\theta=\{W^{(f_1)}\}\cup\dots\cup\{W^{(f_c)}\}\),其中 \(f_1\ge\dots\ge f_c\)。<b>頻率</b>定義為單位時間內的更新次數(Def.1)。CMS 是一條 MLP 區塊鏈,每塊有自己的頻率:</p>
+        <p data-lang="en">Order a language model&#39;s parameters by <mark class="m-method" data-t="METHOD/IDEA">update frequency</mark>: \(\theta=\{W^{(f_1)}\}\cup\dots\cup\{W^{(f_c)}\}\) with \(f_1\ge\dots\ge f_c\). <b>Frequency</b> is the number of updates per unit time (Def.1). CMS is a chain of MLP blocks, each with its own frequency:</p>
+        <div class="eq">$$y_t=\mathrm{MLP}^{(f_k)}\big(\mathrm{MLP}^{(f_{k-1})}(\cdots \mathrm{MLP}^{(f_1)}(x_t))\big)$$</div>
+        <p data-lang="zh">第 \(\ell\) 塊每 \(C^{(\ell)}\) 步更新一次,累積梯度後才更新:\(\theta^{(f_\ell)}_{i+1}=\theta^{(f_\ell)}_{i}-e_{i,\ell}\)。直覺:<mark class="m-method" data-t="METHOD/IDEA">高頻塊 = 短期記憶</mark>(易被新知覆蓋而遺忘),<mark class="m-method" data-t="METHOD/IDEA">低頻塊 = 長期記憶</mark>(接近零頻率最穩)。attention 是無限頻率端,MLP 是零頻率端;CMS 是兩端之間的整條頻譜(Transformer 是 CMS 的特例)。</p>
+        <p data-lang="en">Block \(\ell\) updates every \(C^{(\ell)}\) steps, applying accumulated gradients: \(\theta^{(f_\ell)}_{i+1}=\theta^{(f_\ell)}_{i}-e_{i,\ell}\). Intuition: <mark class="m-method" data-t="METHOD/IDEA">high-frequency blocks = short-term memory</mark> (readily overwritten by new input, hence forgetting), <mark class="m-method" data-t="METHOD/IDEA">low-frequency blocks = long-term memory</mark> (near-zero frequency is most stable). Attention is the infinite-frequency end, MLP the zero-frequency end; CMS is the whole spectrum between (a Transformer is a special case of CMS).</p>
+        <figure class="fig"><img src="figs/Behrouz2026/fig3_hierarchy.png" alt="Figure 7 multi-frequency memory hierarchy">
+          <figcaption data-lang="zh"><b>Fig.7</b> 多頻率記憶階層。左為 Hope 架構:High / Mid / Low Frequency FFN 的更新頻率 \(f_W=1000/5000/10000\)。右側展示:高頻塊每次都做<b>參數擴增(Parameter Expansion)</b>累積更新,直到其視窗到期,才把知識<b>鞏固(Consolidation)到下一個更低頻的記憶</b>——這就是「快塊更新前先向慢塊鞏固」的時序。注意 1000→5000→10000 表示低頻塊更新一次,高頻塊已更新許多次(故需多次鞏固)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.7</b> The multi-frequency memory hierarchy. Left is the Hope architecture: High / Mid / Low-Frequency FFNs with update frequencies \(f_W=1000/5000/10000\). Right shows: a high-frequency block repeatedly does <b>Parameter Expansion</b> to accumulate updates until its window expires, then <b>Consolidates to the next lower-frequency memory</b>—exactly the &#34;consolidate to a slower block before the faster block updates&#34; schedule. Note 1000→5000→10000 means the fast block updates many times per single slow-block update (hence multiple consolidations).</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">睡眠 = 兩階段</span><span data-lang="en">Sleep = two stages</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">WAKE</span><b><span data-lang="zh">清醒吸收</span><span data-lang="en">Wake / absorb</span></b><small><span data-lang="zh">接收外部資料,高頻塊快速適應(ICL 式)。</span><span data-lang="en">Take external data; high-frequency blocks adapt fast (ICL-style).</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">SLEEP · 1 (NREM)</span><b><span data-lang="zh">記憶鞏固</span><span data-lang="en">Memory Consolidation</span></b><small><span data-lang="zh">長出新參數 + 向上蒸餾:把快塊知識固化進慢塊。</span><span data-lang="en">Grow parameters + upward distill: fix fast-block knowledge into slow blocks.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">SLEEP · 2 (REM)</span><b><span data-lang="zh">Dreaming</span><span data-lang="en">Dreaming</span></b><small><span data-lang="zh">自產「夢境」合成資料 + RL 自我改進。</span><span data-lang="en">Self-generate &#34;dreams&#34; + RL self-improvement.</span></small></div>
+        </div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:6px">鞏固不只發生在睡眠——清醒時 NL 的端到端學習就是「線上鞏固」;睡眠負責的是<mark class="m-method" data-t="METHOD/IDEA">離線鞏固</mark>:停止吸收外部資料,改用自產資料整理既有知識。鞏固在 \(\{C^{(1)}b,\dots,C^{(k)}b\}\) 步觸發(\(b\in\mathbb{N}\))。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:6px">Consolidation is not sleep-only—NL&#39;s end-to-end learning during wake is &#34;online consolidation&#34;; sleep handles <mark class="m-method" data-t="METHOD/IDEA">offline consolidation</mark>: stop ingesting external data, use self-generated data to reorganize existing knowledge. It triggers at steps \(\{C^{(1)}b,\dots,C^{(k)}b\}\) for \(b\in\mathbb{N}\).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">階段一:記憶鞏固(參數擴增 + Knowledge Seeding)</span><span data-lang="en">Stage 1: Memory Consolidation (parameter growth + Knowledge Seeding)</span></h3>
+        <figure class="fig"><img src="figs/Behrouz2026/fig2_consolidation.png" alt="Figure 2 memory consolidation overview">
+          <figcaption data-lang="zh"><b>Fig.2</b> 記憶鞏固總覽。<b>左</b>:Hope 架構(Sequence Layer + 高/中/低頻 FFN)。<b>中</b>:一個 MoE 記憶塊「成長」——router 選 expert,並新增低秩 \(\{A,B\}\)(圖中 Linear 對)作為<b>新參數</b>存放被蒸餾進來的知識。<b>右</b>:鞏固 = On-Policy Distillation 目標 + Imitation Learning(Knowledge Alignment):老師「種下」知識(Seed)、學生模仿(Imitation)、依對齊程度給 Reward。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> Memory-consolidation overview. <b>Left</b>: the Hope architecture (Sequence Layer + High/Mid/Low-Frequency FFN). <b>Middle</b>: one MoE memory block &#34;grows&#34;—the router picks experts and a new low-rank \(\{A,B\}\) pair (the Linear pair) is added as <b>New Parameters</b> to hold the distilled knowledge. <b>Right</b>: consolidation = an On-Policy Distillation objective + Imitation Learning (Knowledge Alignment): the teacher seeds knowledge, the student imitates, and a reward scores their alignment.</figcaption></figure>
+        <p data-lang="zh"><b>(1) 參數擴增。</b>假設每個 MLP 塊是稀疏 MoE。要把第 \(\ell^*-1\) 塊(較快)鞏固到第 \(\ell^*\) 塊(較慢),就在 \(\ell^*\) 塊<mark class="m-method" data-t="METHOD/IDEA">新增一個低秩 expert</mark> \(\{A,B\}\),\(A\in\mathbb{R}^{d\times d_{low}},B\in\mathbb{R}^{d_{low}\times d}\)(\(d_{low}\ll d\)),專門存放轉移進來的新知識,避免與舊知識干擾。</p>
+        <p data-lang="en"><b>(1) Parameter growth.</b> Assume each MLP block is a sparse MoE. To consolidate block \(\ell^*-1\) (faster) into block \(\ell^*\) (slower), <mark class="m-method" data-t="METHOD/IDEA">add a new low-rank expert</mark> \(\{A,B\}\), \(A\in\mathbb{R}^{d\times d_{low}},B\in\mathbb{R}^{d_{low}\times d}\) (\(d_{low}\ll d\)), dedicated to the transferred knowledge to avoid interference with old knowledge.</p>
+        <p data-lang="zh"><b>(2) compute–consolidate–update 協議。</b>(a) <b>Compute</b>:算出快塊的預期新權重 \(\theta^{(f_{\ell^*-1})}_{new}\) 但<b>先不套用</b>;(b) <b>Consolidate</b>:定義<mark class="m-method" data-t="METHOD/IDEA">老師 = 更新前的舊模型</mark>、<mark class="m-method" data-t="METHOD/IDEA">學生 = 用預期新權重 + 新低秩 expert 的模型</mark>,只優化 \(\{A,B\}\) 去最小化蒸餾損失;(c) <b>Update</b>:套用快塊更新、<b>重置</b>先前加到快塊的低秩 expert(synaptic pruning 突觸修剪)、啟用慢塊的新 expert。</p>
+        <p data-lang="en"><b>(2) The compute–consolidate–update protocol.</b> (a) <b>Compute</b> the fast block&#39;s prospective new weights \(\theta^{(f_{\ell^*-1})}_{new}\) but <b>do not apply them yet</b>; (b) <b>Consolidate</b>: define <mark class="m-method" data-t="METHOD/IDEA">teacher = the pre-update model</mark> and <mark class="m-method" data-t="METHOD/IDEA">student = the model with prospective weights + the new low-rank expert</mark>, optimizing only \(\{A,B\}\) to minimize the distillation loss; (c) <b>Update</b>: apply the fast-block update, <b>reset</b> the low-rank experts previously added to the fast block (synaptic pruning), and activate the new expert in the slow block.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">注意這是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">反常規蒸餾:學生比老師大</mark>。作者指出兩個挑戰——(i) 學生更有表達力,直接學老師輸出會浪費容量;(ii) 睡眠時外部資料受限,Hinton 式蒸餾不適用。故改用 GKD(允許混合 on-policy 學生生成 + 老師生成)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Note this is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">unconventional distillation: the student is larger than the teacher</mark>. The authors flag two challenges—(i) a more expressive student wastes capacity if trained directly on teacher outputs; (ii) external data is limited during sleep, so Hinton-style distillation does not apply. Hence GKD (mixing on-policy student-generated with teacher-generated data).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Knowledge Seeding 目標:蒸餾 + 模仿學習(LTI)</span><span data-lang="en">The Knowledge Seeding objective: distillation + imitation learning (LTI)</span></h3>
+        <p data-lang="zh">先寫 GKD 式 on-policy 蒸餾(\(\lambda\) 控制 on-policy 學生生成的比例;<b>不</b>回傳學生取樣分佈的梯度,並凍結學生除新參數外的所有權重以防 CF):</p>
+        <p data-lang="en">Start from GKD-style on-policy distillation (\(\lambda\) sets the fraction of on-policy student-generated data; gradients are <b>not</b> backpropagated through the student sampling distribution, and all student weights except the new ones are frozen to prevent CF):</p>
+        <div class="eq">$$\mathcal{L}(\theta,\theta_{\exp})=(1-\lambda)\,\mathbb{E}_{(x,y)\sim D}\big[\mathcal{F}(\mathrm{LM}_\theta\Vert \mathrm{LM}_{\theta_{\exp}})(y|x)\big]+\lambda\,\mathbb{E}_{x\sim D}\,\mathbb{E}_{y\sim \mathrm{LM}_{\theta_{\exp}}(\cdot|x)}\big[\mathcal{F}(\mathrm{LM}_\theta\Vert \mathrm{LM}_{\theta_{\exp}})(y|x)\big]$$</div>
+        <p data-lang="zh">作者觀察到:光蒸餾,學生<mark class="m-problem" data-t="PROBLEM/GAP">「有知識卻不會用」</mark>,弱弱地模仿老師的取樣。於是加上 RL 的 <b>Learning to Imitate(LTI)</b>:從老師生成的「夢境」\(d^{(i)}\) 取前綴,要學生補完 \(\hat d^{(i)}\),依對齊給獎勵:</p>
+        <p data-lang="en">The authors observe that distillation alone leaves the student <mark class="m-problem" data-t="PROBLEM/GAP">&#34;knowing but not using&#34;</mark>—weakly mimicking the teacher&#39;s sampling. So they add RL-based <b>Learning to Imitate (LTI)</b>: take a prefix of a teacher-generated &#34;dream&#34; \(d^{(i)}\), have the student complete \(\hat d^{(i)}\), and reward by alignment:</p>
+        <div class="eq">$$r(\hat d^{(i)};d^{(i)})=\gamma\, r_{\text{sem}}(\hat d^{(i)};d^{(i)})+(1-\gamma)\, r_{\text{abs}}(\hat d^{(i)};d^{(i)})$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(r_{\text{sem}}\) 由凍結的獎勵模型判定語意是否相同(1/0);\(r_{\text{abs}}\) 由 Levenshtein 距離 \(z\) 定義:\(r_{\text{abs}}=1-\frac{z}{\max\{|\hat d|,|d|\}}\)(當 \(z\le z_0\),否則 0)。合成的 on-policy Knowledge Seeding 目標由 \(\alpha\) 平衡蒸餾與 LTI:</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(r_{\text{sem}}\) is judged by a frozen reward model (same semantics = 1, else 0); \(r_{\text{abs}}\) uses the Levenshtein distance \(z\): \(r_{\text{abs}}=1-\frac{z}{\max\{|\hat d|,|d|\}}\) if \(z\le z_0\), else 0. The combined on-policy Knowledge Seeding objective balances distillation and LTI via \(\alpha\):</p>
+        <div class="eq">$$\mathcal{L}_{\text{KS}}(\theta,\theta_{\exp})=\mathbb{E}_{x\sim D}\Big[(1-\alpha)\,\mathbb{E}_{y\sim \mathrm{LM}_{\theta_{\exp}}(\cdot|x)}[r(y)]-\alpha\,\mathbb{E}_{y\sim \mathrm{LM}_{\theta_{\exp}}(\cdot|x)}\big[\mathcal{D}(\mathrm{LM}_\theta\Vert \mathrm{LM}_{\theta_{\exp}})(y|x)\big]\Big]$$</div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">階段二:Dreaming(REM 式自我改進)</span><span data-lang="en">Stage 2: Dreaming (REM-style self-improvement)</span></h3>
+        <p data-lang="zh">建立在 <b>SEAL</b> 上,但補三個缺口。給定任務 \((C,\tau)\):(1) 以 \(C\) 為 context 生成 \(m\) 個夢境 \(\{\text{DREAM}^{(i)}\}\sim \mathrm{LM}_\theta(\cdot|C)\);取樣時每個 MoE router <mark class="m-method" data-t="METHOD/IDEA">額外選一個隨機 expert</mark>,注入「無關知識」以探索隱藏模式(對應 REM 的新奇連結)。(2) 用<mark class="m-method" data-t="METHOD/IDEA">梯度式重要度</mark> \(g^{(i)}_{DR}=\nabla_\theta \mathcal{L}_{SFT}(\text{DREAM}^{(i)},\theta)\) 選 Top-\(k\) + \(b\) 個隨機樣本(保多樣性)。(3) 對每個夢境用 LoRA 做 SFT,依「是否提升表現」給 0/1 獎勵(follow SEAL),以 ReST\(^{EM}\) 優化。</p>
+        <p data-lang="en">Built on <b>SEAL</b> but closing three gaps. Given a task \((C,\tau)\): (1) generate \(m\) dreams \(\{\text{DREAM}^{(i)}\}\sim \mathrm{LM}_\theta(\cdot|C)\) with \(C\) in context; during sampling each MoE router <mark class="m-method" data-t="METHOD/IDEA">also picks a random expert</mark>, injecting &#34;irrelevant knowledge&#34; to explore hidden patterns (mirroring REM&#39;s novel connections). (2) Select via a <mark class="m-method" data-t="METHOD/IDEA">gradient-based importance</mark> \(g^{(i)}_{DR}=\nabla_\theta \mathcal{L}_{SFT}(\text{DREAM}^{(i)},\theta)\), keeping Top-\(k\) + \(b\) random samples (for diversity). (3) SFT (with LoRA) on each dream, rewarding 0/1 by whether it improves performance (following SEAL), optimized with ReST\(^{EM}\).</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">關鍵論點:<mark class="m-result" data-t="RESULT/EVIDENCE">先鞏固、後 Dreaming</mark> 的兩階段設計,比「直接對固定模型迭代自我改進」更抗 CF——因為新知識已先被穩定在新長出的低頻參數裡,Dreaming 才進一步修改。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Key claim: the two-stage design of <mark class="m-result" data-t="RESULT/EVIDENCE">consolidate-first, dream-second</mark> is more CF-resistant than iterating self-improvement on a fixed model—new knowledge is first stabilized in freshly grown low-frequency parameters before Dreaming modifies things further.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(f_W,\ C^{(\ell)}\)</td><td><span data-lang="zh">更新頻率 / 對應的區塊更新週期(每幾步更新一次)。高頻=短期,低頻=長期。</span><span data-lang="en">Update frequency / the block&#39;s update period (update every so many steps). High = short-term, low = long-term.</span></td></tr>
+          <tr><td>\(\mathrm{LM}_\theta\) / \(\mathrm{LM}_{\theta_{\exp}}\)</td><td><span data-lang="zh">老師(更新前的舊模型)/ 學生(擴增後、含新低秩 expert 的模型)。</span><span data-lang="en">Teacher (pre-update model) / student (expanded model with the new low-rank expert).</span></td></tr>
+          <tr><td>\(\{A,B\}\)</td><td><span data-lang="zh">新增的低秩 expert(\(d_{low}\ll d\)),睡眠時唯一被訓練的參數,存放被蒸餾進來的知識。</span><span data-lang="en">The added low-rank expert (\(d_{low}\ll d\)); the only parameters trained during sleep, holding distilled knowledge.</span></td></tr>
+          <tr><td>\(\lambda,\ \alpha,\ \gamma\)</td><td><span data-lang="zh">\(\lambda\):on-policy 比例;\(\alpha\):蒸餾 vs LTI 權重;\(\gamma\):語意 vs 字面獎勵權重。</span><span data-lang="en">\(\lambda\): on-policy fraction; \(\alpha\): distillation-vs-LTI weight; \(\gamma\): semantic-vs-literal reward weight.</span></td></tr>
+          <tr><td>\(\text{DREAM}^{(i)}\)</td><td><span data-lang="zh">Dreaming 階段自產的合成訓練樣本(「夢境」)。</span><span data-lang="en">A self-generated synthetic training sample (&#34;dream&#34;) in the Dreaming stage.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">睡覺時,模型<b>先長出一小塊新腦</b>(低秩 expert),把「今天學到的」短期知識<b>蒸餾並模仿</b>進去,再<b>剪掉</b>用過的臨時連結;接著做夢(自產資料 + 隨機 expert)進一步自我強化。</span>
+        <span data-lang="en">During sleep the model <b>grows a small new patch of brain</b> (a low-rank expert), <b>distills and imitates</b> the day&#39;s short-term knowledge into it, then <b>prunes</b> the used temporary connections; afterwards it dreams (self-generated data + a random expert) to self-strengthen further.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何要「向上」?</span><span data-lang="en">Why &#34;upward&#34;?</span></span>
+        <span data-lang="zh">傳統蒸餾是「大老師 → 小學生」壓縮;這裡反過來,<mark class="m-result" data-t="RESULT/EVIDENCE">小老師 → 大學生</mark>。動機是把 CF 視為<b>容量不足</b>:與其覆寫舊參數,不如給模型更多容量來裝新知,舊知識就不必被犧牲。</span>
+        <span data-lang="en">Classic distillation compresses &#34;big teacher → small student.&#34; Here it is reversed: <mark class="m-result" data-t="RESULT/EVIDENCE">small teacher → large student</mark>. The motivation treats CF as <b>insufficient capacity</b>: rather than overwrite old parameters, give the model more capacity for new knowledge so old knowledge need not be sacrificed.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">「長出參數」在實作上並非真的改張量維度,而是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">預先配置、初始遮罩(mask)</mark>,到睡眠時才解除遮罩啟用——類比人腦容量固定、靠「解鎖新連結」增加可塑性。</span>
+        <span data-lang="en">&#34;Growing parameters&#34; is not literally resizing tensors; parameters are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">pre-allocated and initially masked</mark>, then unmasked/activated at sleep time—analogous to a brain of fixed capacity gaining plasticity by &#34;unlocking new connections.&#34;</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">數學推理(Tab.2,average@16 ↑)</span><span data-lang="en">Math reasoning (Tab.2, average@16 ↑)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th>AIME-24</th><th>AIME-25</th><th>HMMT-25</th></tr>
+          <tr><td colspan="4" style="background:#f3eede;font-weight:700;color:var(--muted)">Qwen3-1.7B</td></tr>
+          <tr><td>Base (Instruct)</td><td>49.8</td><td>34.5</td><td>25.7</td></tr>
+          <tr><td>SFT</td><td>47.3</td><td>36.1</td><td>22.9</td></tr>
+          <tr><td>GRPO</td><td>51.0</td><td>38.6</td><td>26.1</td></tr>
+          <tr><td>OPSD</td><td>51.6</td><td>40.0</td><td>28.1</td></tr>
+          <tr><td class="win">Sleep</td><td class="win">53.2</td><td class="win">40.2</td><td class="win">29.3</td></tr>
+          <tr><td colspan="4" style="background:#f3eede;font-weight:700;color:var(--muted)">Qwen3-8B</td></tr>
+          <tr><td>Base (Instruct)</td><td>73.8</td><td>68.1</td><td>42.4</td></tr>
+          <tr><td>SFT</td><td>75.5</td><td>66.4</td><td>43.7</td></tr>
+          <tr><td>GRPO</td><td>76.4</td><td>68.1</td><td>44.9</td></tr>
+          <tr><td>OPSD</td><td>76.6</td><td>67.4</td><td>45.1</td></tr>
+          <tr><td class="win">Sleep</td><td class="win">79.2</td><td class="win">69.0</td><td class="win">46.1</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">記憶鞏固單獨用於推理:<mark class="m-result" data-t="RESULT/EVIDENCE">兩個尺寸都勝過 SFT / GRPO / OPSD</mark>。增益多在 1~3 分之間——不是壓倒性,但一致。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Memory consolidation alone, applied to reasoning: <mark class="m-result" data-t="RESULT/EVIDENCE">beats SFT / GRPO / OPSD at both sizes</mark>. Gains are mostly 1–3 points—not overwhelming, but consistent.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">知識注入 & few-shot(Tab.3 / Tab.4)</span><span data-lang="en">Knowledge incorporation &amp; few-shot (Tab.3 / Tab.4)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法 (SQuAD, no-context acc)</span><span data-lang="en">Method (SQuAD, no-context acc)</span></th><th><span data-lang="zh">單篇 n=1</span><span data-lang="en">Single n=1</span></th><th><span data-lang="zh">CPT n=200</span><span data-lang="en">CPT n=200</span></th></tr>
+          <tr><td>Base model</td><td>31.9</td><td>31.9</td></tr>
+          <tr><td><span data-lang="zh">Fine-tuned(無 Dreaming)</span><span data-lang="en">Fine-tuned (no dreaming)</span></td><td>33.4</td><td>32.0</td></tr>
+          <tr><td>SEAL</td><td>46.7</td><td>43.2</td></tr>
+          <tr><td>Sleep (Transformer)</td><td>48.1</td><td>44.3</td></tr>
+          <tr><td class="win">Sleep (Transformer + four-level)</td><td class="win">48.9</td><td class="win">46.2</td></tr>
+          <tr><td><small><span data-lang="zh">— 去梯度式選擇</span><span data-lang="en">— drop gradient selection</span></small></td><td>47.1</td><td>45.2</td></tr>
+          <tr><td><small><span data-lang="zh">— 去隨機 expert</span><span data-lang="en">— drop random expert</span></small></td><td>48.0</td><td>44.7</td></tr>
+          <tr><td><small><span data-lang="zh">— 去 Dreaming</span><span data-lang="en">— drop Dreaming</span></small></td><td class="bad">35.7</td><td class="bad">36.2</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted);margin-top:6px"><b>Few-shot ARC(Tab.4,成功率 %)</b>:ICL 0 · TTT 10 · SEAL 72.5 · <b class="ok">Sleep 80</b>。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted);margin-top:6px"><b>Few-shot ARC (Tab.4, success %)</b>: ICL 0 · TTT 10 · SEAL 72.5 · <b class="ok">Sleep 80</b>.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">全設計(含 Dreaming)勝過 SEAL;消融顯示<mark class="m-result" data-t="RESULT/EVIDENCE">Dreaming 是知識注入的主力</mark>(去掉後 48.9→35.7),四級記憶 > 兩級。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">The full design (with Dreaming) beats SEAL; the ablation shows <mark class="m-result" data-t="RESULT/EVIDENCE">Dreaming is the main driver</mark> for knowledge incorporation (48.9→35.7 without it), and four-level memory &gt; two-level.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融:各元件都有貢獻(Tab.1,Qwen3-8B)</span><span data-lang="en">Ablation: every component contributes (Tab.1, Qwen3-8B)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">設定</span><span data-lang="en">Setting</span></th><th>AIME-24</th><th>AIME-25</th><th>HMMT-25</th></tr>
+          <tr><td class="win">Sleep (full)</td><td class="win">79.2</td><td class="win">69.0</td><td class="win">46.1</td></tr>
+          <tr><td><span data-lang="zh">− Imitation Learning</span><span data-lang="en">− Imitation Learning</span></td><td class="bad">76.8</td><td>67.9</td><td>45.0</td></tr>
+          <tr><td><span data-lang="zh">− Semantic Reward</span><span data-lang="en">− Semantic Reward</span></td><td>78.9</td><td>69.2</td><td>44.5</td></tr>
+          <tr><td><span data-lang="zh">− w/o Expansion(不擴增)</span><span data-lang="en">− w/o Expansion</span></td><td>78.2</td><td>67.9</td><td>44.9</td></tr>
+          <tr><td>OPSD</td><td>76.6</td><td>67.4</td><td>45.1</td></tr>
+          <tr><td>OPSD + Expansion</td><td>77.9</td><td>68.2</td><td>45.9</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">拿掉 Imitation Learning 掉最多 → <mark class="m-result" data-t="RESULT/EVIDENCE">LTI 是關鍵元件</mark>;把 Expansion 加到 OPSD 上(76.6→77.9)也證明<b>參數擴增本身就有用</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Dropping Imitation Learning hurts most → <mark class="m-result" data-t="RESULT/EVIDENCE">LTI is the key component</mark>; adding Expansion onto OPSD (76.6→77.9) shows <b>parameter growth alone helps</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">持續學習 & 長脈絡(Fig.3–6)</span><span data-lang="en">Continual learning &amp; long context (Fig.3–6)</span></h3>
+        <figure class="fig"><img src="figs/Behrouz2026/fig4_classincr.png" alt="Figure 3 class-incremental learning">
+          <figcaption data-lang="zh"><b>Fig.3</b> 類別增量學習(左 CLINC / 中 Banking / 右 DBpedia),Llama-3B 與 Llama3-8B。由淺到深:In-Context、EWC、InCA、Hope、<b>Sleep(最深紅)</b>。每個資料集、每個尺寸,<b>Sleep 都是最高柱</b>,勝過正則化(EWC)與外部學習器(InCA)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Class-incremental learning (left CLINC / middle Banking / right DBpedia) on Llama-3B and Llama3-8B. Light-to-dark: In-Context, EWC, InCA, Hope, <b>Sleep (darkest red)</b>. On every dataset and size, <b>Sleep is the tallest bar</b>, beating regularization (EWC) and an external learner (InCA).</figcaption></figure>
+        <ul style="margin:6px 0 0;padding-left:18px;line-height:1.75;font-size:14px">
+          <li data-lang="zh"><b>睡眠階段數(Fig.4)</b>:<mark class="m-result" data-t="RESULT/EVIDENCE">鞏固階段越多、ICL / 長脈絡越好</mark>;最穩記憶的頻率越低、保留越好(在 MK-NIAH、LongHealth、QASPER 上皆勝 ICL / DuoAttention / Cartridges)。</li>
+          <li data-lang="en"><b>Number of sleep phases (Fig.4)</b>: <mark class="m-result" data-t="RESULT/EVIDENCE">more consolidation stages → better ICL / long context</mark>; a lower frequency for the most stable memory retains better (beats ICL / DuoAttention / Cartridges on MK-NIAH, LongHealth, QASPER).</li>
+          <li data-lang="zh"><b>學新語言(Fig.5,CTNL)</b>:持續學習下 ICL 大幅退化(退回預訓練行為),<mark class="m-result" data-t="RESULT/EVIDENCE">Hope 保留較多,Hope-3 幾乎回到單語言水準</mark>;Cartridges 與 SFT 反而 CF(掉出圖外)。</li>
+          <li data-lang="en"><b>Learning a new language (Fig.5, CTNL)</b>: under continual learning ICL degrades sharply (reverting to pretrained behavior), while <mark class="m-result" data-t="RESULT/EVIDENCE">Hope retains more and Hope-3 nearly recovers single-language performance</mark>; Cartridges and SFT instead suffer CF (off the plot).</li>
+          <li data-lang="zh"><b>BABILong(Fig.6)</b>:GPT-4 / GPT-4o-mini 在 128K–256K 後崩;<mark class="m-result" data-t="RESULT/EVIDENCE">Hope 穩定到 10M tokens,近乎滿分</mark>(需微調)。</li>
+          <li data-lang="en"><b>BABILong (Fig.6)</b>: GPT-4 / GPT-4o-mini collapse beyond 128K–256K; <mark class="m-result" data-t="RESULT/EVIDENCE">Hope stays stable to 10M tokens, near-perfect</mark> (with fine-tuning).</li>
+        </ul>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">五類任務(推理、知識注入、few-shot、持續學習、長脈絡)<b>一致勝出</b>,且消融顯示每個元件都有用(LTI 與 Dreaming 尤其關鍵)。<b>廣度</b>是它最強的證據。</span>
+        <span data-lang="en">Consistent wins across five task families (reasoning, knowledge incorporation, few-shot, continual learning, long context), with an ablation showing each component helps (LTI and Dreaming especially). Its <b>breadth</b> is the strongest evidence.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">每個任務用<b>不同的 backbone / baseline / 資料集</b>(Llama-3B/8B、Qwen3-1.7B/8B、Llama-3.2-1B…),<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有一個統一實驗</mark>把所有元件與所有對手放在同一設定下對比;多次睡眠後的<b>容量成長與長期穩定性</b>也未量化。</span>
+        <span data-lang="en">Each task uses a <b>different backbone / baseline / dataset</b> (Llama-3B/8B, Qwen3-1.7B/8B, Llama-3.2-1B, …); <mark class="m-limit" data-t="LIMITATION/FUTURE">there is no single unified experiment</mark> pitting all components against all rivals under one setting, and the <b>capacity growth and long-run stability</b> across many sleep cycles are not quantified.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">公平比較?</span><span data-lang="en">fair compare?</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">複雜度代價</span><span data-lang="en">complexity cost</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>神經科學類比是動機,不是證據。</b> 全篇用大量篇幅描述人腦 NREM/REM、突觸修剪、順向失憶症,說服力強,但<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「睡眠階段 ↔ 演算法步驟」的映射是隱喻性的</mark>。生物合理性不代表這個設計是最優;類比可能反過來限制了設計空間的想像。</li>
+          <li data-lang="en"><b>The neuroscience analogy is motivation, not evidence.</b> Much of the paper describes human NREM/REM, synaptic pruning, anterograde amnesia—persuasive, but the <mark class="m-assume" data-t="ASSUMPTION/CLAIM">&#34;sleep stage ↔ algorithm step&#34; mapping is metaphorical</mark>. Biological plausibility does not imply optimality; the analogy may even narrow the imagined design space.</li>
+          <li data-lang="zh"><b>增益幅度偏溫和。</b> 數學推理 Qwen3-8B:Sleep 79.2 vs OPSD 76.6 / GRPO 76.4;知識注入 48.1 vs SEAL 46.7。<mark class="m-limit" data-t="LIMITATION/FUTURE">多為 1~3 分</mark>。相對於引入的大量機制(MoE routing、低秩 expert、RL 模仿、梯度選夢、ReST\(^{EM}\)),投入產出比值得商榷。</li>
+          <li data-lang="en"><b>Gains are modest.</b> Math reasoning Qwen3-8B: Sleep 79.2 vs OPSD 76.6 / GRPO 76.4; knowledge incorporation 48.1 vs SEAL 46.7—<mark class="m-limit" data-t="LIMITATION/FUTURE">mostly 1–3 points</mark>. Against the machinery introduced (MoE routing, low-rank experts, RL imitation, gradient-based dream selection, ReST\(^{EM}\)), the cost/benefit is debatable.</li>
+          <li data-lang="zh"><b>評測碎片化,難拼全貌。</b> 不同任務用不同 backbone/資料集/baseline,兩個睡眠階段也<mark class="m-limit" data-t="LIMITATION/FUTURE">分開評測</mark>(鞏固→持續學習/長脈絡;全 Sleep→知識注入/few-shot)。缺一個「同設定、全元件、全對手」的主表,增加 cherry-pick 的疑慮。</li>
+          <li data-lang="en"><b>Fragmented evaluation, hard to see the whole.</b> Different tasks use different backbones/datasets/baselines, and the two sleep stages are <mark class="m-limit" data-t="LIMITATION/FUTURE">evaluated separately</mark> (consolidation → continual/long-context; full Sleep → knowledge/few-shot). Lacking one main table under a single setting with all components and rivals raises cherry-picking concerns.</li>
+          <li data-lang="zh"><b>成本與可複現性。</b> 全睡眠週期的整體 wall-clock / 記憶體成本在正文<mark class="m-limit" data-t="LIMITATION/FUTURE">幾乎沒系統性報告</mark>(僅 B.5 給了推理 SFT 的相對倍數);超參數眾多(\(\lambda,\alpha,\gamma,z_0,k,b\)、每任務夢境數)、無明顯程式碼連結,複現門檻高。</li>
+          <li data-lang="en"><b>Cost and reproducibility.</b> The overall wall-clock / memory cost of a full sleep cycle is <mark class="m-limit" data-t="LIMITATION/FUTURE">barely reported systematically</mark> (only B.5 gives relative multiples for the reasoning SFT comparison); many hyperparameters (\(\lambda,\alpha,\gamma,z_0,k,b\), dreams per task) and no obvious code link make reproduction hard.</li>
+          <li data-lang="zh"><b>建立在自家框架上,增量成分需釐清。</b> Hope / NL / CMS 都來自同組先前工作;<mark class="m-assume" data-t="ASSUMPTION/CLAIM">真正新的是 Knowledge Seeding(向上蒸餾)+ LTI + 隨機 expert dreaming</mark>。多少增益來自新元件、多少來自 Hope 本身,界線可以更清楚。</li>
+          <li data-lang="en"><b>Built on the group&#39;s own framework; the delta needs clarifying.</b> Hope / NL / CMS all come from prior work by the same group; <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the genuinely new pieces are Knowledge Seeding (upward distillation) + LTI + random-expert dreaming</mark>. How much gain is from the new components vs Hope itself could be drawn more sharply.</li>
+          <li data-lang="zh"><b>優先權敘事偏防禦性。</b> 附錄 A.4 大篇幅比較 2026 年的 OPSD 系列,反覆強調「本研究更早(2025/09 OpenReview)」。<mark class="m-limit" data-t="LIMITATION/FUTURE">同期比較的公平性</mark>(訓練資料、調參預算是否對齊)與定位論述,值得讀者自行檢視。</li>
+          <li data-lang="en"><b>The priority narrative reads defensively.</b> Appendix A.4 extensively contrasts the 2026 OPSD line, repeatedly stressing &#34;this work is older (OpenReview 2025/09).&#34; The <mark class="m-limit" data-t="LIMITATION/FUTURE">fairness of concurrent comparisons</mark> (aligned training data, tuning budget) and the positioning claims deserve the reader&#39;s own scrutiny.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>類比 vs 機制</b>:去掉所有神經科學包裝,Sleep 本質上是不是「週期性長低秩 expert + GKD 蒸餾 + LTI + SEAL 式 dreaming」?哪一部分是<b>真正必要</b>的?</li>
+          <li data-lang="en"><b>Analogy vs mechanism</b>: stripped of the neuroscience framing, is Sleep essentially &#34;periodically grow low-rank experts + GKD distillation + LTI + SEAL-style dreaming&#34;? Which part is <b>truly necessary</b>?</li>
+          <li data-lang="zh"><b>比較公平性</b>:OPSD / SEAL / GRPO 的對比,是否用了與 Sleep 相同的資料、算力與調參預算?「贏在方法」還是「贏在多做了 dreaming 資料」?</li>
+          <li data-lang="en"><b>Fairness</b>: were OPSD / SEAL / GRPO compared under the same data, compute and tuning budget as Sleep? Is the win &#34;in the method&#34; or &#34;in the extra dreaming data&#34;?</li>
+          <li data-lang="zh"><b>增益是否值得複雜度</b>:1~3 分的提升,是否足以支撐這麼多可動零件?有沒有更簡單的 baseline(如「只做參數擴增 + 標準蒸餾」)能吃掉大部分增益?</li>
+          <li data-lang="en"><b>Is the gain worth the complexity</b>: do 1–3 point improvements justify so many moving parts? Could a simpler baseline (e.g. &#34;just parameter growth + standard distillation&#34;) capture most of the gain?</li>
+          <li data-lang="zh"><b>長期容量成長</b>:反覆睡眠會不斷長出低秩 expert。修剪雖回收快塊,但慢塊持續變大——<b>連續數十個睡眠週期後,參數量、推理成本、與穩定性如何?</b></li>
+          <li data-lang="en"><b>Long-run capacity growth</b>: repeated sleep keeps adding low-rank experts. Pruning reclaims fast blocks, but slow blocks keep growing—<b>after dozens of consecutive sleep cycles, what happens to parameter count, inference cost, and stability?</b></li>
+          <li data-lang="zh"><b>Dreaming 的自我強化風險</b>:附錄自承迭代自我蒸餾會有資訊洩漏 / 訓練崩壞。Sleep 靠「先鞏固後 dreaming」緩解,但這個緩解在<b>更長 horizon</b> 下是否仍成立?有壓測嗎?</li>
+          <li data-lang="en"><b>Self-reinforcement risk of Dreaming</b>: the appendix admits iterating self-distillation can leak information / cause training collapse. Sleep mitigates via &#34;consolidate-then-dream,&#34; but does that mitigation hold at a <b>longer horizon</b>? Is it stress-tested?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把標題「Language Models Need Sleep」讀成一個已被驗證的普適定律。更準確地說:本文<mark class="m-assume" data-t="ASSUMPTION/CLAIM">提出一個範式主張,並用一個具體實作(Hope + Knowledge Seeding + Dreaming)給出正面證據</mark>——證據廣但每項增益溫和,且高度綁定作者自家的 NL / Hope 生態。</span>
+        <span data-lang="en">Reading the title &#34;Language Models Need Sleep&#34; as a proven universal law. More precisely: the paper <mark class="m-assume" data-t="ASSUMPTION/CLAIM">advances a paradigm claim and supports it with one concrete instantiation (Hope + Knowledge Seeding + Dreaming)</mark>—broad evidence but modest per-task gains, and tightly bound to the authors&#39; own NL / Hope ecosystem.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">概念清晰且有生產力:「遺忘 = 容量問題」的重新框定、「向上蒸餾」與「先穩後改」的兩階段設計,都是可遷移的好想法。消融誠實(每個元件都測),且明確與同期 OPSD 工作劃清界線。</span>
+        <span data-lang="en">Conceptually clear and productive: the &#34;forgetting = capacity&#34; reframing, &#34;upward distillation,&#34; and the &#34;stabilize-then-modify&#34; two-stage design are all transferable ideas. The ablations are honest (each component tested), and the boundary against concurrent OPSD work is drawn explicitly.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>把「持續學習」當記憶系統問題,而非後訓練目標。</b> 用「多頻率記憶鏈 + 定期鞏固」的視角看待模型生命週期,可能比「再微調一輪」更能長期抗遺忘。這個框架可遷移到任何需要終身適應的系統。</li>
+          <li data-lang="en"><b>Treat continual learning as a memory-system problem, not a post-training objective.</b> Viewing a model&#39;s lifecycle through &#34;a multi-frequency memory chain + periodic consolidation&#34; may resist forgetting long-term better than &#34;another fine-tuning round.&#34; The framing transfers to any system needing lifelong adaptation.</li>
+          <li data-lang="zh"><b>「向上蒸餾 + 成長容量」是值得借用的技巧。</b> 當遺忘的根因是容量不足時,與其覆寫,不如<b>先長參數再蒸餾進去</b>,並在事後修剪臨時連結——一個乾淨的「加容量而不加干擾」配方。</li>
+          <li data-lang="en"><b>&#34;Upward distillation + growing capacity&#34; is a borrowable trick.</b> When forgetting stems from insufficient capacity, rather than overwrite, <b>grow parameters first then distill into them</b>, pruning the temporary connections afterward—a clean &#34;add capacity without adding interference&#34; recipe.</li>
+          <li data-lang="zh"><b>「先穩後改」勝過「直接迭代自我改進」。</b> 若你在做自我改進 / self-training,先把新知識穩定進獨立參數,再讓自我改進去修改,能顯著降低訓練崩壞與遺忘風險。</li>
+          <li data-lang="en"><b>&#34;Stabilize-then-modify&#34; beats &#34;iterate self-improvement directly.&#34;</b> If you do self-improvement / self-training, first stabilize new knowledge in dedicated parameters, then let self-improvement modify—markedly lowering the risk of collapse and forgetting.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What&#39;s worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「持續學習應有清醒 / 睡眠週期」</span><span data-lang="en">&#34;continual learning should have wake / sleep phases&#34;</span></td><td><span data-lang="zh">作為 sleep 範式的代表性主張與具體實作。</span><span data-lang="en">A flagship statement and concrete instantiation of the sleep paradigm.</span></td></tr>
+          <tr><td><span data-lang="zh">「以成長容量對抗災難性遺忘」</span><span data-lang="en">&#34;fight catastrophic forgetting by growing capacity&#34;</span></td><td><span data-lang="zh">引 Knowledge Seeding(向上蒸餾)與參數擴增消融。</span><span data-lang="en">Cite Knowledge Seeding (upward distillation) and the parameter-growth ablation.</span></td></tr>
+          <tr><td><span data-lang="zh">「多頻率記憶 / CMS 有助長脈絡」</span><span data-lang="en">&#34;multi-frequency memory / CMS helps long context&#34;</span></td><td><span data-lang="zh">引 BABILong 10M tokens 與睡眠階段數消融。</span><span data-lang="en">Cite the BABILong 10M-token result and the sleep-phase-count ablation.</span></td></tr>
+          <tr><td><span data-lang="zh">「兩階段 self-improvement 更抗崩壞」</span><span data-lang="en">&#34;two-stage self-improvement resists collapse&#34;</span></td><td><span data-lang="zh">引「先鞏固後 Dreaming」與 SEAL 對比。</span><span data-lang="en">Cite &#34;consolidate-then-dream&#34; and the comparison with SEAL.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">本文把「LLM 部署後靜止、更新即遺忘」重新框定為「<b>缺少睡眠週期的記憶系統問題</b>」,並給出可跑的解:清醒吸收、睡眠時<b>長出新參數 + 向上蒸餾(Knowledge Seeding)+ Dreaming 自我改進</b>。證據橫跨五類任務且一致為正,但每項增益溫和、機制繁複、且高度綁定作者自家的 Nested Learning / Hope 生態——是一個<b>有說服力的方向</b>,而非已定論的普適定律。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">The paper reframes &#34;LLMs freeze after deployment, and updating means forgetting&#34; as &#34;<b>a memory-system problem of a missing sleep cycle</b>,&#34; with a runnable solution: absorb while awake, then during sleep <b>grow new parameters + upward-distill (Knowledge Seeding) + Dream to self-improve</b>. Evidence spans five task families and is consistently positive, but per-task gains are modest, the machinery is elaborate, and it is tightly bound to the authors&#39; own Nested Learning / Hope ecosystem—a <b>persuasive direction</b>, not a settled universal law.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Nested Learning / Hope</span>
+          <span class="chip">SEAL</span>
+          <span class="chip">GKD (on-policy distill)</span>
+          <span class="chip">Titans / TTT</span>
+          <span class="chip">EWC</span>
+          <span class="chip">ReST / STaR</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">在你的論文庫中的位置</span><span data-lang="en">Place in your library</span></span>
+        <span data-lang="zh">這是庫裡<b>第一篇 LLM 持續學習 / 記憶鞏固</b>主題,與現有的力覺操作、機器人基礎模型、3D 視覺(VGGT)、Segment Anything 等視覺 / 機器人主線<b>不直接相關</b>。概念上最接近 <b>Touati2021 FB representation</b>(無監督 RL)的「部署時不靠外部監督、自我生成訊號」精神——Dreaming 也是無人監督的 RL 自我改進。<span class="add">[導讀補充] 建議自成一條「self-improving / continual-learning LLM」新主線。</span></span>
+        <span data-lang="en">This is the library&#39;s <b>first LLM continual-learning / memory-consolidation</b> entry, <b>not directly related</b> to the existing force-aware manipulation, robot foundation models, 3D vision (VGGT), or Segment Anything threads. Conceptually it is closest in spirit to <b>Touati2021 FB representation</b> (unsupervised RL): &#34;self-generated signal without external supervision at deployment&#34;—Dreaming is likewise unsupervised RL self-improvement. <span class="add">[guide note] Worth starting a new &#34;self-improving / continual-learning LLM&#34; thread.</span></span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Behrouz et al. 2026 (Language Models Need Sleep) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Language Models Need Sleep reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

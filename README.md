@@ -31,8 +31,11 @@ Method · Results · Critique · Takeaway** — with:
 ### 🧊 3D Vision & Reconstruction
 - **VGGT** — Visual Geometry Grounded Transformer (CVPR 2025)
 
-### 🎯 Unsupervised / Zero-shot RL
-- **FB representation** — Learning One Representation to Optimize All Rewards (NeurIPS 2021)
+### 🎯 RL: Representations for Control
+- **FB representation** (NeurIPS 2021) ↔ **TD-MPC** (ICML 2022) — task-free vs task-oriented latents, a contrast pair
+
+### 🧠 LLM Continual Learning & Self-Improvement
+- **Language Models Need Sleep** (2026) — Wake/Sleep consolidation: upward distillation + dreaming
 
 ## How it's built
 
