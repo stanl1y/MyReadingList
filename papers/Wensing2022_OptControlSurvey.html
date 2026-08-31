@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Optimization-Based Control for Dynamic Legged Robots — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Optimization-Based Control for Dynamic Legged Robots","authors":"Patrick M. Wensing, Michael Posa, Yue Hu, Adrien Escande, Nicolas Mansard, Andrea Del Prete","year":"2022","venue":"IEEE T-RO (arXiv 2022)","tags":["Legged Robotics","Survey","Optimal Control","MPC","Whole-Body Control","Trajectory Optimization","Contact Dynamics"],"tldr":"六位模型派核心學者的全景綜述:把足式運動統一成一個最佳控制問題 OCP,沿「接觸建模、簡化模型、數值轉錄、全身 QP 控制」四個工具箱梳理十年進展,並給出與強化學習融合的路線圖。","tldr_en":"A panoramic survey by six leading authors: legged locomotion as one optimal control problem, organized along four toolboxes - contact modeling, simplified models, numerical transcription, and whole-body QP control - with a roadmap for fusing with reinforcement learning."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+  .compact td{padding:6px 8px; font-size:12.5px}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:110px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">這是一篇由六位模型派核心學者合寫的<b>足式機器人「優化式控制」全景綜述</b>。它的統一視角:過去十年,社群已收斂到「把運動生成寫成一個<b>最佳控制問題(OCP)</b>」;但通用 OCP 因為<mark class="m-problem" data-t="PROBLEM/GAP">接觸的非平滑性、非凸性、高維度</mark>而無法直接線上求解。綜述沿四個工具箱梳理領域怎麼讓它可解——<mark class="m-method" data-t="METHOD/IDEA">接觸建模與排程(III)、簡化模型(IV)、數值轉錄與求解(V)、全身 QP 反應式控制(VI)</mark>——並以「模型式方法如何與學習式方法合流」收尾。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">A <b>panoramic survey of optimization-based control for legged robots</b> by six leading model-based researchers. Its unifying lens: over the past decade the community converged on writing motion generation as one <b>optimal control problem (OCP)</b>—which is intractable online due to <mark class="m-problem" data-t="PROBLEM/GAP">contact non-smoothness, non-convexity, and dimensionality</mark>. The survey organizes how the field makes it tractable via four toolboxes—<mark class="m-method" data-t="METHOD/IDEA">contact modeling and scheduling (III), simplified models (IV), numerical transcription and solvers (V), whole-body QP reactive control (VI)</mark>—and closes with how model-based methods should merge with learning.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>背景</b> — 十年間足式機器人從少數實驗室專利變成產業常態(如 Boston Dynamics Spot);里程碑背後的共同引擎是<mark class="m-method" data-t="METHOD/IDEA">優化式控制</mark>:預測式(MPC 類,顯式模型往前推演)與反應式(只管當下瞬間)。</li>
+          <li data-lang="en"><b>Background</b> — In a decade, legged robots went from a few labs to industrial reality (e.g., Boston Dynamics Spot); the common engine behind milestones is <mark class="m-method" data-t="METHOD/IDEA">optimization-based control</mark>: predictive (MPC-style reasoning over an explicit model) and reactive (only the current instant).</li>
+          <li data-lang="zh"><b>問題</b> — 通用 OCP(式 1)理論上什麼動作都能編碼,但<mark class="m-problem" data-t="PROBLEM/GAP">接觸使動力學非平滑/剛性、全身模型高維非凸</mark>,線上求解不可行。整個領域=「讓這個 OCP 變得可解」的各種折衷。</li>
+          <li data-lang="en"><b>Problem</b> — The general OCP (Eq. 1) can encode any behavior, but <mark class="m-problem" data-t="PROBLEM/GAP">contacts make dynamics non-smooth/stiff, and whole-body models are high-dimensional and nonconvex</mark>—unsolvable online. The whole field = trade-offs that make this OCP tractable.</li>
+          <li data-lang="zh"><b>地圖</b> — 四個決策軸:接觸怎麼建模(剛性 hybrid/互補 vs 軟化平滑)與排程(固定順序 vs 讓優化自己選);動力學怎麼簡化(centroidal → SRB / 質點 → LIP / SLIP);怎麼轉錄(multiple shooting / collocation / DDP);計畫怎麼上真機(<mark class="m-method" data-t="METHOD/IDEA">whole-body QP,百微秒~毫秒級</mark>)。Table I 把 60+ 篇代表作放進這個矩陣。</li>
+          <li data-lang="en"><b>The map</b> — Four design axes: contact modeling (rigid hybrid/complementarity vs softened smooth) and scheduling (fixed sequence vs letting optimization choose); model simplification (centroidal → SRB / point mass → LIP / SLIP); transcription (multiple shooting / collocation / DDP); execution on hardware (<mark class="m-method" data-t="METHOD/IDEA">whole-body QP, sub-millisecond</mark>). Table I places 60+ representative papers in this matrix.</li>
+          <li data-lang="zh"><b>展望</b> — 趨勢:contact-implicit 興起、MPC 模型越用越完整、DDP 與稀疏 Riccati 求解器加速。開放問題:<mark class="m-limit" data-t="LIMITATION/FUTURE">缺形式化分析(穩定性/遞迴可行性)、太依賴專家調參、與 RL 的關係未定</mark>——作者的答案是「合流,而非對抗」。</li>
+          <li data-lang="en"><b>Outlook</b> — Trends: contact-implicit methods rising, ever more complete models in MPC, DDP and sparse Riccati-like solvers. Open problems: <mark class="m-limit" data-t="LIMITATION/FUTURE">little formal analysis (stability/recursive feasibility), heavy expert tuning, unsettled relation to RL</mark>—the authors answer: fusion, not rivalry.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">把優化用於機器人運動可追溯數十年:1990 年代用 <mark class="m-method" data-t="METHOD/IDEA">QP 做冗餘機械臂的力矩控制</mark>,2000 年代推廣到模擬中的人形機器人;1990 年代中期<mark class="m-method" data-t="METHOD/IDEA">凸優化的多項式時間解法</mark>與商用求解器成熟,讓「線上解優化」變得可行。2015 <b>DARPA Robotics Challenge(DRC)</b>前的一波研究聚焦「用凸優化做反應式平衡控制」;DRC 之後,重心轉向<mark class="m-method" data-t="METHOD/IDEA">預測式控制</mark>:更動態的步態、更難的地形。</p>
+        <p data-lang="en">Optimization for robot motion goes back decades: the 1990s used <mark class="m-method" data-t="METHOD/IDEA">QPs for torque control of redundant manipulators</mark>, generalized to simulated humanoids in the 2000s; polynomial-time <mark class="m-method" data-t="METHOD/IDEA">convex optimization</mark> (mid-1990s) plus commercial solvers made online optimization practical. The wave before the 2015 <b>DARPA Robotics Challenge (DRC)</b> focused on reactive balance via convex optimization; after the DRC, the field pushed <mark class="m-method" data-t="METHOD/IDEA">predictive control</mark>: more dynamic gaits, harder terrain.</p>
+        <p data-lang="zh">為什麼堅持「模型式」?作者給出兩個理由:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">能自然地表達安全約束</mark>(未來應用的關鍵),且<mark class="m-assume" data-t="ASSUMPTION/CLAIM">第一性原理模型在未見情境中泛化較好</mark>。代價:<mark class="m-limit" data-t="LIMITATION/FUTURE">保證只跟模型一樣好,且感知資訊很難放進問題形式</mark>——這正是學習式方法的切入點。</p>
+        <p data-lang="en">Why stay model-based? Two reasons: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">safety constraints are naturally expressible</mark> (critical for envisioned applications), and <mark class="m-assume" data-t="ASSUMPTION/CLAIM">first-principles models generalize to unforeseen situations</mark>. The cost: <mark class="m-limit" data-t="LIMITATION/FUTURE">guarantees are only as good as the model, and perception streams are hard to fold into the formulation</mark>—exactly where learning enters.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">怎麼讀這篇綜述</span><span data-lang="en">How to read this survey</span></span>
+          <p data-lang="zh" style="margin-top:6px">目標讀者是「早期研究生 + 想補模型式背景的 ML 研究者」。Section II 是全文的執行摘要(讀完它=拿到地圖);III–VI 各自獨立成章,可按需求跳讀;每章結尾的 <b>Relationship to learning</b> 小節與 Section VII 串起「模型 × 學習」的主軸。</p>
+          <p data-lang="en" style="margin-top:6px">Target readers: early graduate students plus ML researchers needing the model-based background. Section II is an executive summary of the whole paper (read it = get the map); III–VI stand alone for selective reading; the per-section <b>Relationship to learning</b> notes and Section VII thread the model × learning storyline.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇綜述值得帶走的不是任何單一方法,而是這套「看懂整個領域」的框架:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What to take away is not any single method, but a framework for parsing the entire field:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">一個 OCP、三個難點、四個工具箱。</b>所有足式控制論文都可定位為「對式 (1) 的某種折衷」:你怎麼處理接觸、要不要簡化模型、用哪種轉錄、線上還是線下、要不要 WBC 兜底。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">One OCP, three difficulties, four toolboxes.</b> Every legged-control paper can be located as "some compromise on Eq. (1)": how you treat contact, whether you simplify the model, which transcription, online or offline, and whether a WBC backstops it.</li>
+          <li data-lang="zh"><b style="color:var(--c-problem)">接觸是萬惡之源。</b>不接觸就沒有梯度資訊(解對初值 <b>non-analytic</b>),所以梯度法「發現新接觸」先天困難——這解釋了為什麼<mark class="m-assume" data-t="ASSUMPTION/CLAIM">固定步態順序至今仍是實用系統的主流</mark>,也解釋了 contact-implicit 為何難產。</li>
+          <li data-lang="en"><b style="color:var(--c-problem)">Contact is the root of all evil.</b> Without touching, there is no gradient signal (solutions are <b>non-analytic</b> in initial conditions), so gradient methods struggle to discover new contacts—explaining why <mark class="m-assume" data-t="ASSUMPTION/CLAIM">fixed contact sequences still dominate practical systems</mark>, and why contact-implicit methods remain hard.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">簡化模型是一棵有譜系的樹。</b>centroidal dynamics 是全身動力學的<b>精確投影</b>(不加人工限制);SRB、質點、LIP、SLIP 都是再加「人工限制」的後代。Fig.4 的樹 + Fig.5 的集合包含關係,是選模型的心智圖。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Simplified models form a family tree.</b> Centroidal dynamics is an <b>exact projection</b> of whole-body dynamics (no artificial restrictions); SRB, point-mass, LIP, SLIP are descendants with added artificial restrictions. Fig.4 tree + Fig.5 set containment = the mental map for model selection.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">分層架構是計算現實的產物,不是原理必然。</b>「規劃 → 簡化模型 MPC → WBC」的經典三層,只是把大 OCP 拆小的一種方式(Fig.2 還有兩種);作者坦言拆法 <b>remains an art more than a science</b>。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Hierarchies are artifacts of compute, not principle.</b> The classic planner → simple-model MPC → WBC stack is just one way to break the big OCP apart (Fig.2 shows two more); the authors admit decomposition <b>remains an art more than a science</b>.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">WBC 已是成熟技術;whole-body MPC 正站在 2007 年的位置。</b>反應式 QP 控制(0.1~數 ms)已「近乎普世」;歷史類比:2007 年凸優化反應式控制備受質疑 → 2015 年普及。今日全身 MPC 面臨同樣的兩個質疑(線上算力、放棄凸性),作者預期同樣會跨過去。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">WBC is mature technology; whole-body MPC is where reactive QP was in 2007.</b> Reactive QP control (0.1 to a few ms) is now near-universal; by analogy, convex reactive control was doubted in 2007 and commonplace by 2015. Whole-body MPC faces the same two doubts today (online compute, giving up convexity)—the authors expect the same crossing.</li>
+          <li data-lang="zh"><b style="color:var(--c-limit)">模型與學習終將合流。</b>RL 的長處恰是 OCP 的短處:gradient-free(不怕非平滑)、會探索(不怕非凸)——甚至 Policy Gradient 可解讀為<b>隨機平滑(randomized smoothing)</b>。反向地,模型優化能給學習提供約束處理、結構與 warm start。</li>
+          <li data-lang="en"><b style="color:var(--c-limit)">Models and learning will fuse.</b> RL is strong exactly where OCPs are weak: gradient-free (immune to non-smoothness), exploratory (immune to non-convexity)—Policy Gradient even reads as <b>randomized smoothing</b>. Conversely, model-based optimization offers learning constraint handling, structure, and warm starts.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Optimization-Based Control for Dynamic Legged Robots</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Wensing, Posa, Hu, Escande, Mansard, Del Prete</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Notre Dame · UPenn · Waterloo · INRIA · LAAS-CNRS · Trento</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>arXiv:2211.11644(2022)<span class="add">[導讀補充 / guide note] IEEE T-RO 2024</span></span>
+          <b><span data-lang="zh">類型</span><span data-lang="en">Type</span></b><span><span data-lang="zh">綜述 / 教程(cs.RO)</span><span data-lang="en">Survey / tutorial (cs.RO)</span></span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">六位作者是 whole-body control、contact-implicit 優化、DDP 軟體生態(Crocoddyl / Pinocchio 圈)的代表人物;這篇等於<b>模型派社群對自己十年工作的官方總結</b>——讀 legged robotics 任何一篇模型式論文之前,先用它定位座標。</span>
+        <span data-lang="en">The six authors are figureheads of whole-body control, contact-implicit optimization, and the DDP software ecosystem (Crocoddyl / Pinocchio circle); this is effectively <b>the model-based community summarizing its own decade</b>—use it to locate any model-based legged paper before reading it.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">OCP / MPC</span><span class="chip">Hybrid dynamics</span>
+          <span class="chip">Complementarity</span><span class="chip">Centroidal dynamics</span>
+          <span class="chip">LIP / SRB / SLIP</span><span class="chip">DDP / iLQR</span>
+          <span class="chip">Collocation</span><span class="chip">Whole-Body QP</span>
+        </div>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">RL 反客為主?</span><span data-lang="en">RL takeover?</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">無量化比較</span><span data-lang="en">no benchmarks</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">統一的問題形式:一個什麼都能編碼的 OCP</span><span data-lang="en">The unifying formulation: an OCP that encodes everything</span></h3>
+        <p data-lang="zh">整個領域收斂到的形式——在狀態 \(x=(q,\nu)\)、控制 \(u\triangleq\tau\)、接觸力 \(\lambda\) 的軌跡上做優化:</p>
+        <p data-lang="en">The form the field converged on—optimizing over trajectories of state \(x=(q,\nu)\), control \(u\triangleq\tau\), and contact forces \(\lambda\):</p>
+        <div class="eq">$$\begin{aligned}
+\underset{x(\cdot),\,u(\cdot),\,\lambda(\cdot)}{\text{minimize}}\quad & \mathrm{Cost}\big(x(\cdot),u(\cdot),\lambda(\cdot)\big)\\[2pt]
+\text{subject to}\quad & M(q)\dot\nu + C(q,\nu)\,\nu + \tau_g(q) = S^{T}\tau + J(q)^{T}\lambda\\
+& \text{ContactConstraints}\big(x,\lambda,u,\mathrm{Env}\big)\\
+& \text{Kinematics / Input / Task Constraints}\quad \forall t
+\end{aligned}$$</div>
+        <p data-lang="zh">指定初末狀態=點到點行走;把物體狀態放進 \(x\)=操作行為。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">通用性極高</mark>,但作者也承認 OCP 本身有先天限制——<mark class="m-limit" data-t="LIMITATION/FUTURE">難以保證解軌跡的穩定性與強健性</mark>;本綜述聚焦另一個限制:<mark class="m-problem" data-t="PROBLEM/GAP">計算複雜度</mark>。</p>
+        <p data-lang="en">Fixing initial/final states = point-to-point locomotion; putting an object into \(x\) = manipulation. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Extremely general</mark>—though the authors concede intrinsic OCP limits (<mark class="m-limit" data-t="LIMITATION/FUTURE">stability and robustness of solutions are hard to guarantee</mark>); this survey targets another limit: <mark class="m-problem" data-t="PROBLEM/GAP">computational complexity</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">三個難點 × 領域的對策(= 全文地圖)</span><span data-lang="en">Three difficulties × the field&#39;s responses (= map of the paper)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">難點</span><span data-lang="en">Difficulty</span></th><th><span data-lang="zh">為什麼致命</span><span data-lang="en">Why it bites</span></th><th><span data-lang="zh">對策(章節)</span><span data-lang="en">Response (section)</span></th></tr>
+          <tr>
+            <td><b><span data-lang="zh">非平滑 / 剛性</span><span data-lang="en">Non-smoothness / stiffness</span></b></td>
+            <td><span data-lang="zh">接觸使動力學<mark class="m-problem" data-t="PROBLEM/GAP">混合(hybrid)或極端剛性</mark>:撞擊瞬間速度跳變、摩擦力不連續,直接丟給優化器=病態問題。</span><span data-lang="en">Contact makes dynamics <mark class="m-problem" data-t="PROBLEM/GAP">hybrid or extremely stiff</mark>: impact velocity jumps, discontinuous friction—feeding this to an optimizer yields ill-conditioned problems.</span></td>
+            <td><span data-lang="zh">剛性 hybrid / 互補約束、或軟化平滑;固定接觸順序 vs contact-implicit(<b>III</b>)</span><span data-lang="en">Rigid hybrid / complementarity, or softening; fixed sequences vs contact-implicit (<b>III</b>)</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">高維度</span><span data-lang="en">Dimensionality</span></b></td>
+            <td><span data-lang="zh">全身模型自由度多,<mark class="m-problem" data-t="PROBLEM/GAP">線上 MPC 算不完</mark>。</span><span data-lang="en">Whole-body models have many DoF—<mark class="m-problem" data-t="PROBLEM/GAP">too slow for online MPC</mark>.</span></td>
+            <td><span data-lang="zh">簡化 / 模板模型:centroidal、SRB、LIP、SLIP(<b>IV</b>)</span><span data-lang="en">Simplified / template models: centroidal, SRB, LIP, SLIP (<b>IV</b>)</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">非凸性</span><span data-lang="en">Non-convexity</span></b></td>
+            <td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">解對初始猜測敏感</mark>,可能收斂到壞的(甚至不可行的)局部解。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Sensitive to the initial guess</mark>; may converge to poor (even infeasible) local solutions.</span></td>
+            <td><span data-lang="zh">好的轉錄與求解器(shooting / collocation / DDP,<b>V</b>)+ 分層拆解 + warm start</span><span data-lang="en">Good transcription and solvers (shooting / collocation / DDP, <b>V</b>) + hierarchical decomposition + warm starts</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">殘留誤差 / 執行</span><span data-lang="en">Residual error / execution</span></b></td>
+            <td><span data-lang="zh">簡化模型忽略的細節、太慢的重規劃頻率,<mark class="m-problem" data-t="PROBLEM/GAP">真機上需要有人兜底</mark>。</span><span data-lang="en">Details dropped by simple models and slow replans <mark class="m-problem" data-t="PROBLEM/GAP">must be backstopped on hardware</mark>.</span></td>
+            <td><span data-lang="zh">反應式 whole-body QP 控制(<b>VI</b>)</span><span data-lang="en">Reactive whole-body QP control (<b>VI</b>)</span></td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">把難點看見:一顆質點撞牆</span><span data-lang="en">Seeing the difficulty: a particle hitting a wall</span></h3>
+        <figure class="fig"><img src="figs/Wensing2022/fig3_contact.png" alt="Figure 3 contact models">
+          <figcaption data-lang="zh"><b>Fig.3</b> 三種接觸模型下的撞牆行為(上到下:位置、速度、<b>速度對初始位置的敏感度</b> \(\partial v(t)/\partial q_0\))。藍=Hunt-Crossley 彈簧(可微但撞擊處不平滑);橘=鬆弛互補模型(如 MuJoCo,處處平滑,但<b>未接觸就先出力</b>);綠=剛性 hybrid(速度瞬間跳變,撞擊點導數未定義)。注意:三者離開撞擊事件後梯度都良好——問題全集中在接觸事件本身。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Wall impact under three contact models (top to bottom: position, velocity, <b>sensitivity</b> \(\partial v(t)/\partial q_0\)). Blue = Hunt-Crossley spring (differentiable but non-smooth at impact); orange = relaxed complementarity (MuJoCo-like: smooth everywhere but <b>forces act before contact</b>); green = rigid hybrid (instantaneous velocity jump; derivative undefined at impact). Note all three have fine gradients away from the impact—the trouble concentrates at the contact event itself.</figcaption></figure>
+        <p data-lang="zh">這張小圖是全篇的縮影:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">接觸建模=在「物理真實性」與「可微性 / 數值條件」之間交易</mark>。平滑化給你到處可用的梯度,但模型越準(越剛)、優化問題就越病態——<mark class="m-limit" data-t="LIMITATION/FUTURE">這條 trade-off 曲線的精確形狀,至今 remain unknown</mark>。</p>
+        <p data-lang="en">This small figure is the paper in miniature: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">contact modeling = trading physical realism against differentiability / numerical conditioning</mark>. Smoothing buys usable gradients everywhere, but the more accurate (stiffer) the model, the worse conditioned the optimization—<mark class="m-limit" data-t="LIMITATION/FUTURE">the precise shape of this trade-off remains unknown</mark>.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把「解 OCP」想成一個統一演算法。實務上<b>沒有人直接解式 (1)</b>:所有可跑的系統都是把它<mark class="m-method" data-t="METHOD/IDEA">拆成層級子問題</mark>(先落腳點、再 CoM 軌跡、再全身扭矩)。讀論文時先問:它拆在哪裡?丟掉了什麼?</span>
+        <span data-lang="en">Do not read "solving the OCP" as one unified algorithm. In practice <b>nobody solves Eq. (1) directly</b>: every working system <mark class="m-method" data-t="METHOD/IDEA">decomposes it hierarchically</mark> (footsteps first, then CoM trajectory, then whole-body torques). For any paper, ask: where does it cut, and what does it drop?</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">同一個 OCP 視角讓「LIP 步態規劃」「MIT 型凸 MPC」「DDP 全身 MPC」「WBC QP」看似無關的工作變成<b>同一張地圖上的不同座標</b>——這是綜述最大的附加價值。</span>
+        <span data-lang="en">The single-OCP lens turns seemingly unrelated work—LIP gait planning, MIT-style convex MPC, DDP whole-body MPC, WBC QPs—into <b>coordinates on one map</b>. That is the survey&#39;s biggest added value.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">術語速查</span><span data-lang="en">Jargon check</span></div>
+        <span data-lang="zh"><b>hybrid dynamics</b>=連續動力學+離散模式切換(mode / guard / reset);<b>transcription</b>=把無限維 OCP 離散成有限維 NLP 的方式;<b>contact-implicit</b>=不預先指定接觸順序,讓優化自己決定。</span>
+        <span data-lang="en"><b>Hybrid dynamics</b> = continuous flow + discrete mode switches (mode / guard / reset); <b>transcription</b> = discretizing the infinite-dimensional OCP into a finite NLP; <b>contact-implicit</b> = no pre-specified contact sequence—the optimizer chooses.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">contact-implicit 是未來?</span><span data-lang="en">contact-implicit future?</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">無穩定性保證</span><span data-lang="en">no stability proof</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif"><span data-lang="zh">The Field Taxonomy(四個工具箱)</span><span data-lang="en">The Field Taxonomy (four toolboxes)</span></h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">先看架構:大 OCP 怎麼拆(Fig.2)</span><span data-lang="en">Architecture first: how the big OCP gets split (Fig.2)</span></h3>
+        <figure class="fig"><img src="figs/Wensing2022/fig2_hierarchy.png" alt="Figure 2 decomposition strategies">
+          <figcaption data-lang="zh"><b>Fig.2</b> 三種典型拆法。左:接觸規劃器(運動學模型、長 horizon、低頻)→ 簡化模型 MPC(中頻)→ 全身控制 WBC(完整模型、短 horizon、高頻)。中:kinodynamic 規劃直接輸出接觸+CoM 軌跡 → WBC。右:接觸規劃器 → <b>whole-body MPC</b>(完整動力學、高頻)。層越往下,模型越完整、頻率越高、視野越短。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> Three canonical decompositions. Left: contact planner (kinematic model, long horizon, low rate) → simplified-model MPC (mid rate) → whole-body control (full model, short horizon, high rate). Middle: a kinodynamic planner emits contacts + CoM trajectory → WBC. Right: contact planner → <b>whole-body MPC</b> (full dynamics at high rate). Lower layers: fuller models, higher rates, shorter lookahead.</figcaption></figure>
+        <div class="flow">
+          <div class="step"><span class="ph mono">TOOLBOX 1 · §III</span><b>Contact</b><small><span data-lang="zh">接觸怎麼建模、順序誰來決定</span><span data-lang="en">how to model contact; who picks the sequence</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">TOOLBOX 2 · §IV</span><b>Simplified models</b><small><span data-lang="zh">降維:centroidal / SRB / LIP / SLIP</span><span data-lang="en">reduce dimension: centroidal / SRB / LIP / SLIP</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">TOOLBOX 3 · §V</span><b>Transcription</b><small><span data-lang="zh">shooting / collocation / DDP 解 OCP</span><span data-lang="en">shooting / collocation / DDP to solve the OCP</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">TOOLBOX 4 · §VI</span><b>Whole-Body QP</b><small><span data-lang="zh">毫秒級反應式執行 + 兜底</span><span data-lang="en">millisecond reactive execution + backstop</span></small></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">工具箱 1:接觸建模與排程(§III)</span><span data-lang="en">Toolbox 1: contact modeling and scheduling (§III)</span></h3>
+        <p data-lang="zh"><b>建模</b>。剛性接觸的數學核心是<mark class="m-method" data-t="METHOD/IDEA">互補約束(complementarity)</mark>:不穿透、力不拉、兩者至少一個為零——</p>
+        <p data-lang="en"><b>Modeling.</b> The mathematical core of rigid contact is the <mark class="m-method" data-t="METHOD/IDEA">complementarity constraint</mark>: no penetration, no pulling forces, and at least one of the two is zero—</p>
+        <div class="eq">$$0 \le \lambda_n \;\perp\; \phi(q) \ge 0 \qquad\Longleftrightarrow\qquad \lambda_n\ge 0,\;\; \phi(q)\ge 0,\;\; \lambda_n^{T}\phi(q)=0$$</div>
+        <p data-lang="zh">等價於 hybrid 系統(mode / guard / reset \(x^+=R(x^-)\))。<mark class="m-limit" data-t="LIMITATION/FUTURE">病態案例:接觸 Jacobian 秩虧時力不唯一</mark>(四腳桌 / 平足壓力分布不定),演算法會「不自覺地」替你挑一個解。軟化路線(彈簧阻尼、MuJoCo 式鬆弛)換得平滑,但<mark class="m-problem" data-t="PROBLEM/GAP">真實剛度=數值剛性</mark>。</p>
+        <p data-lang="en">Equivalent to a hybrid system (mode / guard / reset \(x^+=R(x^-)\)). <mark class="m-limit" data-t="LIMITATION/FUTURE">Pathology: forces are non-unique when the contact Jacobian loses rank</mark> (a four-legged table / flat foot has indeterminate pressure), and algorithms silently pick one solution for you. Softened routes (spring-damper, MuJoCo-style relaxation) buy smoothness, but <mark class="m-problem" data-t="PROBLEM/GAP">realistic stiffness = numerical stiffness</mark>.</p>
+        <p data-lang="zh"><b>排程</b>。三條路:<mark class="m-method" data-t="METHOD/IDEA">(a) 固定順序</mark>(雙足平地=左右左右,系統變成可微的 time-varying 問題,最實用);<mark class="m-method" data-t="METHOD/IDEA">(b) 離散搜尋</mark>(MIP、SL1M 近似、RRT/PRM 取樣);<mark class="m-method" data-t="METHOD/IDEA">(c) contact-implicit</mark>(把互補約束直接放進 NLP,收斂前允許違反互補=同時探索多種順序)。(c) 最優雅但<mark class="m-limit" data-t="LIMITATION/FUTURE">數值條件差、極依賴初始猜測,多限線下使用</mark>。</p>
+        <p data-lang="en"><b>Scheduling.</b> Three routes: <mark class="m-method" data-t="METHOD/IDEA">(a) fixed sequences</mark> (biped on flat ground = left-right-left; the system becomes a differentiable time-varying problem—most practical); <mark class="m-method" data-t="METHOD/IDEA">(b) discrete search</mark> (MIP, the SL1M relaxation, RRT/PRM sampling); <mark class="m-method" data-t="METHOD/IDEA">(c) contact-implicit</mark> (complementarity constraints inside the NLP; violating them before convergence = exploring several sequences at once). Route (c) is the most elegant but <mark class="m-limit" data-t="LIMITATION/FUTURE">poorly conditioned, initialization-hungry, and mostly offline</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">工具箱 2:簡化模型的譜系(§IV)</span><span data-lang="en">Toolbox 2: the family tree of simplified models (§IV)</span></h3>
+        <figure class="fig"><img src="figs/Wensing2022/fig4_models.png" alt="Figure 4 model tree">
+          <figcaption data-lang="zh"><b>Fig.4</b> 從全身動力學出發:投影方程、放掉關節空間約束 → <b>centroidal dynamics</b>;令 \(k_G=0\) → 質點模型;假設慣量形狀不變 \(I_G\approx\text{const.}\) → <b>SRB</b>(四足最愛);再固定 CoM 高度 → <b>LIP</b>;固定腿剛度 → <b>SLIP</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Starting from whole-body dynamics: project the EoM, drop joint-space constraints → <b>centroidal dynamics</b>; set \(k_G=0\) → point mass; freeze the inertia shape \(I_G\approx\text{const.}\) → <b>SRB</b> (the quadruped favorite); fix CoM height → <b>LIP</b>; fix leg stiffness → <b>SLIP</b>.</figcaption></figure>
+        <p data-lang="zh">關鍵事實:浮動基座動力學的<b>前六列與關節扭矩無關</b>——運動的極限由接觸力約束(摩擦、單向性)決定。這六列正是<mark class="m-method" data-t="METHOD/IDEA">質心動量 \(h_G=(k_G,l_G)\) 的演化</mark>:</p>
+        <p data-lang="en">Key fact: the <b>first six rows</b> of floating-base dynamics do not involve joint torques—motion limits come from contact-force constraints (friction, unilaterality). Those six rows are exactly the evolution of the <mark class="m-method" data-t="METHOD/IDEA">centroidal momentum \(h_G=(k_G,l_G)\)</mark>:</p>
+        <div class="eq">$$h_G = A_G(q)\,\nu,\qquad
+\dot h_G=\begin{bmatrix}\dot k_G\\ \dot l_G\end{bmatrix}
+=\begin{bmatrix}0\\ -M a_g\end{bmatrix}
++\sum_{i=1}^{n_c}\begin{bmatrix}(p_i-p_{\mathrm{CoM}})\times\lambda_i\\ \lambda_i\end{bmatrix}$$</div>
+        <p data-lang="zh">麻煩在角動量方程的<mark class="m-problem" data-t="PROBLEM/GAP">雙線性項 \((p_i-p_{\mathrm{CoM}})\times\lambda_i\)</mark>(非凸)——催生了固定 CoM 區域、McCormick 包絡、Bézier 參數化等一票技巧。再簡化:LIP 模型(固定高度 \(h\)、\(k_G=0\))得到<b>線性</b>動力學</p>
+        <p data-lang="en">The trouble is the <mark class="m-problem" data-t="PROBLEM/GAP">bilinear term \((p_i-p_{\mathrm{CoM}})\times\lambda_i\)</mark> in the angular part (nonconvex)—spawning tricks like fixed CoM regions, McCormick envelopes, and Bézier parameterizations. Simplify further: the LIP (fixed height \(h\), \(k_G=0\)) yields <b>linear</b> dynamics</p>
+        <div class="eq">$$\ddot c_{x,y}=\omega^{2}\,(c_{x,y}-p_{x,y}),\qquad \omega=\sqrt{g/h}
+\qquad\text{;}\qquad
+\ddot p_{\mathrm{CoM}} = a_g + k\,(p_{\mathrm{CoM}}-p_{\mathrm{CoP}})$$</div>
+        <p data-lang="zh">(右式為放開高度假設的變剛度推廣;SLIP 即對 \(k\) 加 Hookean 彈簧限制)。多接觸情形則用<mark class="m-method" data-t="METHOD/IDEA">Contact Wrench Cone(CWC)</mark>把各摩擦錐的淨效果聚成 6D 凸錐——ZMP 準則的多接觸推廣,適合離線預計算。</p>
+        <p data-lang="en">(the right equation generalizes to varying height via a stiffness-like \(k\); SLIP constrains \(k\) to act as a Hookean spring). For multi-contact, the <mark class="m-method" data-t="METHOD/IDEA">Contact Wrench Cone (CWC)</mark> aggregates all friction cones into one 6D convex cone—the multi-contact generalization of the ZMP criterion, best precomputed offline.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">工具箱 3:數值轉錄與求解(§V)</span><span data-lang="en">Toolbox 3: numerical transcription and solvers (§V)</span></h3>
+        <table>
+          <tr><th></th><th><span data-lang="zh">理論支柱</span><span data-lang="en">Supporting theory</span></th><th><span data-lang="zh">計算方式</span><span data-lang="en">Computation</span></th><th><span data-lang="zh">在足式的地位</span><span data-lang="en">Status in legged robotics</span></th></tr>
+          <tr><td><b>Global</b></td><td>Hamilton-Jacobi-Bellman(HJB)</td><td><span data-lang="zh">PDE 求解 / 動態規劃</span><span data-lang="en">PDE solvers / dynamic programming</span></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">維度詛咒</mark>,全身模型不可行</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Curse of dimensionality</mark>; infeasible for whole-body</span></td></tr>
+          <tr><td><b>Indirect</b></td><td><span data-lang="zh">Pontryagin 極大值原理(先優化再離散)</span><span data-lang="en">Pontryagin Maximum Principle (optimize then discretize)</span></td><td><span data-lang="zh">共態方程 + root finding</span><span data-lang="en">co-state equations + root finding</span></td><td><span data-lang="zh">快而準,但<mark class="m-limit" data-t="LIMITATION/FUTURE">難初始化、難放狀態不等式</mark>,少用</span><span data-lang="en">fast and accurate but <mark class="m-limit" data-t="LIMITATION/FUTURE">hard to initialize, no state inequalities</mark>; rare</span></td></tr>
+          <tr><td class="win"><b>Direct</b></td><td class="win"><span data-lang="zh">先離散再優化 → NLP(SQP 等)</span><span data-lang="en">discretize then optimize → NLP (SQP etc.)</span></td><td class="win">shooting / collocation</td><td class="win"><span data-lang="zh">幾乎壟斷</span><span data-lang="en">near-universal</span></td></tr>
+        </table>
+        <p data-lang="zh">Direct 家族內的三主力:</p>
+        <p data-lang="en">The three direct workhorses:</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>Multiple shooting</b>:離散控制,狀態靠分段積分;段首狀態進決策變數 + 連續性(defect=0)約束。<mark class="m-result" data-t="RESULT/EVIDENCE">比 single shooting 穩健</mark>,是固定接觸序列全身優化的主力之一。</li>
+          <li data-lang="en"><b>Multiple shooting</b>: discretize controls, integrate states per segment; segment-initial states become variables with continuity (zero-defect) constraints. <mark class="m-result" data-t="RESULT/EVIDENCE">More robust than single shooting</mark>; a mainstay for whole-body optimization with fixed sequences.</li>
+          <li data-lang="zh"><b>Collocation</b>:狀態用多項式近似,在 collocation 點強迫「多項式斜率=動力學」。約束多但結構稀疏;<mark class="m-method" data-t="METHOD/IDEA">contact-implicit 幾乎都走這條路</mark>(互補約束直接進 NLP);近期把 \(q,\dot q\) 用同一條多項式的做法提升了動力學精度。</li>
+          <li data-lang="en"><b>Collocation</b>: approximate states by polynomials; force polynomial slopes to match dynamics at collocation points. Many but sparse constraints; <mark class="m-method" data-t="METHOD/IDEA">contact-implicit methods almost all live here</mark> (complementarity inside the NLP); recent unified polynomials for \(q,\dot q\) improve dynamic accuracy.</li>
+          <li data-lang="zh"><b>DDP / iLQR</b>:對 Q 函數做局部二次展開的<b>單射擊</b>法,收斂率同牛頓法,還附贈<mark class="m-result" data-t="RESULT/EVIDENCE">局部最優回饋策略</mark>(不只開環軌跡)。原版不吃約束;近年靠 Box-DDP、interior-point、Augmented Lagrangian、relaxed barrier 等擴充,並延伸到 implicit / hybrid / multi-phase 動力學與 multiple-shooting 化。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">高自由度可擴展性是它爆紅的主因</mark>。</li>
+          <li data-lang="en"><b>DDP / iLQR</b>: a <b>single-shooting</b> method on a local quadratic expansion of the Q-function; Newton-rate convergence plus a <mark class="m-result" data-t="RESULT/EVIDENCE">locally optimal feedback policy</mark> for free (not just an open-loop trajectory). Vanilla DDP takes no constraints; extensions (Box-DDP, interior-point, Augmented Lagrangian, relaxed barrier) and implicit / hybrid / multi-phase / multiple-shooting variants fixed that. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Its scalability to high-DoF systems drives its popularity</mark>.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">工具箱 4:全身 QP 反應式控制(§VI)</span><span data-lang="en">Toolbox 4: whole-body QP reactive control (§VI)</span></h3>
+        <p data-lang="zh">把 OCP 的時間區間縮成「一瞬間」:決策變數從軌跡變成向量 \((\dot\nu,\tau,\lambda)\),動力學在 \(\dot\nu,\tau,\lambda\) 上是<b>線性</b>的——問題變成凸 QP。任務用誤差函數 \(e_i\) 表達(CoM 追 LIP 計畫、身體姿態、避碰…),微分兩次得到對 \(\dot\nu\) 線性的任務動力學:</p>
+        <p data-lang="en">Shrink the OCP horizon to a single instant: decision variables become vectors \((\dot\nu,\tau,\lambda)\), in which the dynamics are <b>linear</b>—the problem becomes a convex QP. Tasks are error functions \(e_i\) (CoM tracking the LIP plan, body pose, collision avoidance…); differentiating twice gives task dynamics linear in \(\dot\nu\):</p>
+        <div class="eq">$$\ddot e_i = J_i(q)\,\dot\nu + \dot J_i(q,\nu)\,\nu + a_i(q,\nu,t),
+\qquad \ddot e_i^{\,d}=-K_d\,\dot e_i-K_p\,e_i\;\;(K_d=2K_p^{1/2})$$</div>
+        <p data-lang="zh">典型 QP(追蹤 LIP 參考、最小扭矩):</p>
+        <p data-lang="en">A typical QP (track a LIP reference with minimal torque):</p>
+        <div class="eq">$$\begin{aligned}
+\underset{\dot\nu,\tau,\lambda}{\text{minimize}}\quad & w_1\big\|J_G\dot\nu+\dot J_G\nu-(\ddot p_G^{\,d}+\ddot e_G^{\,d})\big\|^2+w_2\|\tau\|^2\\
+\text{subject to}\quad & M\dot\nu + C\nu + \tau_g = S^T\tau + J_c^T\lambda,\qquad J_c\dot\nu = a_c,\qquad C\lambda \le 0
+\end{aligned}$$</div>
+        <p data-lang="zh">衝突仲裁兩派:<mark class="m-method" data-t="METHOD/IDEA">加權(soft priority)QP</mark>——成熟現成求解器、近乎普世,但權重難調、低優先級不能放不等式;<mark class="m-method" data-t="METHOD/IDEA">嚴格階層 HQP(lexicographic)</mark>——Kanoun 的 QP 級聯首次讓任意層級吃不等式,且<mark class="m-result" data-t="RESULT/EVIDENCE">專用求解器可比一般認知更快</mark>,但奇異性處理複雜、普及度較低。求解時間<mark class="m-result" data-t="RESULT/EVIDENCE">數百微秒到數毫秒</mark>(控制週期 1–10 ms)。位置層級的不等式(關節限位、避障)是<mark class="m-limit" data-t="LIMITATION/FUTURE">瞬時控制的先天弱點</mark>——本質上需要 lookahead,這是把 MPC 請回來的根本理由。</p>
+        <p data-lang="en">Two arbitration camps: <mark class="m-method" data-t="METHOD/IDEA">weighted (soft-priority) QPs</mark>—mature off-the-shelf solvers, near-universal, but weights are hard to tune and lower priorities cannot hold inequalities; <mark class="m-method" data-t="METHOD/IDEA">strict-hierarchy HQP (lexicographic)</mark>—Kanoun&#39;s QP cascade first admitted inequalities at any level, and <mark class="m-result" data-t="RESULT/EVIDENCE">dedicated solvers are faster than commonly believed</mark>, though singularity handling limits adoption. Solve times: <mark class="m-result" data-t="RESULT/EVIDENCE">hundreds of microseconds to a few milliseconds</mark> (1–10 ms control periods). Position-level inequalities (joint limits, obstacles) are the <mark class="m-limit" data-t="LIMITATION/FUTURE">intrinsic weakness of instantaneous control</mark>—they fundamentally need lookahead, the deep reason MPC gets invited back.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(q,\;\nu\)</td><td><span data-lang="zh">機器人組態(浮動基座+關節)與廣義速度;\(x=(q,\nu)\)。</span><span data-lang="en">Robot configuration (floating base + joints) and generalized velocity; \(x=(q,\nu)\).</span></td></tr>
+          <tr><td>\(\tau,\;\lambda\)</td><td><span data-lang="zh">關節扭矩(經選擇矩陣 \(S\) 作用於驅動自由度)與環境接觸力。</span><span data-lang="en">Joint torques (via selection matrix \(S\) on actuated DoF) and environmental contact forces.</span></td></tr>
+          <tr><td>\(M,C,\tau_g,J\)</td><td><span data-lang="zh">質量矩陣、科氏/離心項、重力項、接觸 Jacobian——全身動力學的四大件。</span><span data-lang="en">Mass matrix, Coriolis/centrifugal terms, gravity, contact Jacobian—the four pieces of whole-body dynamics.</span></td></tr>
+          <tr><td>\(\phi(q)\)</td><td><span data-lang="zh">帶號距離函數:每個潛在接觸點離環境多遠(<0=穿透)。</span><span data-lang="en">Signed distance function: how far each potential contact is from the environment (negative = penetration).</span></td></tr>
+          <tr><td>\(h_G=(k_G,l_G)\)</td><td><span data-lang="zh">質心動量(角+線);\(A_G(q)\) 是 centroidal momentum matrix。</span><span data-lang="en">Centroidal momentum (angular + linear); \(A_G(q)\) is the centroidal momentum matrix.</span></td></tr>
+          <tr><td>\(p_{\mathrm{CoM}},\,p_{\mathrm{CoP}},\,p_i\)</td><td><span data-lang="zh">質心位置、壓力中心、第 \(i\) 個接觸點位置。</span><span data-lang="en">Center of mass, center of pressure, and the \(i\)-th contact location.</span></td></tr>
+          <tr><td>\(\omega=\sqrt{g/h}\)</td><td><span data-lang="zh">LIP 的自然頻率(\(h\)=固定的 CoM 高度)。</span><span data-lang="en">Natural frequency of the LIP (\(h\) = fixed CoM height).</span></td></tr>
+          <tr><td>\(e_i,\;J_i\)</td><td><span data-lang="zh">第 \(i\) 個任務的誤差函數與其 Jacobian(WBC 的基本單元)。</span><span data-lang="en">Task error function \(i\) and its Jacobian (the WBC building block).</span></td></tr>
+          <tr><td>\(x^+=R(x^-)\)</td><td><span data-lang="zh">hybrid 系統的 reset map:撞擊前後狀態的跳變關係。</span><span data-lang="en">Hybrid reset map: the state jump across an impact.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">整個領域=「把一個解不動的最佳控制問題,沿<b>接觸、模型、轉錄、執行</b>四個軸各讓一步,直到它跑得上真機」;每篇論文只是選了不同的讓步組合。</span>
+        <span data-lang="en">The whole field = "concede along four axes—<b>contact, model, transcription, execution</b>—until an unsolvable optimal control problem runs on hardware"; each paper is just a different combination of concessions.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">最小坐標 vs 浮動基座</span><span data-lang="en">Minimal vs floating-base coords</span></span>
+        <span data-lang="zh">固定接觸時可把觸點當 pin joint 用<b>最小坐標</b>(變數少、快),但難施加摩擦約束、多接觸閉鏈時甚至不存在全域定義;<b>浮動基座+約束動力學</b>更通用,把 \(\lambda\) 留作變數(lifted)雖變數多卻<mark class="m-result" data-t="RESULT/EVIDENCE">數值條件更好</mark>。</span>
+        <span data-lang="en">With known contacts you can treat them as pin joints in <b>minimal coordinates</b> (fewer variables, fast), but friction constraints are awkward and global charts may not exist in closed-chain multi-contact; <b>floating-base + constrained dynamics</b> is more general, and keeping \(\lambda\) as a lifted variable costs size but is <mark class="m-result" data-t="RESULT/EVIDENCE">better conditioned</mark>.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">DDP 附贈的「回饋增益」常被當成免費的 WBC 替代品;但它只在<mark class="m-assume" data-t="ASSUMPTION/CLAIM">名義軌跡附近、模式序列不變</mark>時有效。撞擊時刻導數未定義、模式一變全失效——所以真機管線幾乎都仍配一層 WBC。</span>
+        <span data-lang="en">The feedback gains DDP hands you are often treated as a free WBC substitute; they are valid only <mark class="m-assume" data-t="ASSUMPTION/CLAIM">near the nominal trajectory with an unchanged mode sequence</mark>. Derivatives are undefined at impacts and break when modes flip—hence real pipelines still carry a WBC layer.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">每章的「與學習的關係」</span><span data-lang="en">Per-section learning notes</span></span>
+        <span data-lang="zh">§III:學接觸模型 / 學模式序列當 pre-solve;§IV:自動發現簡化模型仍是 open problem、學簡化模型的可行域修正;§V:學 warm start、學 value function 縮短 horizon、學落腳點;§VII:RL 的 gradient-free+探索能力 ↔ TO 的約束處理+結構。<span class="add">[導讀補充] 這些小節加起來就是 2022 年「模型×學習」的研究地圖。</span></span>
+        <span data-lang="en">§III: learn contact models / learn mode sequences as pre-solves; §IV: auto-discovering simple models is open, learning feasibility corrections; §V: learned warm starts, learned value functions to shorten horizons, learned footholds; §VII: RL&#39;s gradient-free exploration ↔ TO&#39;s constraints and structure. <span class="add">[guide note] Together these notes form the 2022 map of model × learning research.</span></span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif"><span data-lang="zh">What the Survey Synthesizes(綜述的產出)</span><span data-lang="en">What the Survey Synthesizes</span></h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">設計空間地圖:Table I 重建(接觸模型 × 步態 × 動力學 × 轉錄)</span><span data-lang="en">The design-space map: Table I rebuilt (contact × gait × dynamics × transcription)</span></h3>
+        <p data-lang="zh">綜述最實用的產出:把 60+ 篇代表作放進四軸矩陣。<span style="color:var(--muted);font-size:13px">(文獻編號為原文引用編號;綠底=實用系統最擁擠的區塊)</span></p>
+        <p data-lang="en">The survey&#39;s most practical artifact: 60+ representative papers in a four-axis matrix. <span style="color:var(--muted);font-size:13px">(Bracketed numbers are the original citations; green = the most crowded practical cells.)</span></p>
+        <table class="compact">
+          <tr><th><span data-lang="zh">文獻群</span><span data-lang="en">Papers</span></th><th><span data-lang="zh">接觸模型</span><span data-lang="en">Contact model</span></th><th><span data-lang="zh">步態</span><span data-lang="en">Gait</span></th><th><span data-lang="zh">動力學</span><span data-lang="en">Dynamics</span></th><th>Transcription</th></tr>
+          <tr><td>[1]–[9]</td><td>Soft/Smoothed</td><td>Optimized</td><td>Full</td><td>DDP</td></tr>
+          <tr><td>[10] · [11]</td><td>Soft/Smoothed</td><td>Optimized</td><td>Full · <span data-lang="zh">簡化</span><span data-lang="en">Simplified</span></td><td>Collocation</td></tr>
+          <tr><td>[12], [13]</td><td>Rigid</td><td>Optimized</td><td>Full</td><td>DDP</td></tr>
+          <tr><td>[14]–[20]</td><td>Rigid</td><td>Optimized</td><td>Full</td><td>Collocation</td></tr>
+          <tr><td>[21]–[27]</td><td>Rigid</td><td>Optimized</td><td><span data-lang="zh">簡化</span><span data-lang="en">Simplified</span></td><td>Collocation</td></tr>
+          <tr><td>[28]–[32]</td><td>Rigid</td><td>Fixed</td><td>Full</td><td>DDP</td></tr>
+          <tr><td>[33]–[36]</td><td>Rigid</td><td>Fixed</td><td>Full</td><td>Multiple Shooting</td></tr>
+          <tr><td>[37]–[40]</td><td>Rigid</td><td>Fixed</td><td>Full</td><td>Collocation</td></tr>
+          <tr><td>[30], [41] · [42]–[44]</td><td>Rigid</td><td>Fixed</td><td><span data-lang="zh">簡化</span><span data-lang="en">Simplified</span></td><td>Mult. Shooting · DDP</td></tr>
+          <tr class="win"><td>[45]–[52]</td><td>Rigid</td><td>Fixed</td><td><span data-lang="zh">簡化</span><span data-lang="en">Simplified</span></td><td>Collocation</td></tr>
+          <tr class="win"><td>[53]–[62]</td><td>Rigid</td><td>Fixed</td><td><span data-lang="zh">簡化</span><span data-lang="en">Simplified</span></td><td>Single Shooting</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">讀法:<mark class="m-result" data-t="RESULT/EVIDENCE">「Rigid + 固定步態 + 簡化模型」是實用系統的重心</mark>(LIP/SRB 一脈,含經典 LIP-MPC [53]–[62]);「Optimized 步態」(讓優化自己選接觸)幾乎都得付出 soft 模型或 collocation+互補約束的代價;<mark class="m-result" data-t="RESULT/EVIDENCE">DDP 是全模型線上 MPC 的主要載體</mark>。</p>
+        <p data-lang="en">How to read it: <mark class="m-result" data-t="RESULT/EVIDENCE">"Rigid + fixed gait + simplified model" is where practical systems concentrate</mark> (the LIP/SRB lineage incl. classic LIP-MPC [53]–[62]); freeing the gait ("Optimized") almost always costs you soft models or collocation with complementarity; <mark class="m-result" data-t="RESULT/EVIDENCE">DDP is the main vehicle for full-model online MPC</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">模型可行域的包含關係(Fig.5)</span><span data-lang="en">Containment of model feasibility sets (Fig.5)</span></h3>
+        <figure class="fig"><img src="figs/Wensing2022/fig5_feasible.png" alt="Figure 5 feasible sets">
+          <figcaption data-lang="zh"><b>Fig.5</b> 各模型「可行運動集合」:whole-body 嚴格包含於 centroidal(投影不加限制,反向不成立——centroidal 可行不代表全身可行!);點質量(\(k_G=0\))嚴格在 centroidal 內;LIP / SLIP 因只管 CoP、放掉完整 GRF 限制,與點質量集合<b>互有交錯</b>;SRB 因 \(I_G=\)const. 是近似而非限制,以虛線另計。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> Feasible-motion sets per model: whole-body is strictly inside centroidal (projection adds no restriction—but the converse fails: centroidal-feasible does not imply whole-body feasible!); point mass (\(k_G=0\)) sits strictly inside centroidal; LIP / SLIP relax full GRF limits to CoP-only, so they <b>overlap</b> rather than nest with the point-mass set; SRB (\(I_G=\)const.) is an approximation, not a restriction—hence the dashed outline.</figcaption></figure>
+        <p data-lang="zh">這張圖回答工程上最常見的問題:「<b>用簡化模型規劃出來的軌跡,機器人到底做不做得到?</b>」——centroidal 答案是「全身可行 ⇒ centroidal 可行」但反之不然,所以仍需 heuristic 約束(可達性、角動量上限)或 kinodynamic 聯合求解來收緊缺口。</p>
+        <p data-lang="en">It answers the engineer&#39;s most common question: "<b>can the robot actually execute a plan from the simplified model?</b>"—for centroidal: whole-body feasible ⇒ centroidal feasible but not conversely, hence heuristic constraints (reachability, momentum bounds) or joint kinodynamic solves to close the gap.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">成熟技術的樣子:簡化模型計畫 + 全身 QP(Fig.8)</span><span data-lang="en">Mature technology in one picture: simple-model plan + whole-body QP (Fig.8)</span></h3>
+        <figure class="fig"><img src="figs/Wensing2022/fig8_wbc.png" alt="Figure 8 WBC pipeline">
+          <figcaption data-lang="zh"><b>Fig.8</b> 經典管線:左邊簡化模型給出樓梯上的 CoM 軌跡與期望力;右邊 Whole-Body QP 在完整機器人+環境模型上,同時滿足關節參考、避碰、防滑、穩定性、關節/扭矩極限、接觸約束,輸出瞬時扭矩。這是十年下來<mark class="m-result" data-t="RESULT/EVIDENCE">已「近乎普世」的可靠技術</mark>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.8</b> The classic pipeline: a simple-model plan (CoM trajectory + desired forces on stairs) feeds a Whole-Body QP that, on the full robot + environment model, satisfies joint references, collision avoidance, slippage limits, stability, joint/torque limits, and contacts, emitting instantaneous torques. After a decade this is <mark class="m-result" data-t="RESULT/EVIDENCE">reliable, near-universal technology</mark>.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">趨勢綜合(§VII.A)+ 領域時間軸</span><span data-lang="en">Trend synthesis (§VII.A) + field timeline</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">軸</span><span data-lang="en">Axis</span></th><th><span data-lang="zh">近五年趨勢</span><span data-lang="en">Five-year trend</span></th><th><span data-lang="zh">但是…</span><span data-lang="en">But…</span></th></tr>
+          <tr><td><b><span data-lang="zh">接觸</span><span data-lang="en">Contact</span></b></td><td><span data-lang="zh">contact-implicit 增多(compliant 或 MIP/LCP)</span><span data-lang="en">more contact-implicit work (compliant or MIP/LCP)</span></td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">速度與非凸性仍卡關;近期實用部署仍以固定序列為主</mark></span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">speed and non-convexity still gate it; fixed sequences remain the practical default</mark></span></td></tr>
+          <tr><td><b><span data-lang="zh">模型</span><span data-lang="en">Models</span></b></td><td><span data-lang="zh">MPC 用的模型越來越完整(已有全模型 MPC 上真機),受惠於<mark class="m-result" data-t="RESULT/EVIDENCE">動力學導數的快速開源庫</mark></span><span data-lang="en">ever more complete models in MPC (full-model MPC on hardware), enabled by <mark class="m-result" data-t="RESULT/EVIDENCE">fast open-source dynamics-derivative libraries</mark></span></td><td><span data-lang="zh">Moore 定律終結 → 押注平行化;非凸性不會消失,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">簡化模型近期內仍有戲</mark></span><span data-lang="en">post-Moore → bet on parallelism; non-convexity stays, so <mark class="m-assume" data-t="ASSUMPTION/CLAIM">simple models remain pertinent</mark></span></td></tr>
+          <tr><td><b>Transcription</b></td><td><span data-lang="zh">DDP 當紅(高自由度可擴展)+ collocation 的接觸擴展;稀疏 Riccati 型求解器把 DDP 的優勢帶回其他轉錄</span><span data-lang="en">DDP ascendant (high-DoF scalability) + contact-aware collocation; sparse Riccati-like solvers port DDP advantages to other transcriptions</span></td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">收斂到不可行解仍是所有轉錄的通病</mark></span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">convergence to infeasible points plagues all transcriptions</mark></span></td></tr>
+        </table>
+        <div class="flow">
+          <div class="step"><span class="ph mono">1990s–2000s</span><b><span data-lang="zh">QP 力矩控制萌芽</span><span data-lang="en">QP torque control emerges</span></b><small><span data-lang="zh">冗餘機械臂 → 模擬人形;凸優化理論成熟</span><span data-lang="en">redundant arms → simulated humanoids; convex optimization matures</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">2007–2015</span><b><span data-lang="zh">反應式凸控制普及</span><span data-lang="en">Reactive convex control goes mainstream</span></b><small><span data-lang="zh">被質疑(算力/放棄閉式解)→ DRC 時代成為標配</span><span data-lang="en">doubted (compute / no closed form) → standard by the DRC era</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">2015–2022</span><b><span data-lang="zh">預測式控制爆發</span><span data-lang="en">Predictive control boom</span></b><small><span data-lang="zh">簡化模型 MPC 上產品(Spot 等);全身 MPC 首批真機展示</span><span data-lang="en">simple-model MPC in products (Spot etc.); first whole-body MPC hardware demos</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">2022+</span><b><span data-lang="zh">與學習合流?</span><span data-lang="en">Fusion with learning?</span></b><small><span data-lang="zh">作者預測:模型式結構 + RL 探索互補</span><span data-lang="en">authors&#39; bet: model-based structure + RL exploration</span></small></div>
+        </div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">一句話評估:<b>這篇綜述給的是「定性地圖 + 判斷」,不是定量 benchmark</b>——它證明了領域敘事的一致性(所有工作都是同一 OCP 的折衷),但沒有證明哪個折衷客觀最好。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">One-line assessment: <b>the survey delivers a qualitative map plus judgment, not a quantitative benchmark</b>—it establishes a coherent narrative (all work as compromises on one OCP) but does not establish which compromise is objectively best.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">產出=<b>一張四軸設計空間地圖(Table I)+ 一棵簡化模型譜系樹(Fig.4/5)+ 一套轉錄選型表(Table II)+ WBC 成熟技術報告</b>,外加「與學習合流」的路線圖。</span>
+        <span data-lang="en">Deliverables = <b>a four-axis design-space map (Table I) + a simplified-model family tree (Fig.4/5) + a transcription chooser (Table II) + a WBC maturity report</b>, plus a roadmap for fusing with learning.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">代表性數字</span><span data-lang="en">Representative numbers</span></span>
+        <span data-lang="zh">WBC QP 求解:<b>數百 µs ~ 數 ms</b>;控制週期 <b>1–10 ms</b>;分類文獻 <b>60+ 篇</b>(Table I);引用總數 213。<span class="add">[導讀補充] 綜述本身無實驗,這些是全文僅有的量化錨點。</span></span>
+        <span data-lang="en">WBC QP solves: <b>hundreds of µs to a few ms</b>; control periods <b>1–10 ms</b>; <b>60+ papers</b> classified (Table I); 213 references. <span class="add">[guide note] The survey runs no experiments; these are its only quantitative anchors.</span></span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">別誤讀 Fig.5</span><span data-lang="en">Do not misread Fig.5</span></div>
+        <span data-lang="zh">圖中面積大小<b>不代表</b>可行運動範圍大小(作者特別聲明);它只表達「包含 / 交錯」的邏輯關係。且 LIP/SLIP <b>不在</b>點質量集合內——因為它們反而放鬆了 GRF 約束,只管 CoP。</span>
+        <span data-lang="en">Region sizes carry <b>no</b> quantitative meaning (the authors say so explicitly); only containment / overlap logic. And LIP/SLIP are <b>not</b> inside the point-mass set—they relax full GRF feasibility down to CoP-only.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">簡化模型會被淘汰?</span><span data-lang="en">simple models obsolete?</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">分類 ≠ 評比</span><span data-lang="en">taxonomy ≠ ranking</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>只分類、不評比</b>:Table I 是地圖不是排行榜——<mark class="m-limit" data-t="LIMITATION/FUTURE">全文沒有任何跨方法的統一量化比較</mark>(解算時間、成功率、硬體軌跡誤差)。讀者知道每個 cell 有誰,但不知道哪個 cell 在什麼條件下贏。同 cell 內的方法差異可能大於跨 cell。</li>
+          <li data-lang="en"><b>Taxonomy without ranking</b>: Table I is a map, not a leaderboard—<mark class="m-limit" data-t="LIMITATION/FUTURE">there is no unified quantitative comparison across methods</mark> (solve times, success rates, hardware tracking error). You learn who occupies each cell, not which cell wins under which conditions. Within-cell variance may exceed between-cell variance.</li>
+          <li data-lang="zh"><b>立場可預期地偏模型派</b>:六位作者都是模型式優化的領軍人物。對 RL 的處理是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">每章末的「關係」小節+展望</mark>,承認其長處(gradient-free、探索)但敘事仍是「RL 來補模型的洞」。2022 年後大規模 sim-to-real RL(含盲走/感知步行)的爆發,使「模型式為主幹」的預設值得重審。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>Predictably model-based framing</b>: all six authors lead model-based optimization. RL gets <mark class="m-assume" data-t="ASSUMPTION/CLAIM">per-section "relationship" notes plus the outlook</mark>—its strengths acknowledged (gradient-free, exploratory) but narrated as "RL patches model-based holes." The post-2022 explosion of large-scale sim-to-real RL (blind and perceptive locomotion) makes the model-first default worth re-examining. <span class="add">[guide note]</span></li>
+          <li data-lang="zh"><b>四軸分類壓掉了關鍵維度</b>:感知整合、狀態估計、強健性(robust/stochastic)、計算平台都不在 Table I 的軸上;作者自己也把 <mark class="m-limit" data-t="LIMITATION/FUTURE">formal analysis 與 robustness 列為 open problem</mark>——等於承認地圖缺了幾個座標軸。</li>
+          <li data-lang="en"><b>The four axes flatten key dimensions</b>: perception integration, state estimation, robustness (robust/stochastic), and compute platforms are absent from Table I; the authors themselves list <mark class="m-limit" data-t="LIMITATION/FUTURE">formal analysis and robustness as open problems</mark>—conceding the map is missing axes.</li>
+          <li data-lang="zh"><b>「拆解是藝術」被承認、但沒被解決</b>:Fig.2 的三種架構沒有附選擇準則(什麼任務/算力該選哪種)。對綜述的目標讀者(新生)而言,這是最需要 guidance 的決策,卻只得到「remains an art」。</li>
+          <li data-lang="en"><b>"Decomposition is an art"—acknowledged, not addressed</b>: Fig.2&#39;s three architectures come with no selection criteria (which task/compute budget favors which). For the survey&#39;s target reader (new students), this is the decision most in need of guidance, yet it gets only "remains an art."</li>
+          <li data-lang="zh"><b>範圍邊界</b>:聚焦雙足/四足/人形的<b>運動</b>;loco-manipulation 只以「把物體放進 \(x\)」帶過;軟體機器人、外骨骼、輪足混合、以及致動器層(串聯彈性、電流極限的熱模型)幾乎未觸及。硬體大戶(Boston Dynamics)的方法未公開,地圖對產業界實務的覆蓋只能靠推測。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>Scope boundaries</b>: focused on <b>locomotion</b> of bipeds/quadrupeds/humanoids; loco-manipulation appears only as "put the object into \(x\)"; soft robots, exoskeletons, wheel-leg hybrids, and the actuator level (series elasticity, thermal current limits) go nearly untouched. Industrial leaders (Boston Dynamics) publish little, so the map&#39;s coverage of industry practice is partly conjecture. <span class="add">[guide note]</span></li>
+          <li data-lang="zh"><b>快照時效</b>:arXiv 版是 2022-11;GPU 平行 MPC、sampling-based MPC、diffusion 類規劃器、以及 RL+模型混合(如 RL 追蹤 TO 參考)在其後快速演化——用它當入門地圖沒問題,<mark class="m-limit" data-t="LIMITATION/FUTURE">當「現況」引用要小心過時</mark>。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>A 2022 snapshot</b>: the arXiv version is 2022-11; GPU-parallel MPC, sampling-based MPC, diffusion-style planners, and RL+model hybrids (e.g., RL tracking TO references) evolved fast afterwards—fine as an entry map, <mark class="m-limit" data-t="LIMITATION/FUTURE">risky to cite as the current state</mark>. <span class="add">[guide note]</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>RL 反客為主?</b>模型派的兩大賣點是「安全約束」與「泛化」。當 RL+安全過濾器(CBF/shielding)能給約束、大規模域隨機化能給泛化時,模型式 MPC 剩下的不可替代性是什麼?</li>
+          <li data-lang="en"><b>RL takeover?</b> The model-based pitch rests on safety constraints and generalization. Once RL + safety filters (CBF/shielding) provide constraints and massive domain randomization provides generalization, what remains irreplaceable about model-based MPC?</li>
+          <li data-lang="zh"><b>contact-implicit 值得繼續押注嗎?</b>作者一面說梯度優化「fundamentally unsuited」於非平滑接觸問題,一面預測 contact-implicit 是趨勢。若根本工具不合適,正確結論是不是換工具(sampling / RL / 混合離散搜尋),而非繼續修補?</li>
+          <li data-lang="en"><b>Is contact-implicit still worth the bet?</b> The authors call gradient-based optimization "fundamentally unsuited" to non-smooth contact problems, yet forecast contact-implicit methods as a trend. If the tool is fundamentally wrong, is the right conclusion to switch tools (sampling / RL / hybrid discrete search) rather than keep patching?</li>
+          <li data-lang="zh"><b>簡化模型的壽命</b>:全模型 MPC 已上真機,而作者仍斷言簡化模型「近期內仍然重要」——理由是非凸性而非算力。這個論證成立嗎?若 warm start / 學到的 value function 能馴服非凸性,LIP/SRB 還剩什麼位置?</li>
+          <li data-lang="en"><b>The lifespan of simple models</b>: full-model MPC already runs on hardware, yet the authors insist simple models stay relevant—citing non-convexity, not compute. Does the argument hold? If warm starts / learned value functions tame non-convexity, what niche remains for LIP/SRB?</li>
+          <li data-lang="zh"><b>沒有穩定性證明的 MPC 憑什麼上真機?</b>作者承認 locomotion MPC 缺乏穩定性/遞迴可行性理論,真機靠工程 margin 撐住。那「模型式=可認證安全」的敘事是否言過其實?formal analysis 到底能換來多少實際性能(作者自己也說 it remains an open question)?</li>
+          <li data-lang="en"><b>Why trust MPC without stability proofs on hardware?</b> The authors admit locomotion MPC lacks stability / recursive-feasibility theory; hardware survives on engineering margins. Doesn&#39;t that overstate the "model-based = certifiably safe" narrative? And how much real performance would formal analysis actually buy (the authors themselves call this an open question)?</li>
+          <li data-lang="zh"><b>分類的效度</b>:Table I 的四軸是「作者社群」的座標系。若改用「感知閉環與否 × 計算預算 × 任務多樣性」重畫地圖,今日(2025+)的贏家分布會不會完全不同?</li>
+          <li data-lang="en"><b>Validity of the taxonomy</b>: Table I&#39;s four axes are the authoring community&#39;s coordinate system. Redraw the map with "perception-in-the-loop × compute budget × task diversity" and would the winners (2025+) land completely differently?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把這篇讀成「模型式 vs 學習式」的裁決書。它其實是<b>模型派的自我總結+主動求和</b>:結語明說希望模型式的結構與方法論「inform and accelerate RL solutions」。同樣地,別把「WBC 已成熟」讀成「控制已解決」——作者強調位置級不等式、強健性、形式化保證都還開著。</span>
+        <span data-lang="en">Reading it as a verdict in "model-based vs learning." It is the model-based camp&#39;s <b>self-synthesis plus peace offer</b>: the closing explicitly hopes model-based structure and methodology "inform and accelerate RL solutions." Likewise, "WBC is mature" does not mean "control is solved"—position-level inequalities, robustness, and formal guarantees remain open.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">自我批評相當坦率:承認拆解是藝術、梯度法不適合非平滑問題、缺 formal analysis、成本函數設計仍靠專家(連「開門」的成本都寫不出來)。教學價值高:每章自成教程,Fig.3/4/5 三張圖就能講清楚接觸與模型選擇的本質。</span>
+        <span data-lang="en">Candid self-criticism: decomposition is an art, gradient methods fundamentally unsuited to non-smooth problems, no formal analysis, cost design still expert-bound (even "open a door" resists a cost function). High teaching value: each section is a self-contained tutorial, and Figs. 3/4/5 alone convey the essence of contact and model choice.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">和誰對照著讀</span><span data-lang="en">Read against</span></span>
+        <span data-lang="zh">把本綜述與 RL 路線的代表作(如 Hwangbo/Lee/Miki 的 ANYmal 系列)並讀,再對照具體系統論文(凸 MPC、WBIC、TOWR、Crocoddyl)驗證 Table I 的分類是否貼合——這是檢驗一篇綜述最誠實的方式。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">Pair it with flagship RL work (e.g., the Hwangbo/Lee/Miki ANYmal line), then check concrete systems papers (convex MPC, WBIC, TOWR, Crocoddyl) against Table I&#39;s cells—the most honest way to audit a survey. <span class="add">[guide note]</span></span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>當座標系用</b>:讀任何 legged / contact-rich 論文,先回答四個問題——接觸怎麼建模?順序誰定?模型簡化到哪層(Fig.4 樹上的哪個節點)?用哪種轉錄、線上還是線下?答完,論文的貢獻與代價自動浮現。</li>
+          <li data-lang="en"><b>Use it as a coordinate system</b>: for any legged / contact-rich paper, answer four questions—how is contact modeled? who picks the sequence? which node of the Fig.4 tree is the model? which transcription, online or offline? The contribution and its costs fall out automatically.</li>
+          <li data-lang="zh"><b>「三難點」框架可移植</b>:非平滑接觸 × 非凸 × 高維的診斷,同樣適用於靈巧操作、雙臂裝配等 contact-rich 任務;那邊的方法演化(平滑化、簡化模型、warm start、學習前處理)正在重演足式的劇本。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>The three-difficulty frame transfers</b>: the non-smooth × nonconvex × high-dimensional diagnosis applies equally to dexterous manipulation and bimanual assembly; methods there (smoothing, template models, warm starts, learned pre-solves) are replaying the legged script. <span class="add">[guide note]</span></li>
+          <li data-lang="zh"><b>做「模型 × 學習」的人</b>:每章末的 Relationship-to-learning 小節就是題目清單——學接觸模型、學模式序列 pre-solve、自動發現簡化模型、學 value function 縮 horizon、TO 保證安全的 RL。其中「自動發現簡化模型」被作者點名為 open problem。</li>
+          <li data-lang="en"><b>For model × learning researchers</b>: the per-section Relationship-to-learning notes are a topic list—learned contact models, learned mode-sequence pre-solves, auto-discovered simple models, learned value functions to shorten horizons, TO-certified safe RL. "Automatic discovery of simple models" is explicitly flagged as open.</li>
+          <li data-lang="zh"><b>工程直覺</b>:先固定接觸順序把系統跑起來(最擁擠的 Table I 綠色區),把 contact-implicit 留給離線動作探索;WBC 一層幾乎永遠值得加;換模型之前先確認瓶頸是「模型不夠準」還是「求解器掉進壞局部解」。</li>
+          <li data-lang="en"><b>Engineering instinct</b>: fix the contact sequence first and get the system running (the crowded green cells of Table I); keep contact-implicit for offline behavior discovery; a WBC layer is almost always worth it; before upgrading the model, check whether the bottleneck is model fidelity or the solver falling into bad local minima.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What is worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇的…</span><span data-lang="en">Cite this for…</span></th></tr>
+          <tr><td><span data-lang="zh">「足式控制已收斂到 OCP 形式」/ 領域概況</span><span data-lang="en">"Legged control converged on the OCP formulation" / field overview</span></td><td><span data-lang="zh">§I–II 的統一形式(式 1)與 Table I 的設計空間分類——綜述級引用的標準選擇。</span><span data-lang="en">The unified formulation (Eq. 1) in §I–II and the Table I design-space taxonomy—the standard survey-level citation.</span></td></tr>
+          <tr><td><span data-lang="zh">「接觸讓梯度優化先天困難」</span><span data-lang="en">"Contact makes gradient-based optimization fundamentally hard"</span></td><td><span data-lang="zh">§III 的 non-analytic 論證、Fig.3 的敏感度比較、以及「梯度法 fundamentally unsuited」的結論句。</span><span data-lang="en">§III&#39;s non-analyticity argument, Fig.3&#39;s sensitivity comparison, and the "fundamentally unsuited" verdict.</span></td></tr>
+          <tr><td><span data-lang="zh">「centroidal 是精確投影;LIP/SRB 是受限特例」</span><span data-lang="en">"Centroidal is an exact projection; LIP/SRB are restricted special cases"</span></td><td><span data-lang="zh">§IV 與 Fig.4/5 的譜系與集合關係。</span><span data-lang="en">§IV with the Fig.4/5 lineage and set containments.</span></td></tr>
+          <tr><td><span data-lang="zh">「WBC QP 是成熟標準技術」</span><span data-lang="en">"Whole-body QP control is mature, standard technology"</span></td><td><span data-lang="zh">§VI(公式、加權 vs 階層、µs–ms 求解時間)。</span><span data-lang="en">§VI (formulation, weighted vs hierarchical, µs–ms solve times).</span></td></tr>
+          <tr><td><span data-lang="zh">「模型式與學習式應互補」</span><span data-lang="en">"Model-based and learning-based methods are complementary"</span></td><td><span data-lang="zh">§VII(RL=gradient-free+探索;PG≈randomized smoothing;TO 給結構/約束/warm start)。</span><span data-lang="en">§VII (RL = gradient-free + exploration; PG ≈ randomized smoothing; TO supplies structure/constraints/warm starts).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">十年足式機器人的模型式控制=「一個解不動的 OCP,沿接觸、模型、轉錄、執行四軸讓步到可跑」;這篇綜述把讓步的全部選項畫成一張地圖,並預告下一步:讓模型式的結構,去加速而非對抗學習式的控制。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">A decade of model-based legged control = "one unsolvable OCP, conceded along contact, model, transcription, and execution until it runs"; this survey draws the complete map of those concessions—and calls the next move: let model-based structure accelerate, not fight, learning-based control.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Convex MPC (SRB)</span>
+          <span class="chip">WBIC / WBC</span>
+          <span class="chip">TOWR / Winkler</span>
+          <span class="chip">Crocoddyl · OCS2</span>
+          <span class="chip">Pinocchio</span>
+          <span class="chip">RL locomotion (ANYmal)</span>
+        </div>
+        <p data-lang="zh" style="margin:8px 0 0;font-size:13px;color:var(--muted)">本庫閱讀順序建議:先讀本篇拿地圖,再讀凸 MPC(Table I 的 SRB+固定步態格)與 WBC 類論文(§VI 的實例),對照驗證分類。<span class="add">[導讀補充]</span></p>
+        <p data-lang="en" style="margin:8px 0 0;font-size:13px;color:var(--muted)">Suggested library order: read this first for the map, then convex-MPC (the SRB + fixed-gait cell of Table I) and WBC papers (instances of §VI), checking them against the taxonomy. <span class="add">[guide note]</span></p>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文(arXiv:2211.11644v1)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences; all other facts and figures come from the original paper (arXiv:2211.11644v1).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Wensing, Posa, Hu, Escande, Mansard, Del Prete 2022 · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Optimization-based control survey reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

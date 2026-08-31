@@ -23,6 +23,11 @@ Method · Results · Critique · Takeaway** — with:
 - **Umbrella** — *Robots Need More Than VLAs & World Models* (position paper, 2026)
 - 🧵 **[Synthesis](papers/Synthesis_ForceManipulation.html)** — head-to-head comparison of the two lines
 
+### 🦿 Legged Robots: Two Roads to Control
+*Model-based optimization vs learned locomotion — curated from the [Legged-Robots](https://github.com/singhaman1750/Legged-Robots) list.*
+- **Model-based** — WBIC+MPC (Kim 2019, MIT Mini-Cheetah) → Optimization-Based Control survey (T-RO 2022+)
+- **Learning** — Motion Imitation (Peng 2020) → RMA (2021) → Walk These Ways (2022) → DreamWaQ (2023)
+
 ### ✂️ The Segment Anything Series
 *One promptable machine, four dimension expansions: space → time → semantics → 3D.*
 - **SAM** (2023) → **SAM 2** (2024) → **SAM 3** (2025) → **SAM 3D** (2025) — Meta FAIR

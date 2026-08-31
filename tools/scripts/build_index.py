@@ -50,6 +50,33 @@ CLUSTERS = [
         ],
     },
     {
+        "id": "legged", "emoji": "🦿", "accent": "#a0522d",
+        "title_zh": "足式機器人:控制的兩條路",
+        "title_en": "Legged Robots: Two Roads to Control",
+        "blurb_zh": ("四足控制的兩種世界觀——又一次「模型 vs 學習」的對照(與力覺串同構)。"
+                     "<b>Model-based 線</b>:把動力學寫成模型、線上解最佳化——凸 MPC 規劃地面反作用力、500 Hz 全身 QP「追力而非追軌跡」(WBIC),"
+                     "Mini-Cheetah 用同一組參數跑六種步態、最高 3.7 m/s;Wensing 等的 T-RO 綜述把「接觸建模→簡化模型→數值轉錄→全身 QP」整條工具鏈畫成地圖。"
+                     "<b>Learning 線</b>:模擬器大規模 RL、零樣本上真機——模仿動物(Motion Imitation)→ 1 秒內線上適應環境 extrinsics(RMA)→ "
+                     "一個 policy 多種步態的行為旋鈕(Walk These Ways)→ 非對稱 actor-critic 的隱式地形想像、單卡一小時訓完(DreamWaQ)。"
+                     "跨串彩蛋:RMA 出自 Pathak 組——與力覺串的 FACTR 同一實驗室。"),
+        "blurb_en": ("Two worldviews for quadruped control — another model-vs-learning contrast (isomorphic to the force thread). "
+                     "<b>Model-based line</b>: write down the dynamics and optimize online — convex MPC plans ground-reaction forces, a 500 Hz whole-body QP tracks forces rather than trajectories (WBIC); "
+                     "Mini-Cheetah runs six gaits up to 3.7 m/s with one parameter set; the Wensing et al. T-RO survey maps the whole toolchain (contact modeling → reduced models → transcription → whole-body QP). "
+                     "<b>Learning line</b>: massive RL in sim, zero-shot to hardware — imitate animals (Motion Imitation) → adapt online to environment extrinsics within a second (RMA) → "
+                     "one policy, many gaits via behavior knobs (Walk These Ways) → implicit terrain imagination with asymmetric actor-critic, trained in one hour on one GPU (DreamWaQ). "
+                     "Cross-thread egg: RMA comes from the Pathak lab — the same lab as FACTR in the force thread."),
+        "context": None,
+        "lineages": [
+            {"label_zh": "Model-based:最佳化控制", "label_en": "Model-based: optimization control",
+             "chain": ["Kim2019", "Wensing2022"],
+             "edges_zh": ["系統實作 → 領域綜述"], "edges_en": ["system → field survey"]},
+            {"label_zh": "Learning-based:RL 運動控制", "label_en": "Learning-based: RL locomotion",
+             "chain": ["Peng2020", "Kumar2021", "Margolis2022", "Nahrendra2023"],
+             "edges_zh": ["模仿動物 → 快速適應", "→ 行為多樣性", "→ 隱式地形想像"],
+             "edges_en": ["imitate → rapid adaptation", "→ behavior multiplicity", "→ terrain imagination"]},
+        ],
+    },
+    {
         "id": "sam", "emoji": "✂️", "accent": "#0f9b8e",
         "synthesis": "Synthesis_SegmentAnything.html",
         "synthesis_note_zh": "：四代橫向比較表 + 不變的配方 →",

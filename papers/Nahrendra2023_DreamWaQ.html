@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>DreamWaQ — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"DreamWaQ: Learning Robust Quadrupedal Locomotion with Implicit Terrain Imagination via Deep Reinforcement Learning","authors":"I Made Aswin Nahrendra, Byeongho Yu, Hyun Myung","year":"2023","venue":"ICRA","tags":["Legged Robotics","Reinforcement Learning","Sim-to-Real","Asymmetric Actor-Critic","State Estimation","Quadruped"],"tldr":"只用 IMU+關節編碼器:非對稱 actor-critic 讓 critic 看特權地形資訊、actor 從時序本體觀測「想像」地形,再用 CENet(共享編碼器 β-VAE)聯合估測體速與環境 context;單階段訓練、1 小時 RTX 3060Ti,即讓 Unitree A1 零樣本走上樓梯、山坡與 430–465 m 野外長程。","tldr_en":"Proprioception-only locomotion: an asymmetric actor-critic lets the critic see privileged terrain info while the actor implicitly imagines it from temporal observations; a shared-encoder beta-VAE (CENet) jointly estimates body velocity and context. One training stage, one hour on an RTX 3060Ti, zero-shot to a Unitree A1 walking stairs, hills, and 430-465 m outdoor courses."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:110px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">DreamWaQ 讓四足機器人<b>只靠本體感測(IMU + 關節編碼器)</b>走過崎嶇地形:訓練時用<b>非對稱 actor-critic</b>——critic 看得到高度圖與擾動等<b>特權資訊</b>,actor 只看時序本體觀測,被迫<mark class="m-method" data-t="METHOD/IDEA">隱式地「想像」地形</mark>;再用 <b>CENet</b>(共享編碼器的 β-VAE)聯合估測體速 \(\mathbf{v}_t\) 與環境 context \(\mathbf{z}_t\)。<mark class="m-result" data-t="RESULT/EVIDENCE">單階段訓練、一張 RTX 3060Ti 一小時</mark>,零樣本部署到 Unitree A1,實地走完樓梯、泥濘坡與 430–465 m 長程野外。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">DreamWaQ makes a quadruped walk rough terrain <b>using proprioception only (IMU + joint encoders)</b>: training uses an <b>asymmetric actor-critic</b>—the critic sees <b>privileged information</b> (height map, disturbances) while the actor sees only temporal proprioceptive observations, forcing it to <mark class="m-method" data-t="METHOD/IDEA">implicitly &quot;imagine&quot; the terrain</mark>; a <b>CENet</b> (shared-encoder β-VAE) jointly estimates body velocity \(\mathbf{v}_t\) and an environment context \(\mathbf{z}_t\). <mark class="m-result" data-t="RESULT/EVIDENCE">One training stage, one hour on a single RTX 3060Ti</mark>, deployed zero-shot on a Unitree A1 that walked stairs, muddy slopes, and 430–465 m outdoor courses.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Nahrendra2023/fig1_overview.png" alt="Figure 1 DreamWaQ overview">
+        <figcaption data-lang="zh"><b>Fig.1</b> DreamWaQ 總覽。上(模擬訓練):CENet 從時序觀測 \(\mathbf{o}_t^H\) 估出 \(\mathbf{z}_t,\mathbf{v}_t\) 餵給 actor(512×256×128×12);critic(512×256×128×1)另外看特權觀測 \(\mathbf{s}_t\)(含高度圖)。下(零樣本 sim-to-real):部署時只剩 CENet + actor,不需任何外感測。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> DreamWaQ overview. Top (training in simulation): CENet estimates \(\mathbf{z}_t,\mathbf{v}_t\) from temporal observations \(\mathbf{o}_t^H\) for the actor (512×256×128×12); the critic (512×256×128×1) additionally sees the privileged observation \(\mathbf{s}_t\) (incl. height map). Bottom (zero-shot sim-to-real): at deployment only CENet + actor remain—no exteroception needed.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 感知式 RL 步行策略依賴<mark class="m-problem" data-t="PROBLEM/GAP">相機/LiDAR,在惡劣天候會失效,也看不出雪地鬆軟、長草可穿越等物理性質</mark>;而純本體感測的既有做法(teacher-student 特權蒸餾)受<mark class="m-problem" data-t="PROBLEM/GAP">行為克隆上限與兩階段訓練低效</mark>所困,長距離實地驗證有限。</li>
+          <li data-lang="en"><b>Problem</b> — Perceptive RL policies depend on <mark class="m-problem" data-t="PROBLEM/GAP">cameras/LiDAR that fail in adverse weather and cannot sense physical properties (soft snow, traversable tall grass)</mark>; existing proprioception-only recipes (teacher-student privileged distillation) suffer a <mark class="m-problem" data-t="PROBLEM/GAP">behavior-cloning bound and inefficient two-stage training</mark>, with limited long-distance field validation.</li>
+          <li data-lang="zh"><b>方法</b> — <mark class="m-method" data-t="METHOD/IDEA">非對稱 actor-critic</mark>:critic 看特權狀態 \(\mathbf{s}_t\)、actor 只看 \(\mathbf{o}_t^H\)(H=5),一階段學會「隱式地形想像」;<mark class="m-method" data-t="METHOD/IDEA">CENet</mark> 用共享編碼器同時回歸 \(\mathbf{v}_t\) 並以 β-VAE 重建 \(\mathbf{o}_{t+1}\) 學 \(\mathbf{z}_t\);<mark class="m-method" data-t="METHOD/IDEA">AdaBoot</mark> 依報酬變異係數自適應調 bootstrap 機率。</li>
+          <li data-lang="en"><b>Method</b> — <mark class="m-method" data-t="METHOD/IDEA">Asymmetric actor-critic</mark>: critic sees privileged \(\mathbf{s}_t\), actor sees only \(\mathbf{o}_t^H\) (H=5), learning &quot;implicit terrain imagination&quot; in one stage; <mark class="m-method" data-t="METHOD/IDEA">CENet</mark> shares one encoder to regress \(\mathbf{v}_t\) and learn \(\mathbf{z}_t\) by β-VAE reconstruction of \(\mathbf{o}_{t+1}\); <mark class="m-method" data-t="METHOD/IDEA">AdaBoot</mark> adapts the bootstrap probability by the reward coefficient of variation.</li>
+          <li data-lang="zh"><b>結果</b> — 學習曲線<mark class="m-result" data-t="RESULT/EVIDENCE">逼近能直接看高度圖的 oracle</mark>;抗推力 1.121 m/s、30 分鐘隨機走存活率 95.2%(baseline 僅 20.5%);Unitree A1 實地走完 430 m 庭園與 465 m、爬升 22 m 的山徑(約 10 分鐘)。</li>
+          <li data-lang="en"><b>Results</b> — Learning curves <mark class="m-result" data-t="RESULT/EVIDENCE">nearly match an oracle with direct height-map access</mark>; withstands 1.121 m/s pushes with a 95.2% 30-min survival rate (baseline: 20.5%); a Unitree A1 completed a 430 m yard course and a 465 m hill with 22 m elevation gain (~10 min).</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">四足步行控制有兩條路。<b>模型式管線</b>(ANYmal、Mini Cheetah 系列)串起狀態估測、軌跡/步態優化與致動器控制,<mark class="m-problem" data-t="PROBLEM/GAP">建模與調參成本高,線性化模型也限制了性能上限</mark>。<b>學習式</b>路線以 Rudin et al. 的大規模平行 RL(legged_gym)為基座;Miki et al. 的感知式策略登上 Science Robotics,但<mark class="m-assume" data-t="ASSUMPTION/CLAIM">仰賴可靠的外感測堆疊</mark>。</p>
+        <p data-lang="en">Quadruped control has two lineages. <b>Model-based pipelines</b> (ANYmal, Mini Cheetah) chain state estimation, trajectory/gait optimization and actuator control, with <mark class="m-problem" data-t="PROBLEM/GAP">heavy modeling/tuning cost and performance capped by linearized models</mark>. The <b>learning-based</b> line builds on Rudin et al. massively-parallel RL (legged_gym); Miki et al. put perceptive policies on Science Robotics, but they <mark class="m-assume" data-t="ASSUMPTION/CLAIM">presuppose a dependable exteroceptive stack</mark>.</p>
+        <p data-lang="zh">純本體感測這一支——Lee et al. 2020(Science Robotics)、<b>RMA</b>(Kumar et al. 2021)——用 <mark class="m-method" data-t="METHOD/IDEA">teacher-student 特權學習</mark>:老師看模擬器特權資訊,學生用行為克隆模仿。Ji et al. 2022 則改為<mark class="m-method" data-t="METHOD/IDEA">併行訓練顯式狀態估測器</mark>。DreamWaQ 站在這條線上,主張兩件事可以一次做完:<b>特權資訊走 critic 就好(不用老師),context 與體速用一顆共享編碼器一起估</b>。</p>
+        <p data-lang="en">The proprioception-only branch—Lee et al. 2020 (Science Robotics), <b>RMA</b> (Kumar et al. 2021)—uses <mark class="m-method" data-t="METHOD/IDEA">teacher-student privileged learning</mark>: a teacher sees simulator-privileged info, a student imitates via behavior cloning. Ji et al. 2022 instead <mark class="m-method" data-t="METHOD/IDEA">concurrently trains an explicit state estimator</mark>. DreamWaQ extends this line, arguing both can be folded into one pass: <b>route privileged info through the critic (no teacher), and estimate context + body velocity with one shared encoder</b>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的核心賭注是:<b>特權學習不需要蒸餾</b>。RL 演算法本身(PPO 的 actor-critic 互動)就足以把 critic 看到的特權資訊「壓」進 actor 的行為。這把過去的兩階段流程折成一段,訓練成本低到一張消費級 GPU 一小時。<span class="add">[導讀補充]</span> 低門檻 + 開源基座,讓 DreamWaQ 之後成為大量四足 RL 工作的標準 baseline 與骨幹。</p>
+          <p data-lang="en" style="margin-top:6px">The core bet: <b>privileged learning needs no distillation</b>. The RL algorithm itself (PPO actor-critic interplay) suffices to squeeze the critic-side privileged information into the actor behavior. This folds the two-stage pipeline into one, cutting the cost to one hour on a consumer GPU. <span class="add">[guide note]</span> The low barrier + open-source base made DreamWaQ a standard baseline and backbone for a wave of later quadruped-RL work.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不是「又一隻會走的狗」,而是幾個訓練配方層面的觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">The takeaway is not &quot;another walking robot&quot; but several recipe-level ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">Critic 就是特權通道。</b> 把高度圖、擾動力只餵給 value network,policy 只拿本體觀測——<mark class="m-method" data-t="METHOD/IDEA">非對稱 actor-critic 取代 teacher-student</mark>,一階段訓練,policy 可自由探索老師沒示範過的失敗狀態。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">The critic is the privileged channel.</b> Feed height maps and disturbance forces only to the value network; the policy gets proprioception—<mark class="m-method" data-t="METHOD/IDEA">asymmetric actor-critic replaces teacher-student</mark>: one stage, and the policy can explore failure states a teacher never demonstrated.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">估測與運動要「共學」。</b> 地形 context 與體速估測互相加持:CENet 的共享編碼器經 auto-encoding 同時學<b>前向/後向動力學</b>,在腳絆到樓梯時仍能準確估速——顯式估測器(EstimatorNet)此時會失準。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Estimation and locomotion must co-learn.</b> Terrain context and body-velocity estimation reinforce each other: the CENet shared encoder learns <b>forward/backward dynamics</b> via auto-encoding and stays accurate when a foot stumbles on stairs—where the explicit-only EstimatorNet breaks.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">地形可以是 16 維潛變數。</b> 「隱式地形想像」不是重建高度圖,而是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">把摩擦、彈性、障礙等性質壓進 \(\mathbf{z}_t\) 供 policy 調節步態</mark>——夠用就好,不必顯式感知。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Terrain can be a 16-D latent.</b> &quot;Implicit terrain imagination&quot; does not reconstruct the height map; it <mark class="m-assume" data-t="ASSUMPTION/CLAIM">compresses friction, restitution and obstacles into \(\mathbf{z}_t\) for gait modulation</mark>—sufficient, without explicit perception.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">Bootstrap 要看火候。</b> AdaBoot 用跨環境報酬的變異係數當「學得夠好了嗎」的訊號:\(p_{\text{boot}}=1-\tanh(CV(\mathbf{R}))\),學得穩才用估測值訓練,避免早期估測雜訊毒害 policy。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Bootstrap only when ready.</b> AdaBoot uses the reward coefficient of variation across environments as a &quot;learned enough?&quot; signal: \(p_{\text{boot}}=1-\tanh(CV(\mathbf{R}))\)—train on estimates only once learning stabilizes, avoiding early estimator noise poisoning the policy.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">硬體壽命也能寫進 reward。</b> 新增 power distribution 獎勵 \(\mathrm{var}(\boldsymbol{\tau}\cdot\dot{\boldsymbol{\theta}})^2\),懲罰馬達出力不均,直接針對實機長程行走的<b>過熱</b>問題。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Hardware longevity can live in the reward.</b> A new power-distribution reward \(\mathrm{var}(\boldsymbol{\tau}\cdot\dot{\boldsymbol{\theta}})^2\) penalizes uneven motor loading, directly targeting <b>overheating</b> during long real-world walks.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">DreamWaQ: Learning Robust Quadrupedal Locomotion with Implicit Terrain Imagination via Deep RL</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>I M. A. Nahrendra, B. Yu, H. Myung</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>KAIST (Urban Robotics Lab)</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2023 · ICRA(arXiv:2301.10602)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Legged Locomotion</span>
+          <b><span data-lang="zh">平台</span><span data-lang="en">Robot</span></b><span>Unitree A1 + Intel NUC</span>
+          <b><span data-lang="zh">網站</span><span data-lang="en">Site</span></b><span>sites.google.com/view/dreamwaq</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「盲走(blind locomotion)」的訓練配方精簡到極致:<b>不用外感測、不用老師、單階段、一小時、消費級 GPU</b>,而性能逼近看得到地形的 oracle。它證明 sim-to-real 特權學習可以又便宜又強。</span>
+        <span data-lang="en">It distills the blind-locomotion recipe to its minimum: <b>no exteroception, no teacher, one stage, one hour, a consumer GPU</b>—yet performance approaches a terrain-seeing oracle. Proof that sim-to-real privileged learning can be both cheap and strong.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Asymmetric Actor-Critic</span><span class="chip">CENet</span>
+          <span class="chip">β-VAE</span><span class="chip">PPO</span>
+          <span class="chip">Isaac Gym</span><span class="chip">AdaBoot</span>
+          <span class="chip">Zero-shot Sim-to-Real</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">模型式控制管線</span><span data-lang="en">Model-based pipelines</span></b><br><small>(ANYmal, Mini Cheetah…)</small></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">狀態估測→軌跡優化→步態優化→致動控制的長鏈</mark>,需大量人工建模與調參;線性化模型壓抑了機器人的真實能力。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">A long chain of state estimation → trajectory optimization → gait optimization → actuation</mark>, demanding heavy modeling and tuning; linearized models suppress the true capability.</span></td></tr>
+          <tr><td><b><span data-lang="zh">感知式 RL</span><span data-lang="en">Perceptive RL</span></b><br><small>(Miki 2022, etc.)</small></td><td><span data-lang="zh">仰賴相機/LiDAR:<mark class="m-problem" data-t="PROBLEM/GAP">惡劣天候與光照下會失效</mark>,且幾何看不出物理——雪看似堅硬其實鬆軟、長草看似不可通行其實能走。</span><span data-lang="en">Depends on cameras/LiDAR: <mark class="m-problem" data-t="PROBLEM/GAP">fails under adverse weather/lighting</mark>, and geometry misses physics—snow looks solid but is soft; tall grass looks impassable but is walkable.</span></td></tr>
+          <tr><td><b><span data-lang="zh">純本體感測既有工作</span><span data-lang="en">Proprioception-only prior work</span></b><br><small>(Lee 2020, RMA, Ji 2022)</small></td><td><span data-lang="zh">teacher-student 蒸餾有<mark class="m-problem" data-t="PROBLEM/GAP">性能上限與資料低效</mark>;實地展示多半短程,<mark class="m-problem" data-t="PROBLEM/GAP">長距離、多變地形下常因估測誤差而失效</mark>。</span><span data-lang="en">Teacher-student distillation has a <mark class="m-problem" data-t="PROBLEM/GAP">performance bound and data inefficiency</mark>; field demos are mostly short-range, <mark class="m-problem" data-t="PROBLEM/GAP">failing over long distances due to estimation errors</mark>.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">底層還有一個雞生蛋問題——<b>表徵學習瓶頸(representation learning bottleneck)</b>:policy 要懂地形才能走得穩,但要走得夠廣才能學懂地形。所以<mark class="m-method" data-t="METHOD/IDEA">策略與環境表徵必須聯合學習</mark>,不能拆開。</p>
+        <p data-lang="en" style="margin-top:14px">Underneath sits a chicken-and-egg issue—the <b>representation learning bottleneck</b>: the policy needs to understand terrain to walk robustly, yet must walk widely to learn terrain. Hence <mark class="m-method" data-t="METHOD/IDEA">policy and environment representation must be learned jointly</mark>, not sequentially.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,DreamWaQ 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how DreamWaQ fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">DreamWaQ 如何補上</span><span data-lang="en">How DreamWaQ fills it</span></th></tr>
+          <tr>
+            <td><b>Teacher-Student</b><br><small>(Lee 2020, RMA)</small></td>
+            <td><span data-lang="zh">行為克隆使<mark class="m-problem" data-t="PROBLEM/GAP">學生 ≤ 老師</mark>;兩階段訓練低效;學生看不到老師早期經歷的失敗狀態。</span><span data-lang="en">Behavior cloning <mark class="m-problem" data-t="PROBLEM/GAP">bounds student ≤ teacher</mark>; two stages are data-inefficient; the student never sees failure states the teacher explored early on.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">非對稱 actor-critic</mark>:特權資訊只進 critic,一階段 RL,policy 全程自主探索。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Asymmetric actor-critic</mark>: privileged info goes only to the critic; one RL stage; the policy explores throughout.</span></td>
+          </tr>
+          <tr>
+            <td><b>EstimatorNet</b><br><small>(Ji et al. 2022)</small></td>
+            <td><span data-lang="zh">只顯式估體態,<mark class="m-problem" data-t="PROBLEM/GAP">沒有環境 context</mark>;遇到沒學過的困難地形性能驟降。</span><span data-lang="en">Explicit body-state only, <mark class="m-problem" data-t="PROBLEM/GAP">no environment context</mark>; performance plummets on unseen hard terrain.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">CENet 共享編碼器</mark>同時出 \(\mathbf{v}_t\) 與 \(\mathbf{z}_t\),auto-encoding 學前向/後向動力學。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">CENet shared encoder</mark> outputs both \(\mathbf{v}_t\) and \(\mathbf{z}_t\); auto-encoding learns forward/backward dynamics.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">固定機率 bootstrap</span><span data-lang="en">Fixed-probability bootstrapping</span></b><br><small>(Ji et al. 2022)</small></td>
+            <td><span data-lang="zh">訓練早期估測雜訊大,<mark class="m-problem" data-t="PROBLEM/GAP">bootstrap 反而傷害 policy</mark>。</span><span data-lang="en">Early estimator noise is large; <mark class="m-problem" data-t="PROBLEM/GAP">bootstrapping then hurts the policy</mark>.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">AdaBoot</mark>:\(p_{\text{boot}}=1-\tanh(CV(\mathbf{R}))\),依學習成熟度自動調節。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">AdaBoot</mark>: \(p_{\text{boot}}=1-\tanh(CV(\mathbf{R}))\), auto-tuned by learning maturity.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意作者的定位:他們<b>不是</b>宣稱盲走勝過感知式系統,而是主張「當外感測不可靠或不可得時,本體感測能撐到什麼程度」。貢獻的重心在<b>訓練框架</b>(單階段特權學習 + 聯合估測),長程野外實驗則是給「撐得夠遠」的證據。</p>
+          <p data-lang="en" style="margin-top:6px">Note the positioning: the authors do <b>not</b> claim blind walking beats perceptive systems; they ask &quot;how far can proprioception go when exteroception is unreliable or unavailable?&quot; The core contribution is the <b>training framework</b> (one-stage privileged learning + joint estimation); the long outdoor runs evidence that it goes far enough.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">「隱式地形<b>想像</b>」聽起來像預知,其實是<b>反應式</b>的:資訊全部來自本體感測的歷史,<mark class="m-limit" data-t="LIMITATION/FUTURE">機器人得先「碰到」障礙,才能推斷它的存在</mark>(作者在結論明說)。它不是免費的視覺替代品。</span>
+        <span data-lang="en">&quot;Implicit terrain <b>imagination</b>&quot; sounds anticipatory but is <b>reactive</b>: all information comes from proprioceptive history, so <mark class="m-limit" data-t="LIMITATION/FUTURE">the robot must first hit an obstacle to infer it exists</mark> (stated in the conclusion). It is not a free substitute for vision.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">IMU + 關節編碼器<b>幾乎不會壞</b>:輕、便宜、不受天候光照影響。若盲走策略夠強,它就是所有感知式系統的<b>底線安全層</b>——外感測失效時仍能走。</span>
+        <span data-lang="en">IMU + joint encoders <b>rarely fail</b>: light, cheap, weather- and lighting-proof. A strong blind policy is the <b>safety floor</b> under any perceptive system—locomotion survives when exteroception dies.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">baseline 公平性</span><span data-lang="en">baseline fairness</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">實地只有 demo?</span><span data-lang="en">field = demo only?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">問題設定:POMDP 下的盲走</span><span data-lang="en">Setup: blind walking as a POMDP</span></h3>
+        <p data-lang="zh">環境是無限視野的<b>部分可觀測 MDP</b>。policy 只能看到本體觀測 \(\mathbf{o}_t\)(45 維),由 IMU 與關節編碼器直接量得:</p>
+        <p data-lang="en">The environment is an infinite-horizon <b>partially observable MDP</b>. The policy sees only the proprioceptive observation \(\mathbf{o}_t\) (45-D), measured directly by IMU and joint encoders:</p>
+        <div class="eq">$$\mathbf{o}_t=\big[\;\boldsymbol{\omega}_t\;\;\mathbf{g}_t\;\;\mathbf{c}_t\;\;\boldsymbol{\theta}_t\;\;\dot{\boldsymbol{\theta}}_t\;\;\mathbf{a}_{t-1}\;\big]^{\!T}$$</div>
+        <p data-lang="zh">(角速度、機身座標的重力向量、速度命令、關節角、關節角速度、上一步動作。)歷史堆疊 \(\mathbf{o}_t^H=[\mathbf{o}_t\;\mathbf{o}_{t-1}\cdots\mathbf{o}_{t-H}]^T\),本文取 <b>H=5</b>。critic 才看得到的<b>特權觀測</b>是</p>
+        <p data-lang="en">(Angular velocity, gravity vector in the body frame, velocity command, joint angles, joint velocities, previous action.) The temporal stack is \(\mathbf{o}_t^H=[\mathbf{o}_t\;\mathbf{o}_{t-1}\cdots\mathbf{o}_{t-H}]^T\) with <b>H=5</b>. The <b>privileged observation</b>, visible only to the critic, is</p>
+        <div class="eq">$$\mathbf{s}_t=\big[\;\mathbf{o}_t\;\;\mathbf{v}_t\;\;\mathbf{d}_t\;\;\mathbf{h}_t\;\big]^{\!T}$$</div>
+        <p data-lang="zh">其中 \(\mathbf{d}_t\) 是隨機施加在機身的擾動力、\(\mathbf{h}_t\) 是周圍地形的高度圖掃描。動作 \(\mathbf{a}_t\in\mathbb{R}^{12}\) 是繞站立姿勢的期望關節角:\(\boldsymbol{\theta}_{\text{des}}=\boldsymbol{\theta}_{\text{stand}}+\mathbf{a}_t\),由各關節 PD 控制器追蹤。</p>
+        <p data-lang="en">where \(\mathbf{d}_t\) is a random disturbance force on the body and \(\mathbf{h}_t\) a height-map scan of the surroundings. The action \(\mathbf{a}_t\in\mathbb{R}^{12}\) is the desired joint angle around the standing pose: \(\boldsymbol{\theta}_{\text{des}}=\boldsymbol{\theta}_{\text{stand}}+\mathbf{a}_t\), tracked by per-joint PD controllers.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 1:非對稱 actor-critic = 免老師的特權學習</span><span data-lang="en">Key idea 1: asymmetric actor-critic = teacher-free privileged learning</span></h3>
+        <p data-lang="zh">policy \(\pi_\phi(\mathbf{a}_t\,|\,\mathbf{o}_t,\mathbf{v}_t,\mathbf{z}_t)\) 用 PPO 訓練;value network \(V(\mathbf{s}_t)\) 吃完整特權狀態。因為 advantage 由「看得見地形」的 critic 計算,梯度會<mark class="m-method" data-t="METHOD/IDEA">把地形知識隱式地灌進只看本體感測的 policy</mark>——這就是「implicit terrain imagination」:policy 被迫從 \(\mathbf{o}_t^H\) 推斷 \(\mathbf{d}_t,\mathbf{h}_t\) 的效果。</p>
+        <p data-lang="en">The policy \(\pi_\phi(\mathbf{a}_t\,|\,\mathbf{o}_t,\mathbf{v}_t,\mathbf{z}_t)\) is trained with PPO; the value network \(V(\mathbf{s}_t)\) consumes the full privileged state. Since advantages are computed by a terrain-seeing critic, gradients <mark class="m-method" data-t="METHOD/IDEA">implicitly distill terrain knowledge into the proprioception-only policy</mark>—this is &quot;implicit terrain imagination&quot;: the policy is forced to infer the effect of \(\mathbf{d}_t,\mathbf{h}_t\) from \(\mathbf{o}_t^H\).</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">相對 teacher-student:<b>只需一個訓練階段</b>(資料效率大增);policy 全程用 RL 探索,<mark class="m-method" data-t="METHOD/IDEA">不被老師的行為克隆上限綁住</mark>,也能經歷並學會處理失敗狀態。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Versus teacher-student: <b>only one training phase</b> (much better data efficiency); the policy explores with RL throughout, <mark class="m-method" data-t="METHOD/IDEA">unbound by the behavior-cloning ceiling</mark>, and gets to visit and handle failure states.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 2:CENet — 一顆編碼器,兩個任務</span><span data-lang="en">Key idea 2: CENet — one encoder, two jobs</span></h3>
+        <figure class="fig"><img src="figs/Nahrendra2023/fig2_cenet.png" alt="Figure 2 CENet architecture">
+          <figcaption data-lang="zh"><b>Fig.2</b> CENet:共享編碼器(128×64,輸出 19 維 = 3 維 \(\mathbf{v}_t\) + 16 維 \(\mathbf{z}_t\))。上分支顯式回歸體速;下分支是 β-VAE,用 \(\mathbf{z}_t\) 重建下一步觀測 \(\mathbf{o}_{t+1}\)(decoder 64×128×48)。注意:它學的是「預測下一步」= 前向動力學,加上編碼歷史 = 後向動力學。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> CENet: a shared encoder (128×64, 19-D output = 3-D \(\mathbf{v}_t\) + 16-D \(\mathbf{z}_t\)). The top head explicitly regresses body velocity; the bottom branch is a β-VAE reconstructing the next observation \(\mathbf{o}_{t+1}\) (decoder 64×128×48). Note it learns &quot;predict the next step&quot; = forward dynamics, plus encoding history = backward dynamics.</figcaption></figure>
+        <p data-lang="zh">policy 需要的 \(\mathbf{v}_t\)(體速)與 \(\mathbf{z}_t\)(context)由 <b>CENet</b> 從 \(\mathbf{o}_t^H\) 估出,總損失:</p>
+        <p data-lang="en">The \(\mathbf{v}_t\) (body velocity) and \(\mathbf{z}_t\) (context) the policy needs are estimated from \(\mathbf{o}_t^H\) by <b>CENet</b>, with total loss:</p>
+        <div class="eq">$$\mathcal{L}_{\text{CE}}=\mathcal{L}_{\text{est}}+\mathcal{L}_{\text{VAE}},\qquad
+\mathcal{L}_{\text{est}}=\mathrm{MSE}(\tilde{\mathbf{v}}_t,\mathbf{v}_t)$$</div>
+        <div class="eq">$$\mathcal{L}_{\text{VAE}}=\mathrm{MSE}(\tilde{\mathbf{o}}_{t+1},\mathbf{o}_{t+1})+\beta\, D_{\mathrm{KL}}\!\big(q(\mathbf{z}_t\,|\,\mathbf{o}_t^H)\,\big\|\,p(\mathbf{z}_t)\big)$$</div>
+        <p data-lang="zh">體速的真值 \(\mathbf{v}_t\) 來自模擬器;\(p(\mathbf{z}_t)\) 取標準常態(觀測已正規化為零均值單位變異)。<mark class="m-method" data-t="METHOD/IDEA">共享編碼器讓「估體速」與「懂環境」互相校準</mark>:懂地形的表徵能在腳絆到時修正速度估計,反之亦然。</p>
+        <p data-lang="en">Ground-truth \(\mathbf{v}_t\) comes from the simulator; \(p(\mathbf{z}_t)\) is a standard normal (observations are normalized to zero mean, unit variance). <mark class="m-method" data-t="METHOD/IDEA">The shared encoder cross-calibrates &quot;estimating velocity&quot; and &quot;understanding the environment&quot;</mark>: a terrain-aware representation corrects velocity estimates during stumbles, and vice versa.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 3:AdaBoot — 看報酬變異數決定何時 bootstrap</span><span data-lang="en">Key idea 3: AdaBoot — bootstrap scheduled by reward variance</span></h3>
+        <p data-lang="zh">訓練時 policy 可以吃「模擬器真值 \(\mathbf{v}_t,\mathbf{z}_t\)」或「CENet 估測值」。用估測值(bootstrap)能提升 sim-to-real 穩健性,但<mark class="m-problem" data-t="PROBLEM/GAP">早期估測雜訊大,反而會學壞</mark>。AdaBoot 用 \(m\) 個域隨機化環境的 episodic reward 向量 \(\mathbf{R}\) 的變異係數決定 bootstrap 機率:</p>
+        <p data-lang="en">During training the policy can consume either simulator ground truth \(\mathbf{v}_t,\mathbf{z}_t\) or CENet estimates. Bootstrapping on estimates improves sim-to-real robustness, but <mark class="m-problem" data-t="PROBLEM/GAP">early estimator noise corrupts learning</mark>. AdaBoot sets the bootstrap probability from the coefficient of variation of the episodic-reward vector \(\mathbf{R}\) over \(m\) domain-randomized environments:</p>
+        <div class="eq">$$p_{\text{boot}}=1-\tanh\!\big(CV(\mathbf{R})\big),\qquad p_{\text{boot}}\in[0,1]$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">直覺:各環境報酬還很分歧(CV 大)= 還沒學會 → 少 bootstrap;報酬齊了(CV 小)= 學穩了 → 多用估測值練「抗估測誤差」。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Intuition: rewards diverging across environments (large CV) = not learned yet → bootstrap less; rewards converged (small CV) = stable → train more on estimates to harden against estimation error.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">訓練配方(一頁就能複現的程度)</span><span data-lang="en">Training recipe (reproducible from one page)</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">SIM</span><b>Isaac Gym ×4096</b><small><span data-lang="zh">平行域隨機化 agents,基於 legged_gym 開源實作</span><span data-lang="en">parallel domain-randomized agents, on the open-source legged_gym</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">CURRICULUM</span><b><span data-lang="zh">地形課程</span><span data-lang="en">Terrain curriculum</span></b><small><span data-lang="zh">smooth/rough/discretized/stairs,坡度 0°–22° 十級;低速用 grid-adaptive 課程防絆腳</span><span data-lang="en">smooth/rough/discretized/stairs, 10 levels over 0°–22°; grid-adaptive curriculum at low speed prevents tripping</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">TRAIN</span><b>PPO + CENet</b><small><span data-lang="zh">1,000 iterations 同步訓練 policy/value/CENet;clip 0.2、GAE 0.95、γ 0.99、Adam 10<sup>-3</sup></span><span data-lang="en">1,000 iterations jointly training policy/value/CENet; clip 0.2, GAE 0.95, γ 0.99, Adam 10<sup>-3</sup></span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">DEPLOY</span><b>Unitree A1</b><small><span data-lang="zh">Intel NUC 上 50 Hz 跑 CENet+policy;PD 追蹤 K<sub>p</sub>=28, K<sub>d</sub>=0.7 @200 Hz</span><span data-lang="en">CENet+policy at 50 Hz on an Intel NUC; PD tracking K<sub>p</sub>=28, K<sub>d</sub>=0.7 @200 Hz</span></small></div>
+        </div>
+        <p data-lang="zh"><b>域隨機化</b>:負載 [−1, 2] kg、K<sub>p</sub>/K<sub>d</sub>/馬達強度係數 [0.9, 1.1]、質心偏移 ±50 mm、摩擦係數 [0.2, 1.25]、系統延遲 [0, 15] ms。<b>成本</b>:一台 i7-8700 + RTX 3060Ti 桌機,<mark class="m-result" data-t="RESULT/EVIDENCE">約 1 小時 ≈ 46 天真實世界經驗</mark>。</p>
+        <p data-lang="en"><b>Domain randomization</b>: payload [−1, 2] kg, K<sub>p</sub>/K<sub>d</sub>/motor-strength factors [0.9, 1.1], CoM shift ±50 mm, friction [0.2, 1.25], system delay [0, 15] ms. <b>Cost</b>: one i7-8700 + RTX 3060Ti desktop, <mark class="m-result" data-t="RESULT/EVIDENCE">~1 hour ≈ 46 days of real-world experience</mark>.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">reward 沿用既有工作(速度追蹤 + 穩定性懲罰),<b>刻意不做 reward 工程</b>以凸顯框架本身的貢獻;唯一新增的是 power distribution 項 \(\mathrm{var}(\boldsymbol{\tau}\cdot\dot{\boldsymbol{\theta}})^2\)(權重 −10<sup>−5</sup>),懲罰馬達功率分布不均、延緩實機過熱。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Rewards follow prior work (velocity tracking + stability penalties)—<b>deliberately no reward engineering</b> so gains credit the framework; the only new term is the power-distribution reward \(\mathrm{var}(\boldsymbol{\tau}\cdot\dot{\boldsymbol{\theta}})^2\) (weight −10<sup>−5</sup>), penalizing uneven motor power to delay real-world overheating.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\mathbf{o}_t,\;\mathbf{o}_t^H\)</td><td><span data-lang="zh">本體觀測(45 維)及其近 H=5 步的歷史堆疊——policy 與 CENet 的唯一輸入來源。</span><span data-lang="en">Proprioceptive observation (45-D) and its H=5-step history stack—the sole input source for policy and CENet.</span></td></tr>
+          <tr><td>\(\mathbf{s}_t\)</td><td><span data-lang="zh">特權狀態:\(\mathbf{o}_t\) 加上真實體速、擾動力 \(\mathbf{d}_t\)、高度圖 \(\mathbf{h}_t\)。只有模擬器裡的 critic 看得到。</span><span data-lang="en">Privileged state: \(\mathbf{o}_t\) plus true body velocity, disturbance \(\mathbf{d}_t\), height map \(\mathbf{h}_t\). Visible only to the critic in simulation.</span></td></tr>
+          <tr><td>\(\mathbf{v}_t\)</td><td><span data-lang="zh">機身線速度(3 維)。真值僅存在於模擬器;實機上只能靠 CENet 估——準不準決定生死。</span><span data-lang="en">Body linear velocity (3-D). Ground truth exists only in simulation; on hardware CENet must estimate it—accuracy is life-or-death.</span></td></tr>
+          <tr><td>\(\mathbf{z}_t\)</td><td><span data-lang="zh">16 維環境 context 潛變數:摩擦、彈性、障礙等地形性質的隱式壓縮=「想像出的地形」。</span><span data-lang="en">16-D environment-context latent: an implicit compression of friction, restitution, obstacles—the &quot;imagined terrain.&quot;</span></td></tr>
+          <tr><td>\(\beta\)</td><td><span data-lang="zh">β-VAE 的 KL 權重,調節 \(\mathbf{z}_t\) 的資訊瓶頸與解耦程度。</span><span data-lang="en">KL weight of the β-VAE, trading off the information bottleneck / disentanglement of \(\mathbf{z}_t\).</span></td></tr>
+          <tr><td>\(p_{\text{boot}}\)</td><td><span data-lang="zh">本次迭代用 CENet 估測值(而非真值)訓練 policy 的機率,由報酬 CV 自動調節。</span><span data-lang="en">Probability of training the policy on CENet estimates (vs ground truth) this iteration, auto-tuned by reward CV.</span></td></tr>
+          <tr><td>\(CV(\mathbf{R})\)</td><td><span data-lang="zh">m 個隨機化環境 episodic reward 的變異係數(std/mean)=「還沒學會」的程度訊號。</span><span data-lang="en">Coefficient of variation (std/mean) of episodic rewards over m randomized environments—a &quot;not learned yet&quot; signal.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">讓「裁判」(critic)開天眼、「選手」(actor)矇眼訓練:裁判按真實地形打分,選手只好從腳底與身體的震動<b>學會腦補地形</b>;旁邊再配一個同時練「估速度」與「預測下一刻」的小腦(CENet)。</span>
+        <span data-lang="en">Train with a clairvoyant referee (critic) and a blindfolded athlete (actor): scored against true terrain, the athlete must <b>hallucinate the terrain from foot and body vibrations</b>—aided by a small cerebellum (CENet) that jointly estimates velocity and predicts the next instant.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何用 VAE 而不是普通 encoder?</span><span data-lang="en">Why a VAE, not a plain encoder?</span></span>
+        <span data-lang="zh">重建 \(\mathbf{o}_{t+1}\) 迫使編碼器學<b>前向動力學</b>(這狀態+這地形 → 下一步會怎樣),KL 正則讓 \(\mathbf{z}_t\) 平滑、可泛化。RMA 的 context 只靠「對齊老師的 latent」;CENet 的 context 有<b>自監督的物理意義</b>。</span>
+        <span data-lang="en">Reconstructing \(\mathbf{o}_{t+1}\) forces the encoder to learn <b>forward dynamics</b> (this state + this terrain → what happens next); the KL term keeps \(\mathbf{z}_t\) smooth and generalizable. RMA aligns a latent to a teacher; CENet gives context a <b>self-supervised physical meaning</b>.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">特權資訊(高度圖、擾動力、真實體速)<mark class="m-assume" data-t="ASSUMPTION/CLAIM">只存在於模擬器</mark>。實機上整個系統只剩 <b>CENet + policy,50 Hz</b> 同步跑——沒有任何地圖、視覺或事後優化。</span>
+        <span data-lang="en">Privileged info (height map, disturbances, true velocity) <mark class="m-assume" data-t="ASSUMPTION/CLAIM">exists only in simulation</mark>. On hardware the whole system reduces to <b>CENet + policy at 50 Hz</b>—no maps, no vision, no post-hoc optimization.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">z 真的是地形嗎?</span><span data-lang="en">is z really terrain?</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">AdaBoot 只是 trick?</span><span data-lang="en">AdaBoot a trick?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">學習曲線:逼近開天眼的 oracle</span><span data-lang="en">Learning curves: approaching the clairvoyant oracle</span></h3>
+        <figure class="fig"><img src="figs/Nahrendra2023/fig3_curves.png" alt="Figure 3 learning curves">
+          <figcaption data-lang="zh"><b>Fig.3</b> 十個隨機種子的 episodic reward(實線=均值、陰影=標準差)。看右側放大圖:DreamWaQ(藍點線/橘虛線)緊貼 oracle(灰,直接看高度圖);EstimatorNet(綠)在課程進入更難地形後<b>不升反跌</b>;Baseline(紫)最低。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Episodic reward over ten seeds (line = mean, shading = std). In the zoom-in: DreamWaQ (blue dotted / orange dashed) hugs the oracle (gray, direct height-map access); EstimatorNet (green) <b>degrades</b> once the curriculum reaches harder terrain; Baseline (purple) is lowest.</figcaption></figure>
+        <p data-lang="zh">關鍵讀法:EstimatorNet 起初高於 AdaptationNet,但<mark class="m-result" data-t="RESULT/EVIDENCE">迭代變多、遇到更難地形後性能驟降</mark>——顯式估測沒有 context 撐不住;而 <mark class="m-result" data-t="RESULT/EVIDENCE">DreamWaQ 全程領先、且幾乎追平 oracle</mark>,代表「盲走」的性能差距幾乎被補齊。</p>
+        <p data-lang="en">Key reading: EstimatorNet starts above AdaptationNet but <mark class="m-result" data-t="RESULT/EVIDENCE">plummets once harder terrains arrive</mark>—explicit estimation without context cannot cope; <mark class="m-result" data-t="RESULT/EVIDENCE">DreamWaQ leads throughout and nearly matches the oracle</mark>, i.e., the blind-walking gap is almost closed.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果表:抗擾動(Table III,模擬)</span><span data-lang="en">Main results: robustness to pushes (Table III, simulation)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">演算法</span><span data-lang="en">Algorithm</span></th><th><span data-lang="zh">最大抗推速度 (m/s) ↑</span><span data-lang="en">Max push (m/s) ↑</span></th><th><span data-lang="zh">30 分鐘存活率 (%) ↑</span><span data-lang="en">30-min survival rate (%) ↑</span></th></tr>
+          <tr><td>Baseline (Rudin et al.)</td><td>0.511 ± 0.053</td><td>20.51 ± 6.44</td></tr>
+          <tr><td>AdaptationNet (RMA-style)</td><td>0.714 ± 0.096</td><td>82.37 ± 2.49</td></tr>
+          <tr><td>EstimatorNet (Ji et al.)</td><td>0.871 ± 0.124</td><td>80.92 ± 5.73</td></tr>
+          <tr><td>DreamWaQ w/o AdaBoot</td><td>1.015 ± 0.121</td><td>90.71 ± 1.25</td></tr>
+          <tr><td class="win">DreamWaQ w/ AdaBoot</td><td class="win">1.121 ± 0.164</td><td class="win">95.23 ± 1.61</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">每秒隨機方向推撞直到跌倒。DreamWaQ 抗推力是 baseline 的 <mark class="m-result" data-t="RESULT/EVIDENCE">2.2 倍</mark>、比最強估測式 baseline 高 <mark class="m-result" data-t="RESULT/EVIDENCE">~29%</mark>;AdaBoot 本身再貢獻約 +0.11 m/s 與 +4.5% 存活率——<b>這也是 AdaBoot 唯一的消融證據</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Random-direction pushes every second until the robot falls. DreamWaQ withstands <mark class="m-result" data-t="RESULT/EVIDENCE">2.2× the baseline push</mark> and <mark class="m-result" data-t="RESULT/EVIDENCE">~29% more than the strongest estimator baseline</mark>; AdaBoot itself adds ~+0.11 m/s and +4.5% survival—<b>which is also its only ablation evidence</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">指令追蹤與估測品質</span><span data-lang="en">Command tracking &amp; estimation quality</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.85">
+          <li data-lang="zh"><b>指令追蹤</b>(Gazebo,10 分鐘隨機命令 ±1.0 m/s,五種子):以絕對追蹤誤差(ATE)比較,DreamWaQ 在 \(v_x,v_y,\omega_z\) 全項最低,配對 t 檢定 <mark class="m-result" data-t="RESULT/EVIDENCE">p &lt; 10<sup>−4</sup></mark>;AdaBoot 又顯著再降誤差。</li>
+          <li data-lang="en"><b>Command tracking</b> (Gazebo, 10 min of random ±1.0 m/s commands, five seeds): by absolute tracking error (ATE), DreamWaQ is lowest on all of \(v_x,v_y,\omega_z\), paired t-test <mark class="m-result" data-t="RESULT/EVIDENCE">p &lt; 10<sup>−4</sup></mark>; AdaBoot significantly reduces error further.</li>
+          <li data-lang="zh"><b>估測誤差</b>(模擬樓梯場景):平地上 CENet 誤差已較小(拜前向/後向動力學學習之賜);<mark class="m-result" data-t="RESULT/EVIDENCE">腳絆到樓梯時,EstimatorNet 的體速估測失準、CENet 仍準確</mark>——作者歸因於 context 對顯式估測的「條件化」效果。嚴重失準可能直接導致摔倒。</li>
+          <li data-lang="en"><b>Estimation error</b> (simulated stairs): on flat ground CENet is already more accurate (thanks to forward/backward dynamics learning); <mark class="m-result" data-t="RESULT/EVIDENCE">when feet stumble on stairs, EstimatorNet mis-estimates velocity while CENet stays accurate</mark>—credited to context conditioning the explicit estimate. Severe mis-estimation can cause outright falls.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實機:樓梯反射與長程野外</span><span data-lang="en">Hardware: stair reflexes and long-range outdoor runs</span></h3>
+        <figure class="fig"><img src="figs/Nahrendra2023/fig6_reflex.png" alt="Figure 6 foot reflex on stairs and slips">
+          <figcaption data-lang="zh"><b>Fig.6</b> 實機足部反射(足端 z 軌跡)。(a) 絆到樓梯:下樓時壓低身體、前腳遠伸探索落點,上樓時<b>自動加大抬腳</b>(紅區步幅明顯變大);(b) 打滑:偵測到不規則落點後立即調整步態並回復。這些行為都不是手寫的,是策略從隱式地形想像中湧現的。</figcaption>
+          <figcaption data-lang="en"><b>Fig.6</b> Real-world foot reflexes (foot z-trajectories). (a) Stair stumble: going down, the body tilts low with the front foot reaching to probe footholds; going up, <b>step height increases automatically</b> (larger swings in the red zone); (b) slip: irregular footholds are detected, the gait adapts and recovers. None of this is hand-coded—it emerges from implicit terrain imagination.</figcaption></figure>
+        <p data-lang="zh"><b>長程驗證</b>:Course A(校園庭園,430 m)含連續坡地、會纏腳的濃密植被、雨後濕滑樓梯與泥濘坡;Course B(校園山徑,465 m、<mark class="m-result" data-t="RESULT/EVIDENCE">爬升 22 m,約 10 分鐘走完</mark>)含柏油、碎石與長坡,夏天馬達過熱下仍完成。作者稱這是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">A1 這種小型平台首次被展示能持續走完此類丘陵/庭園長程</mark>。軌跡由機背 RTK-GPS(10 Hz)記錄。</p>
+        <p data-lang="en"><b>Long-range validation</b>: Course A (campus yard, 430 m) has continuous slopes, leg-trapping vegetation, and post-rain slippery stairs and muddy slopes; Course B (campus hill, 465 m, <mark class="m-result" data-t="RESULT/EVIDENCE">22 m elevation gain, finished in ~10 min</mark>) has asphalt, gravel and long climbs, completed despite summer motor heating. The authors claim this is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the first demonstration of a small A1-class platform sustainably walking such hill/yard courses</mark>. Trajectories were logged by an onboard RTK-GPS (10 Hz).</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><b>實驗證明了什麼/沒證明什麼:</b>證明了——單階段非對稱 AC + 聯合估測在<b>同 reward、同架構、同種子</b>的控制比較下全面優於三個本體感測 baseline,且可實機長程部署。沒證明——與感知式系統的對比、跨機型的可攜性、以及實地上與 baseline 的<b>量化</b>對比(野外部分只有 DreamWaQ 自己的 demo)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><b>What the experiments do / do not prove:</b> They do—under controlled comparisons (<b>same rewards, architecture, seeds</b>), one-stage asymmetric AC + joint estimation beats three proprioceptive baselines across the board and deploys for long real-world runs. They do not—compare against perceptive systems, show cross-robot portability, or give <b>quantitative</b> field comparisons versus baselines (outdoor runs feature DreamWaQ alone).</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">盲走性能<b>逼近 oracle</b>、抗推力 2.2×、存活率 95%,並用 430–465 m 的真實野外長走把「本體感測夠用」這句話落了地。</span>
+        <span data-lang="en">Blind performance <b>near the oracle</b>, 2.2× push tolerance, 95% survival—grounded by 430–465 m real outdoor walks showing proprioception suffices.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">數字的邊界</span><span data-lang="en">Where the numbers stop</span></div>
+        <span data-lang="zh">抗擾動與追蹤誤差都是<mark class="m-limit" data-t="LIMITATION/FUTURE">模擬測的</mark>(Isaac Gym / Gazebo);實機部分沒有對 baseline 的量化對照,只有 DreamWaQ 的成功展示與影片。「首次 A1 長程」是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">作者自稱(to the best of our knowledge)</mark>。</span>
+        <span data-lang="en">Push-robustness and tracking errors are <mark class="m-limit" data-t="LIMITATION/FUTURE">measured in simulation</mark> (Isaac Gym / Gazebo); hardware results lack quantitative baseline comparisons—only successful DreamWaQ demos and videos. &quot;First A1 long-range&quot; is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">self-claimed (to the best of our knowledge)</mark>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">讀圖技巧</span><span data-lang="en">How to read Fig.6</span></span>
+        <span data-lang="zh">看足端 z 軌跡的<b>包絡變化</b>:正常走(綠)幅度規律;上樓(紅)幅度顯著變大=policy 主動抬高腳;打滑(紅→橘)出現亂波後迅速回到規律=偵測+適應+回復三步驟。</span>
+        <span data-lang="en">Watch the <b>envelope</b> of the foot-z traces: normal walking (green) is regular; climbing (red) swings much larger = the policy actively lifts its feet; slipping (red→orange) shows a burst of irregularity then quick re-regularization = detect + adapt + recover.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">baseline 重現公平嗎</span><span data-lang="en">fair reimpl.?</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">22° 就是上限?</span><span data-lang="en">22° the cap?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>Baseline 是自行重現的</b>:AdaptationNet「代表」RMA、EstimatorNet「代表」Ji et al.,但都被改成同 reward、同課程、同網路容量。這種控制變因固然乾淨,卻可能<mark class="m-assume" data-t="ASSUMPTION/CLAIM">削弱了原方法精心調校後的實力</mark>——RMA 原版的兩階段課程與架構細節並未完整重現。「打贏自己重現的對手」與「打贏原作」不是同一句話。</li>
+          <li data-lang="en"><b>Baselines are reimplementations</b>: AdaptationNet stands in for RMA, EstimatorNet for Ji et al., but both were refit to the same rewards, curriculum and network capacity. Clean control, yes—but it may <mark class="m-assume" data-t="ASSUMPTION/CLAIM">understate the originals as carefully tuned systems</mark>—for example the original two-stage RMA curriculum and architecture details are not fully reproduced. Beating your own reimplementation is not the same as beating the original.</li>
+          <li data-lang="zh"><b>量化實驗全在模擬</b>:Table III(抗推)、Fig.4(ATE)、Fig.5(估測誤差)都在 Isaac Gym / Gazebo。實機只有 DreamWaQ 單方的成功 demo,<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有實地成功率、跌倒次數、能耗等量化對照</mark>;「robustness and durability evaluation in the real world」這個貢獻宣稱,證據形式其實是影片。</li>
+          <li data-lang="en"><b>All quantitative results are simulated</b>: Table III (pushes), Fig.4 (ATE), Fig.5 (estimation error) live in Isaac Gym / Gazebo. Hardware evidence is DreamWaQ-only success demos—<mark class="m-limit" data-t="LIMITATION/FUTURE">no field success rates, fall counts, or energy metrics against baselines</mark>; the claimed &quot;real-world robustness and durability evaluation&quot; is, evidentially, video.</li>
+          <li data-lang="zh"><b>\(\mathbf{z}_t\) 的語意未經檢驗</b>:標題說「地形想像」,但論文<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有任何 probing 或視覺化證明 \(\mathbf{z}_t\) 真的編碼了摩擦/高度等地形性質</mark>;它也可能只是「對 policy 有用的任意時序特徵」。想像 vs 特徵,是敘事與證據之間的空隙。</li>
+          <li data-lang="en"><b>The semantics of \(\mathbf{z}_t\) are untested</b>: the title says terrain imagination, yet <mark class="m-limit" data-t="LIMITATION/FUTURE">no probing or visualization shows \(\mathbf{z}_t\) actually encodes friction/height properties</mark>; it could be any temporally useful feature. &quot;Imagination&quot; vs &quot;feature&quot; is a gap between narrative and evidence.</li>
+          <li data-lang="zh"><b>消融不完整</b>:AdaBoot 只有 with/without 一組(且增益 ~0.1 m/s,在 ±0.16 的標準差內);<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有「拿掉 VAE 只留回歸」「拿掉共享編碼器」「H、β、latent 維度掃描」等關鍵消融</mark>,CENet 各設計的貢獻無法拆帳。</li>
+          <li data-lang="en"><b>Ablations are thin</b>: AdaBoot gets one with/without pair (a ~0.1 m/s gain inside the ±0.16 std); <mark class="m-limit" data-t="LIMITATION/FUTURE">no &quot;VAE removed, regression only,&quot; no unshared-encoder variant, no sweeps over H, β, or latent size</mark>—the contribution of each CENet design choice cannot be attributed.</li>
+          <li data-lang="zh"><b>能力範圍其實不大</b>:命令取樣 ±1.0 m/s、課程坡度上限 22°、樓梯以 A1 的腿長論並不高;作者也坦承<mark class="m-limit" data-t="LIMITATION/FUTURE">必須先碰到障礙才能適應、高階樓梯要靠外感測</mark>。這是一篇「穩」的論文,不是「敏捷」的論文。</li>
+          <li data-lang="en"><b>The capability envelope is modest</b>: commands sampled within ±1.0 m/s, curriculum slopes capped at 22°, stairs modest for A1 leg length; the authors admit <mark class="m-limit" data-t="LIMITATION/FUTURE">obstacles must be touched first, and high-rise stairs need exteroception</mark>. This is a robustness paper, not an agility paper.</li>
+          <li data-lang="zh"><b>單一平台</b>:所有結果都在 Unitree A1。框架宣稱通用,但<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有第二台機器人驗證可攜性</mark>(不同質量/腿型/致動器的遷移成本未知)。</li>
+          <li data-lang="en"><b>Single platform</b>: everything is on a Unitree A1. The framework claims generality, but <mark class="m-limit" data-t="LIMITATION/FUTURE">no second robot validates portability</mark> (transfer cost across mass/leg/actuator differences unknown).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>Baseline 公平性</b>:若用 RMA 原始碼、原始課程與兩階段訓練預算重跑 AdaptationNet,Table III 的差距會縮多少?「同 reward 同架構」對 teacher-student 方法是否反而是不利設定?</li>
+          <li data-lang="en"><b>Baseline fairness</b>: rerun AdaptationNet with the original RMA code, curriculum and two-stage budget—how much of the Table III gap survives? Is &quot;same reward, same architecture&quot; actually a handicap for teacher-student methods?</li>
+          <li data-lang="zh"><b>\(\mathbf{z}_t\) 可解釋性</b>:對 \(\mathbf{z}_t\) 做線性 probing,能否解碼出摩擦係數或地形類別?若不能,「terrain imagination」的說法是否應該降級為「temporal context」?</li>
+          <li data-lang="en"><b>Interpretability of \(\mathbf{z}_t\)</b>: can a linear probe decode friction or terrain class from \(\mathbf{z}_t\)? If not, should &quot;terrain imagination&quot; be demoted to &quot;temporal context&quot;?</li>
+          <li data-lang="zh"><b>AdaBoot 的必要性</b>:+0.106 m/s 落在標準差內;跟簡單的線性退火 bootstrap 排程相比呢?CV 訊號在 reward 尺度改變時是否穩定?</li>
+          <li data-lang="en"><b>Is AdaBoot necessary?</b> +0.106 m/s sits within one std; how does it compare to a simple linearly-annealed bootstrap schedule? Is the CV signal stable under reward rescaling?</li>
+          <li data-lang="zh"><b>實地量化</b>:野外長走若讓 EstimatorNet/AdaptationNet 也跑同路線,跌倒率與完成率差多少?沒有這組數字,「實地更穩」還只是合理推測。</li>
+          <li data-lang="en"><b>Field quantification</b>: run EstimatorNet/AdaptationNet on the same outdoor courses—what are the fall and completion rates? Without these numbers, &quot;more robust in the field&quot; remains plausible inference.</li>
+          <li data-lang="zh"><b>能力邊界</b>:把課程坡度推過 22°、樓梯推到 A1 膝高,或命令推到 2 m/s,哪個組件先崩——policy、CENet 還是 PD 增益?</li>
+          <li data-lang="en"><b>Capability frontier</b>: push slopes past 22°, stairs to knee height, or commands to 2 m/s—which component breaks first: policy, CENet, or the PD gains?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 DreamWaQ 讀成「<b>視覺無用論</b>」。論文的結論恰恰相反:反應式適應必須先撞到障礙,<mark class="m-limit" data-t="LIMITATION/FUTURE">高階樓梯等複雜結構仍需整合外感測做事前步態規劃</mark>——這正是作者列的未來工作。DreamWaQ 是在「外感測不可靠時」的強韌下限,不是感知的替代。</span>
+        <span data-lang="en">Reading DreamWaQ as &quot;<b>vision is useless</b>.&quot; The conclusion says the opposite: reactive adaptation must first hit obstacles, and <mark class="m-limit" data-t="LIMITATION/FUTURE">complex structures like high-rise stairs still require exteroception for pre-contact gait planning</mark>—the very future work listed. DreamWaQ is a robust floor for when exteroception fails, not a replacement for perception.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">實驗控制做得認真:同 reward、同架構、固定初始種子、十種子學習曲線、配對 t 檢定;訓練成本低到人人可複現(1 小時、3060Ti)。<span class="add">[導讀補充]</span> 這種「便宜且完整開放的配方」正是它後來被大量沿用為 baseline 的原因。</span>
+        <span data-lang="en">The experimental control is serious: same rewards, same architecture, fixed seeds, ten-seed curves, paired t-tests; training cheap enough for anyone to reproduce (1 hour, 3060Ti). <span class="add">[guide note]</span> That cheap, fully open recipe is exactly why it became a widely adopted baseline.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>特權資訊優先考慮走 critic</b>:只要特權資訊只在模擬器裡存在(地形、擾動、精確狀態),非對稱 actor-critic 是比 teacher-student 更便宜的第一選擇——一階段、無 BC 上限、可探索失敗狀態。先試它,不夠再蒸餾。</li>
+          <li data-lang="en"><b>Route privileged info through the critic first</b>: whenever privileged signals exist only in simulation (terrain, disturbances, exact state), asymmetric actor-critic is the cheaper first choice over teacher-student—one stage, no BC ceiling, failure-state exploration. Try it before distilling.</li>
+          <li data-lang="zh"><b>估測器加上自監督重建頭</b>:顯式回歸(體速)+ VAE 式「預測下一步觀測」共享編碼器,是把動力學知識灌進估測器的通用做法,特別是在接觸豐富、易打滑絆腳的場景。</li>
+          <li data-lang="en"><b>Give estimators a self-supervised reconstruction head</b>: explicit regression (velocity) + a VAE-style next-observation head on a shared encoder is a general way to inject dynamics knowledge into estimators—especially in contact-rich, slip-prone settings.</li>
+          <li data-lang="zh"><b>把「何時信任學生」寫成訊號</b>:AdaBoot 的 \(1-\tanh(CV)\) 排程是個可移植的小工具——任何「用估測值取代真值訓練」的課程,都可以拿跨環境報酬變異數當開關。</li>
+          <li data-lang="en"><b>Turn &quot;when to trust the student&quot; into a signal</b>: the \(1-\tanh(CV)\) schedule is a portable gadget—any curriculum that swaps ground truth for estimates can gate on cross-environment reward variance.</li>
+          <li data-lang="zh"><b>硬體目標寫進 reward</b>:power distribution 項提醒我們,長時部署的痛點(過熱、磨損)可以直接變成可微分的訓練目標,不必等到部署才處理。</li>
+          <li data-lang="en"><b>Encode hardware objectives in the reward</b>: the power-distribution term shows deployment pains (overheating, wear) can become differentiable training objectives instead of post-hoc fixes.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What to cite this paper for</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「特權學習不必 teacher-student 兩階段」</span><span data-lang="en">&quot;Privileged learning need not be two-stage teacher-student&quot;</span></td><td><span data-lang="zh">非對稱 actor-critic 單階段訓練即逼近 oracle 的證據(Fig.3)。</span><span data-lang="en">Evidence that one-stage asymmetric actor-critic approaches an oracle (Fig.3).</span></td></tr>
+          <tr><td><span data-lang="zh">「context 與狀態估測應聯合學習」</span><span data-lang="en">&quot;Context and state estimation should be learned jointly&quot;</span></td><td><span data-lang="zh">CENet 共享編碼器與樓梯絆腳情境下的估測對比(Fig.5)。</span><span data-lang="en">The CENet shared encoder and the stumble-case estimation comparison (Fig.5).</span></td></tr>
+          <tr><td><span data-lang="zh">「純本體感測可支撐長程野外行走」</span><span data-lang="en">&quot;Proprioception alone can sustain long outdoor walks&quot;</span></td><td><span data-lang="zh">A1 的 430 m / 465 m(爬升 22 m)實地展示。</span><span data-lang="en">The 430 m / 465 m (22 m gain) field demonstrations on an A1.</span></td></tr>
+          <tr><td><span data-lang="zh">「bootstrap 排程要看學習成熟度」</span><span data-lang="en">&quot;Bootstrapping should track learning maturity&quot;</span></td><td><span data-lang="zh">AdaBoot 與 Table III 的 with/without 對比。</span><span data-lang="en">AdaBoot and the with/without contrast in Table III.</span></td></tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">在系譜上的位置</span><span data-lang="en">Place in the lineage</span></span>
+          <p data-lang="zh" style="margin-top:6px">Lee 2020(teacher-student 盲走)→ RMA 2021(蒸餾出 adaptation module)→ Ji 2022(併行顯式估測器)→ <b>DreamWaQ 2023(非對稱 AC + VAE context,單階段)</b>。<span class="add">[導讀補充]</span> 之後的估測式四足工作(含作者自己的 DreamWaQ++)多以本篇為骨幹或 baseline;它與 Walk These Ways 等「行為多樣性」路線互補——一個攻穩健的隱式估測,一個攻步態的可控多樣性。</p>
+          <p data-lang="en" style="margin-top:6px">Lee 2020 (teacher-student blind walking) → RMA 2021 (distilled adaptation module) → Ji 2022 (concurrent explicit estimator) → <b>DreamWaQ 2023 (asymmetric AC + VAE context, one stage)</b>. <span class="add">[guide note]</span> Later estimator-centric quadruped work (including the authors own DreamWaQ++) builds on or benchmarks against it; it complements the &quot;behavior diversity&quot; line (e.g., Walk These Ways)—one pursues robust implicit estimation, the other controllable gait multiplicity.</p>
+        </div>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">DreamWaQ 證明:給 critic 開天眼、給 actor 一顆會自監督的估測小腦,盲走四足就能<b>用一張消費級 GPU、一個小時</b>練到逼近看得見地形的 oracle,並在真實世界走完數百公尺的樓梯、泥坡與山徑——代價是它只能「摸著地形過河」,事前避障仍得還給視覺。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">DreamWaQ shows that with a clairvoyant critic and a self-supervised estimator cerebellum, a blind quadruped can train <b>in one hour on a consumer GPU</b> to near-oracle performance and walk hundreds of meters of real stairs, mud and hills—at the cost of feeling its way by contact, leaving pre-contact avoidance to vision.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">RMA (Kumar 2021)</span>
+          <span class="chip">Lee et al. 2020</span>
+          <span class="chip">Ji et al. 2022</span>
+          <span class="chip">Rudin legged_gym</span>
+          <span class="chip">Miki et al. 2022</span>
+          <span class="chip">β-VAE</span>
+          <span class="chip">Asymmetric AC (Pinto 2018)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Nahrendra et al. 2023 (DreamWaQ) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'DreamWaQ reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>
