@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Motion Imitation (Peng 2020) — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Learning Agile Robotic Locomotion Skills by Imitating Animals","authors":"Xue Bin Peng, Erwin Coumans, Tingnan Zhang, Tsang-Wei Edward Lee, Jie Tan, Sergey Levine","year":"2020","venue":"RSS","tags":["Legged Robotics","Motion Imitation","Sim-to-Real","Domain Adaptation","Reinforcement Learning"],"tldr":"把真狗 mocap 經 IK retarget 成參考動作,在模擬中用 RL + 動態隨機化訓練模仿策略,再以資訊瓶頸正則化的 latent 動態編碼在真實 Laikago 上用約 50 次試驗快速適應——一套框架學會 pace、trot、spin、hop-turn 等多樣敏捷步態。","tldr_en":"Dog mocap is IK-retargeted into reference motions, imitated in simulation with RL under randomized dynamics, then adapted to the real Laikago in roughly 50 trials by searching an information-bottlenecked latent dynamics encoding - one framework yields pacing, trotting, spinning and hop-turns."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:110px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">與其為每個步態手工設計控制器或獎勵函數,不如<b>直接模仿動物</b>:把真狗的 mocap 用 IK retarget 到 Laikago 四足機器人上,在模擬中以 <b>RL + 動態隨機化</b>學會追蹤參考動作,最後用<b>資訊瓶頸正則化的 latent 動態編碼</b>,在真實機器人上<mark class="m-result" data-t="RESULT/EVIDENCE">只花約 50 次試驗(每次 5~10 秒)就完成 sim-to-real 適應</mark>。同一套框架學會 pace、trot、spin、hop-turn 等多樣步態——換技能只要換一段參考動作。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Instead of hand-designing a controller or a reward function per gait, <b>imitate the animal directly</b>: retarget real-dog mocap onto the Laikago quadruped via IK, learn to track it in simulation with <b>RL + dynamics randomization</b>, then adapt to the physical robot by searching an <b>information-bottlenecked latent dynamics encoding</b> — <mark class="m-result" data-t="RESULT/EVIDENCE">about 50 real-world trials of 5–10 s each suffice</mark>. One framework yields pacing, trotting, spinning and hop-turns; switching skill means switching the reference clip.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Peng2020/fig1_teaser.png" alt="Figure 1 teaser: dog mocap, simulated Laikago, real Laikago">
+        <figcaption data-lang="zh"><b>Fig.1</b> 三層對照(Dog Trot 與 Dog Spin):上=真狗 mocap 參考動作;中=模擬 Laikago 模仿;下=真實 Laikago 模仿。注意真實機器人重現了狗的步態相位與轉身節奏——這就是整個系統的輸入與輸出。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> Three-row comparison (Dog Trot, Dog Spin): top = real-dog mocap reference; middle = simulated Laikago; bottom = real Laikago. Note the real robot reproduces the gait phasing and turning rhythm of the dog — this is the input and output of the whole system.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 四足機器人的敏捷步態長期依賴<mark class="m-problem" data-t="PROBLEM/GAP">逐技能的手工控制器或逐技能的獎勵函數設計</mark>;RL 雖然自動,但學出的動作常不自然、且<mark class="m-problem" data-t="PROBLEM/GAP">模擬訓練的策略搬上實機就跌倒</mark>(dynamics gap)。</li>
+          <li data-lang="en"><b>Problem</b> — Agile quadruped gaits have long required <mark class="m-problem" data-t="PROBLEM/GAP">per-skill hand-engineered controllers or per-skill reward design</mark>; RL automates this but produces unnatural motions, and <mark class="m-problem" data-t="PROBLEM/GAP">sim-trained policies fall over on real hardware</mark> (the dynamics gap).</li>
+          <li data-lang="zh"><b>方法</b> — 三階段:<mark class="m-method" data-t="METHOD/IDEA">IK retargeting</mark>(狗的骨架 → 機器人形態)→ <mark class="m-method" data-t="METHOD/IDEA">模擬中 RL 模仿</mark>(通用的動作追蹤獎勵,PPO,約 2 億樣本)→ <mark class="m-method" data-t="METHOD/IDEA">latent 空間域適應</mark>:訓練時把隨機化的動態參數 \(\mu\) 編碼成 \(z\),測試時直接在真實機器人上搜尋最好的 \(z^*\)(AWR),不需微調任何網路權重。</li>
+          <li data-lang="en"><b>Method</b> — Three stages: <mark class="m-method" data-t="METHOD/IDEA">IK retargeting</mark> (dog skeleton → robot morphology) → <mark class="m-method" data-t="METHOD/IDEA">RL imitation in simulation</mark> (a generic motion-tracking reward, PPO, ~200M samples) → <mark class="m-method" data-t="METHOD/IDEA">latent-space domain adaptation</mark>: randomized dynamics parameters \(\mu\) are encoded into \(z\) during training; at deployment, search directly for the best \(z^*\) on the real robot (AWR), fine-tuning no network weights.</li>
+          <li data-lang="zh"><b>結果</b> — 真實 Laikago 學會 10 種技能;<mark class="m-result" data-t="RESULT/EVIDENCE">Dog Trot 達 1.08 m/s、倒退 trot 達 1.20 m/s,快過原廠最快步態的 0.84 m/s</mark>;在動態技能上,適應後回報大幅超越只靠 robust 訓練的策略(Dog Pace 0.35→<b>0.83</b>、Dog Spin 0.21→<b>0.75</b>)。</li>
+          <li data-lang="en"><b>Results</b> — The real Laikago learns 10 skills; <mark class="m-result" data-t="RESULT/EVIDENCE">Dog Trot reaches 1.08 m/s and backwards trot 1.20 m/s, beating the fastest manufacturer gait at 0.84 m/s</mark>; on dynamic skills, adaptation lifts return far above robust-only training (Dog Pace 0.35→<b>0.83</b>, Dog Spin 0.21→<b>0.75</b>).</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">2020 年之前,四足機器人的高性能控制主要靠<mark class="m-method" data-t="METHOD/IDEA">手工設計的模型式控制</mark>(MIT Cheetah 3 的 MPC、降階模型的軌跡最佳化)——效果好但<mark class="m-problem" data-t="PROBLEM/GAP">每個行為都要專家投入大量工程</mark>。RL 路線上,Tan et al. 2018 靠精細的馬達建模讓 Minitaur 學會走路,Hwangbo et al. 2019 用學出的 actuator net 把技能轉移到 ANYmal——但兩者都<mark class="m-problem" data-t="PROBLEM/GAP">為每個技能手工設計獎勵函數</mark>。</p>
+        <p data-lang="en">Before 2020, high-performance quadruped control mostly relied on <mark class="m-method" data-t="METHOD/IDEA">hand-designed model-based control</mark> (MPC on MIT Cheetah 3, trajectory optimization over reduced-order models) — effective, but <mark class="m-problem" data-t="PROBLEM/GAP">each behavior demands heavy expert engineering</mark>. On the RL side, Tan et al. 2018 got the Minitaur walking via careful motor modeling, and Hwangbo et al. 2019 transferred skills to ANYmal with a learned actuator net — but both <mark class="m-problem" data-t="PROBLEM/GAP">hand-crafted a reward function per skill</mark>.</p>
+        <p data-lang="zh">另一條線是<mark class="m-method" data-t="METHOD/IDEA">動作模仿(motion imitation)</mark>:第一作者 Peng 的 DeepMimic(2018)已證明在<b>模擬</b>中,RL + mocap 追蹤獎勵能學出高度雜技化的動作;但受限於 RL 的樣本複雜度與 sim-real 落差,<mark class="m-problem" data-t="PROBLEM/GAP">這些能力遲遲沒有登上真實機器人</mark>。本文就是把 DeepMimic 這條線接上實體四足的作品——並用 Yu et al. 的 latent 空間轉移想法補上最後一哩。</p>
+        <p data-lang="en">The other thread is <mark class="m-method" data-t="METHOD/IDEA">motion imitation</mark>: first author Peng himself showed with DeepMimic (2018) that in <b>simulation</b>, RL + a mocap-tracking reward learns highly acrobatic skills; but RL sample complexity and the sim-to-real gap meant <mark class="m-problem" data-t="PROBLEM/GAP">those capabilities never reached real robots</mark>. This paper plugs the DeepMimic line into a physical quadruped — using the latent-space transfer idea of Yu et al. for the last mile.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的核心賭注是:<b>「參考動作」可以同時取代兩種昂貴的人工——控制器設計與獎勵設計。</b>動物已經示範了什麼是可行且自然的動作,學習系統只需要「追蹤」而非「發明」。這個觀點日後成為 learning-based legged locomotion 的一條主幹路線。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">The core bet: <b>a reference motion can replace two expensive kinds of manual labor at once — controller design and reward design.</b> The animal has already demonstrated what is feasible and natural; the learning system only needs to <i>track</i>, not <i>invent</i>. This view later became a trunk line of learning-based legged locomotion. <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是「機器狗會學狗走路」,而是底下這幾個設計決策:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">The takeaway is not "a robot dog can walk like a dog" but these design decisions:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">參考動作 = 通用獎勵。</b>一條 mocap 片段 + 一個固定形式的追蹤獎勵,就能取代逐技能的獎勵工程;<mark class="m-result" data-t="RESULT/EVIDENCE">換技能只要換片段</mark>(甚至倒放 mocap 就得到倒退步態)。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Reference motion = generic reward.</b> One mocap clip + one fixed-form tracking reward replaces per-skill reward engineering; <mark class="m-result" data-t="RESULT/EVIDENCE">switching skills = switching clips</mark> (even playing mocap backwards yields backwards gaits).</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">Sim-to-real = 穩健 + 可適應,缺一不可。</b>域隨機化給「覆蓋面」,latent 編碼 \(z\) 給「可調旋鈕」;實機上<b>只搜尋低維的 \(z\)</b>,不動網路權重——不需要在硬體上算梯度,幾十次 rollout 就夠。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Sim-to-real = robust + adaptive, jointly.</b> Domain randomization provides coverage; the latent code \(z\) provides a tunable knob. On hardware, <b>only the low-dimensional \(z\) is searched</b>, no weight updates — no gradients on the robot, a few dozen rollouts suffice.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">資訊瓶頸是「穩健 vs 可適應」的旋鈕。</b>對 \(I(M,Z)\) 加上界,迫使策略少依賴精確動態參數:\(\beta\) 大 → 適應前就穩但可調空間小;\(\beta\) 小 → 適應前脆弱但適應後進步大。<mark class="m-result" data-t="RESULT/EVIDENCE">\(\beta=10^{-4}\) 時,加了 IB 的策略在適應前後都優於不加 IB</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">The information bottleneck is the robustness-vs-adaptability dial.</b> Upper-bounding \(I(M,Z)\) forces the policy not to over-rely on exact dynamics: large \(\beta\) → robust before adaptation but less tunable; small \(\beta\) → brittle before, big gains after. <mark class="m-result" data-t="RESULT/EVIDENCE">At \(\beta=10^{-4}\), IB-trained policies beat No-IB both before and after adaptation</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">「樣本效率」指的是實機端。</b>模擬裡每個技能仍要 <b>約 2 億</b> PPO 樣本;省下的是<b>真實世界</b>的試驗數(約 50 次)。這個分工——模擬吃大量樣本、實機只做低維搜尋——是全文的工程精髓。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">"Sample efficient" refers to the real-world side.</b> Each skill still consumes <b>~200M</b> PPO samples in simulation; what is saved is <b>real-world</b> trials (~50). This division — simulation absorbs the samples, hardware only runs a low-dimensional search — is the engineering essence.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">歷史定位:DeepMimic 上實機。</b>本文是「模仿動物資料 → 真實四足」這條路線的<b>根節點</b>,後來的 AMP、RMA 式 latent 外參估計、乃至各種 learned locomotion 系統都以它為參照。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b style="color:var(--c-result)">Historical role: DeepMimic on hardware.</b> This is the <b>root node</b> of the "imitate animal data → real quadruped" line; later AMP, RMA-style latent-extrinsics estimation, and many learned locomotion systems trace back to it. <span class="add">[guide note]</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Learning Agile Robotic Locomotion Skills by Imitating Animals</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Peng, Coumans, Zhang, Lee, Tan, Levine</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Google Research · UC Berkeley</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2020 · RSS(arXiv:2004.00784)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Legged Robotics</span>
+          <b><span data-lang="zh">平台</span><span data-lang="en">Platform</span></b><span>Unitree Laikago<span data-lang="zh">(18-DoF,12 個驅動關節)</span><span data-lang="en"> (18-DoF, 12 actuated joints)</span></span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>xbpeng.github.io/projects/Robotic_Imitation<span class="add" data-lang="zh">[導讀補充] 官方程式碼在 github.com/erwincoumans/motion_imitation</span><span class="add" data-lang="en">[guide note] official code: github.com/erwincoumans/motion_imitation</span></span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它把「機器人技能從哪來」的答案從<b>人類專家</b>換成<b>動物資料</b>,並示範了一條可複用的 sim-to-real 配方:隨機化 + latent 條件化 + 實機低維搜尋。這條配方後來被整個 learning-based locomotion 社群反覆變奏。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">It changes the answer to "where do robot skills come from" from <b>human experts</b> to <b>animal data</b>, and demonstrates a reusable sim-to-real recipe: randomize + latent-condition + low-dimensional search on hardware. The learning-based locomotion community has been riffing on this recipe ever since. <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Motion retargeting (IK)</span><span class="chip">DeepMimic-style reward</span>
+          <span class="chip">Domain randomization</span><span class="chip">Latent dynamics encoding</span>
+          <span class="chip">Information bottleneck</span><span class="chip">AWR</span>
+          <span class="chip">PPO</span><span class="chip">Laikago</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">手工控制器 / MPC</span><span data-lang="en">Hand-designed control / MPC</span></b><br><small>(MIT Cheetah 3, SLIP, …)</small></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">逐技能的漫長開發</mark>,需要對系統與該技能的深度專業;降階模型多半 task-specific,能力上限受設計者理解限制,動作仍遠不如動物流暢。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Lengthy per-skill development</mark> demanding deep expertise in both the system and the skill; reduced-order models are task-specific, capability capped by designer understanding, motions still far less fluid than animals.</span></td></tr>
+          <tr><td><b><span data-lang="zh">RL + 手工獎勵</span><span data-lang="en">RL + manual rewards</span></b><br><small>(Tan 2018, Hwangbo 2019)</small></td><td><span data-lang="zh">獎勵設計本身<mark class="m-problem" data-t="PROBLEM/GAP">又是一輪逐技能的調參工程</mark>;RL 容易學出不自然、實機上危險或不可行的動作。</span><span data-lang="en">Reward design is <mark class="m-problem" data-t="PROBLEM/GAP">yet another per-skill tuning effort</mark>; RL tends toward unnatural behaviors that are dangerous or infeasible on hardware.</span></td></tr>
+          <tr><td><b><span data-lang="zh">模擬中的動作模仿</span><span data-lang="en">Motion imitation in sim</span></b><br><small>(DeepMimic, SFV)</small></td><td><span data-lang="zh">模擬裡能做出高難度雜技,但<mark class="m-problem" data-t="PROBLEM/GAP">高樣本複雜度 + dynamics gap</mark>,能力沒登上真實機器人;實體機器人上的模仿多限於上半身、靜態平衡的動作。</span><span data-lang="en">Acrobatics work in simulation, but <mark class="m-problem" data-t="PROBLEM/GAP">high sample complexity + the dynamics gap</mark> kept them off real robots; robot-side imitation was mostly upper-body motions with static balance.</span></td></tr>
+          <tr><td><b><span data-lang="zh">域隨機化(單獨用)</span><span data-lang="en">Domain randomization alone</span></b></td><td><span data-lang="zh">追求「一個策略吃遍所有動態」——但<mark class="m-problem" data-t="PROBLEM/GAP">可能不存在同時適用所有環境的單一策略</mark>,且真實世界有未建模效應,robust 策略仍可能翻車。</span><span data-lang="en">Seeks one strategy for all dynamics — but <mark class="m-problem" data-t="PROBLEM/GAP">no single strategy may work everywhere</mark>, and unmodeled real-world effects can still topple a robust policy.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「能不能用一段動物動作 + 一套固定流程,自動生出能在真實四足機器人上執行的敏捷技能?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"Can one animal motion clip + one fixed pipeline automatically produce agile skills that run on a real quadruped?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,本文怎麼補</span><span data-lang="en">Gap table — who lacks what, and how this paper fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">本文如何補上</span><span data-lang="en">How this paper fills it</span></th></tr>
+          <tr>
+            <td><b>DeepMimic</b><br><small>Peng et al. 2018</small></td>
+            <td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">只在模擬</mark>;角色動力學理想化。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Simulation only</mark>; idealized character dynamics.</span></td>
+            <td><span data-lang="zh">同款追蹤獎勵 + <mark class="m-method" data-t="METHOD/IDEA">域隨機化與 latent 適應</mark>,把整條管線搬上實體 Laikago。</span><span data-lang="en">Same tracking reward + <mark class="m-method" data-t="METHOD/IDEA">randomization and latent adaptation</mark>, carrying the pipeline onto the physical Laikago.</span></td>
+          </tr>
+          <tr>
+            <td><b>Tan et al. 2018 / Hwangbo et al. 2019</b></td>
+            <td><span data-lang="zh">實機成功,但<mark class="m-problem" data-t="PROBLEM/GAP">逐技能手工獎勵</mark>;行為多為常規步態。</span><span data-lang="en">Real-robot success, but <mark class="m-problem" data-t="PROBLEM/GAP">per-skill manual rewards</mark>; mostly conventional gaits.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">mocap 片段取代獎勵設計</mark>,同一框架學 10 種技能(含 hop-turn、spin)。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Mocap clips replace reward design</mark>; one framework learns 10 skills (incl. hop-turn, spin).</span></td>
+          </tr>
+          <tr>
+            <td><b>Yu et al. 2019</b><br><small><span data-lang="zh">latent 轉移(雙足)</span><span data-lang="en">latent transfer (biped)</span></small></td>
+            <td><span data-lang="zh">latent 搜尋已被提出,但<mark class="m-problem" data-t="PROBLEM/GAP">行為多樣性與敏捷度有限</mark>,且 \(z\) 可能過擬合到精確動態。</span><span data-lang="en">Latent search existed, but <mark class="m-problem" data-t="PROBLEM/GAP">with limited skill diversity and agility</mark>, and \(z\) can overfit to exact dynamics.</span></td>
+            <td><span data-lang="zh">結合模仿 + <mark class="m-method" data-t="METHOD/IDEA">資訊瓶頸</mark>正則化 latent,行為庫更大、更動態,且適應前後都更穩。</span><span data-lang="en">Combines imitation + an <mark class="m-method" data-t="METHOD/IDEA">information bottleneck</mark> on the latent: a larger, more dynamic repertoire, stabler both before and after adaptation.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意本文的比較對象<b>全是自己的消融</b>(No Rand / Robust / Adaptive),沒有跟外部方法對打。它賣的不是「刷了誰的榜」,而是<b>一條完整可行的路線</b>:資料 → 模擬 → 實機。這在 2020 年是第一次有人把「模仿真動物」端到端做到實體四足上。</p>
+          <p data-lang="en" style="margin-top:6px">Note the baselines are <b>all internal ablations</b> (No Rand / Robust / Adaptive) — no external head-to-head. The paper sells not a leaderboard win but <b>a complete working route</b>: data → simulation → hardware. In 2020 this was the first end-to-end "imitate a real animal" system on a physical quadruped.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">「sample efficient」別讀成「整個系統省樣本」。省的是<b>實機試驗</b>(約 50 次、每次 5~10 秒);模擬端每技能仍要 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">約 2 億樣本的 PPO 訓練</mark>。宣稱的效率是「實機端的效率」。</span>
+        <span data-lang="en">Do not read "sample efficient" as "the whole system is cheap." What is cheap is <b>real-world trials</b> (~50, each 5–10 s); simulation still burns <mark class="m-assume" data-t="ASSUMPTION/CLAIM">~200M PPO samples per skill</mark>. The claimed efficiency is on the hardware side.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">獎勵工程與控制器工程是 legged robotics 規模化的兩大人力瓶頸。若參考動作能同時消掉兩者,技能庫的成長速度就從「工程師時間」變成「資料量」。</span>
+        <span data-lang="en">Reward engineering and controller engineering are the two manpower bottlenecks of legged robotics. If reference motions eliminate both, skill libraries scale with <i>data</i> rather than <i>engineer time</i>.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">只有內部基線</span><span data-lang="en">internal baselines</span></span><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">實機成本</span><span data-lang="en">real-world cost</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">三階段管線</span><span data-lang="en">The three-stage pipeline</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STAGE 0</span><b>Mocap</b><small data-lang="zh">真狗動作捕捉 + 美術手繪動畫片段(公開資料集)。</small><small data-lang="en">Real-dog motion capture + artist-animated clips (public dataset).</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STAGE 1</span><b>Motion Retargeting</b><small data-lang="zh">IK 把狗骨架的 keypoints(腳、髖)映射到 Laikago 形態,得到參考姿勢序列 \(\hat q_{0:T}\)。</small><small data-lang="en">IK maps dog-skeleton keypoints (feet, hips) onto the Laikago morphology, yielding reference poses \(\hat q_{0:T}\).</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STAGE 2</span><b>Motion Imitation (RL)</b><small data-lang="zh">PyBullet 模擬中用 PPO 最大化追蹤獎勵;動態參數 \(\mu\) 隨機化並編碼成 \(z\)。</small><small data-lang="en">PPO in PyBullet maximizes a tracking reward; dynamics params \(\mu\) are randomized and encoded into \(z\).</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STAGE 3</span><b>Domain Adaptation</b><small data-lang="zh">實機上以 AWR 搜尋 latent \(z^*\),約 50 次試驗完成轉移。</small><small data-lang="en">On hardware, AWR searches for the latent \(z^*\); ~50 trials complete the transfer.</small></div>
+        </div>
+        <figure class="fig"><img src="figs/Peng2020/fig2_pipeline.png" alt="Figure 2 pipeline: retargeting, imitation, adaptation">
+          <figcaption data-lang="zh"><b>Fig.2</b> 框架總覽:動物 mocap →(retargeting)→ 參考動作 →(模擬中 RL 模仿)→ 策略 →(域適應)→ 真實機器人。虛線把「模擬」與「真實世界」分開——只有最後一步碰硬體。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> Framework overview: animal mocap → (retargeting) → reference motion → (RL imitation in sim) → policy → (domain adaptation) → real robot. The dashed line separates simulation from the real world — only the last step touches hardware.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Stage 1 — IK Retargeting:跨形態的動作翻譯</span><span data-lang="en">Stage 1 — IK retargeting: translating motion across morphologies</span></h3>
+        <p data-lang="zh">狗和 Laikago 的身體結構不同,不能直接抄關節角。作法:在狗身上指定 source keypoints(腳與髖的位置),在機器人身上指定對應 target keypoints,然後解一個逐幀的最佳化,讓機器人姿勢 \(q_t\) 追蹤 keypoints、同時用正則項把姿勢拉向預設姿勢 \(\bar q\):</p>
+        <p data-lang="en">A dog and the Laikago have different bodies, so joint angles cannot be copied. Instead: specify source keypoints on the dog (feet, hips) and corresponding targets on the robot, then solve a per-frame optimization that tracks keypoints while regularizing toward a default pose \(\bar q\):</p>
+        <div class="eq">$$\arg\min_{q_{0:T}}\;\sum_t\sum_i\big\|\hat x_i(t)-x_i(q_t)\big\|^2\;+\;(\bar q-q_t)^{T}\,W\,(\bar q-q_t)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(\hat x_i(t)\) 是第 \(i\) 個 keypoint 在原始動作中的 3D 位置,\(x_i(q_t)\) 是機器人在姿勢 \(q_t\) 下的對應位置,\(W\) 是各關節的正則化權重(對角矩陣)。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">keypoints 的選取與 \(W\) 都是人工指定的</mark>——形態差距是靠這些先驗吸收的。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(\hat x_i(t)\) is keypoint \(i\) in the source motion, \(x_i(q_t)\) its robot counterpart under pose \(q_t\), and \(W\) a diagonal per-joint regularization matrix. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Both the keypoints and \(W\) are hand-specified</mark> — the morphology gap is absorbed by these priors.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Stage 2 — RL 模仿:一個獎勵追蹤所有技能</span><span data-lang="en">Stage 2 — RL imitation: one reward tracks every skill</span></h3>
+        <p data-lang="zh">標準 RL 設定:最大化期望折扣回報 \(J(\pi)=\mathbb E_{\tau\sim p(\tau|\pi)}\big[\sum_{t=0}^{T-1}\gamma^t r_t\big]\)。策略是前饋網路 \(\pi(a_t|s_t,g_t)\),30 Hz 輸出各關節 PD 目標角(先過低通濾波再上機)。輸入設計很「實機導向」:</p>
+        <p data-lang="en">Standard RL: maximize the expected discounted return \(J(\pi)=\mathbb E_{\tau\sim p(\tau|\pi)}\big[\sum_{t=0}^{T-1}\gamma^t r_t\big]\). The policy is a feedforward net \(\pi(a_t|s_t,g_t)\) outputting per-joint PD targets at 30 Hz (low-pass filtered before hitting the robot). The input design is deliberately hardware-friendly:</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>State</b> \(s_t=(q_{t-2:t},\,a_{t-3:t-1})\):最近三個時刻的姿勢(IMU 的 roll/pitch/yaw + 各關節角)與最近三個動作。<mark class="m-method" data-t="METHOD/IDEA">刻意不含 root 位置</mark>——實機上難以估計。</li>
+          <li data-lang="en"><b>State</b> \(s_t=(q_{t-2:t},\,a_{t-3:t-1})\): the last three poses (IMU roll/pitch/yaw + joint rotations) and last three actions. <mark class="m-method" data-t="METHOD/IDEA">Root position is deliberately excluded</mark> — it is hard to estimate on hardware.</li>
+          <li data-lang="zh"><b>Goal</b> \(g_t=(\hat q_{t+1},\hat q_{t+2},\hat q_{t+10},\hat q_{t+30})\):參考動作未來四個目標姿勢,橫跨約 1 秒——給策略「接下來要去哪」的預告。</li>
+          <li data-lang="en"><b>Goal</b> \(g_t=(\hat q_{t+1},\hat q_{t+2},\hat q_{t+10},\hat q_{t+30})\): four future reference poses spanning ~1 s — a preview of where the motion is heading.</li>
+        </ul>
+        <p data-lang="zh" style="margin-top:10px">獎勵是固定權重的五項追蹤和(沿用 DeepMimic):</p>
+        <p data-lang="en" style="margin-top:10px">The reward is a fixed-weight sum of five tracking terms (as in DeepMimic):</p>
+        <div class="eq">$$r_t = 0.5\,r^{p}_t + 0.05\,r^{v}_t + 0.2\,r^{e}_t + 0.15\,r^{rp}_t + 0.1\,r^{rv}_t$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">每一項都是「誤差的指數核」,例如姿勢項 \(r^p_t=\exp\!\big[-5\sum_j\|\hat q^j_t-q^j_t\|^2\big]\)(joint 角度)、末端點項 \(r^e_t=\exp\!\big[-40\sum_e\|\hat x^e_t-x^e_t\|^2\big]\)(足端相對 root 的位置)、root 姿勢項 \(r^{rp}_t=\exp\!\big[-20\|\hat x^{root}_t-x^{root}_t\|^2-10\|\hat q^{root}_t-q^{root}_t\|^2\big]\),另有速度項 \(r^v_t\)、root 速度項 \(r^{rv}_t\)。<mark class="m-method" data-t="METHOD/IDEA">同一組權重用於全部 10 個技能</mark>——這就是「不用逐技能設計獎勵」的具體意思。訓練:PPO、約 2 億樣本、每技能 3 個 seeds、PyBullet。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Each term is an exponentiated error kernel, e.g. pose \(r^p_t=\exp\!\big[-5\sum_j\|\hat q^j_t-q^j_t\|^2\big]\) (joint rotations), end-effector \(r^e_t=\exp\!\big[-40\sum_e\|\hat x^e_t-x^e_t\|^2\big]\) (foot positions relative to root), root pose \(r^{rp}_t=\exp\!\big[-20\|\hat x^{root}_t-x^{root}_t\|^2-10\|\hat q^{root}_t-q^{root}_t\|^2\big]\), plus velocity terms \(r^v_t,\,r^{rv}_t\). <mark class="m-method" data-t="METHOD/IDEA">One weight set serves all 10 skills</mark> — this is what "no per-skill reward design" concretely means. Training: PPO, ~200M samples, 3 seeds per skill, PyBullet.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Stage 3 — Latent 空間域適應(本文的技術核心)</span><span data-lang="en">Stage 3 — Latent-space domain adaptation (the technical core)</span></h3>
+        <p data-lang="zh"><b>訓練時:</b>每個 episode 先抽一組動態參數 \(\mu\sim p(\mu)\)(下表六項),再由隨機編碼器 \(E(z|\mu)=\mathcal N(m(\mu),\Sigma(\mu))\) 編成 latent \(z\),供給策略 \(\pi(a|s,g,z)\)。這讓策略學會「在不同動態下該用哪種行為變體」。</p>
+        <p data-lang="en"><b>During training:</b> each episode samples dynamics parameters \(\mu\sim p(\mu)\) (six kinds, table below), which a stochastic encoder \(E(z|\mu)=\mathcal N(m(\mu),\Sigma(\mu))\) maps to a latent \(z\) fed to the policy \(\pi(a|s,g,z)\). The policy thus learns which behavior variant suits which dynamics.</p>
+        <table>
+          <tr><th><span data-lang="zh">隨機化參數</span><span data-lang="en">Randomized param</span></th><th><span data-lang="zh">訓練範圍</span><span data-lang="en">Train range</span></th><th><span data-lang="zh">測試範圍(更廣)</span><span data-lang="en">Test range (wider)</span></th></tr>
+          <tr><td><span data-lang="zh">質量</span><span data-lang="en">Mass</span></td><td>[0.8, 1.2]×</td><td>[0.5, 2.0]×</td></tr>
+          <tr><td><span data-lang="zh">慣量</span><span data-lang="en">Inertia</span></td><td>[0.5, 1.5]×</td><td>[0.4, 1.6]×</td></tr>
+          <tr><td><span data-lang="zh">馬達強度</span><span data-lang="en">Motor strength</span></td><td>[0.8, 1.2]×</td><td>[0.7, 1.3]×</td></tr>
+          <tr><td><span data-lang="zh">馬達摩擦</span><span data-lang="en">Motor friction</span></td><td>[0, 0.05] Nms/rad</td><td>[0, 0.075] Nms/rad</td></tr>
+          <tr><td><span data-lang="zh">延遲</span><span data-lang="en">Latency</span></td><td>[0, 0.04] s</td><td>[0, 0.05] s</td></tr>
+          <tr><td><span data-lang="zh">側向摩擦</span><span data-lang="en">Lateral friction</span></td><td>[0.05, 1.25] Ns/m</td><td>[0.04, 1.35] Ns/m</td></tr>
+        </table>
+        <p data-lang="zh"><b>資訊瓶頸:</b>若 \(z\) 把 \(\mu\) 編得太精確,策略會過擬合到「每組動態的專屬打法」,而真實世界根本沒有哪個 \(\mu\) 是準的。因此對 \(I(M,Z)\) 加上界,實作上用 KL 到單位高斯先驗 \(\rho(z)=\mathcal N(0,I)\) 的變分上界,化成軟約束:</p>
+        <p data-lang="en"><b>Information bottleneck:</b> if \(z\) encodes \(\mu\) too precisely, the policy overfits a bespoke strategy to each dynamics setting — and no \(\mu\) exactly matches the real world anyway. So the mutual information \(I(M,Z)\) is upper-bounded, implemented as a variational bound via the KL to a unit-Gaussian prior \(\rho(z)=\mathcal N(0,I)\), relaxed into a soft constraint:</p>
+        <div class="eq">$$\arg\max_{\pi,E}\;\mathbb E_{\mu\sim p(\mu)}\,\mathbb E_{z\sim E(z|\mu)}\,\mathbb E_{\tau\sim p(\tau|\pi,\mu,z)}\!\Big[\textstyle\sum_{t=0}^{T-1}\gamma^t r_t\Big]\;-\;\beta\,\mathbb E_{\mu\sim p(\mu)}\Big[D_{\mathrm{KL}}\big[E(\cdot|\mu)\,\big\|\,\rho(\cdot)\big]\Big]$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(\beta\) 是 Lagrange 乘子:\(\beta\!\to\!\infty\) 得到完全不看動態參數的 robust 策略;\(\beta\!\to\!0\) 則策略對 \(\mu\) 無限制取用、變得脆弱。<mark class="m-result" data-t="RESULT/EVIDENCE">實驗選 \(\beta=10^{-4}\)</mark>。編碼器與策略用 reparameterization trick 端到端一起訓。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(\beta\) is a Lagrange multiplier: \(\beta\!\to\!\infty\) yields a robust policy that ignores dynamics parameters; \(\beta\!\to\!0\) gives unfettered access to \(\mu\) and brittle strategies. <mark class="m-result" data-t="RESULT/EVIDENCE">Experiments use \(\beta=10^{-4}\)</mark>. Encoder and policy are trained end-to-end via the reparameterization trick.</p>
+        <p data-lang="zh"><b>實機轉移:</b>真實世界的 \(\mu\) 未知,乾脆跳過它——直接在 latent 空間搜尋讓實機回報最大的編碼:</p>
+        <p data-lang="en"><b>Real-world transfer:</b> the true \(\mu\) is unknown, so skip it — search the latent space directly for the encoding that maximizes return on the physical system:</p>
+        <div class="eq">$$z^{*}=\arg\max_{z}\;\mathbb E_{\tau\sim p^{*}(\tau|\pi,z)}\Big[\textstyle\sum_{t=0}^{T-1}\gamma^{t}r_{t}\Big]$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">用 <b>AWR(advantage-weighted regression)</b>:從先驗 \(\omega_0=\mathcal N(0,I)\) 出發,每輪抽 \(z_k\)、跑一個 episode 記回報 \(R_k\),然後把搜尋分佈往「回報高於平均的樣本」加權更新(權重 \(\exp\!\big[\tfrac1\alpha(R_i-\bar v)\big]\))。作者發現解析解容易過早收斂,改用幾步梯度下降做增量更新。<mark class="m-result" data-t="RESULT/EVIDENCE">約 50 次實機試驗(每次 5~10 秒)即可</mark>——全程不需要在硬體上算策略梯度。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">This uses <b>AWR (advantage-weighted regression)</b>: start from the prior \(\omega_0=\mathcal N(0,I)\); each iteration samples \(z_k\), runs one episode, records return \(R_k\), and reweights the search distribution toward above-average samples (weight \(\exp\!\big[\tfrac1\alpha(R_i-\bar v)\big]\)). The analytic update converges prematurely, so a few gradient steps are used instead. <mark class="m-result" data-t="RESULT/EVIDENCE">About 50 real trials of 5–10 s each suffice</mark> — no policy gradients ever computed on hardware.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\hat q_t,\ \hat x^e_t\)</td><td><span data-lang="zh">參考動作在時刻 \(t\) 的目標姿勢 / 目標足端位置(retargeting 的輸出,^ 代表「參考值」)。</span><span data-lang="en">Reference pose / end-effector target at time \(t\) (output of retargeting; the hat means "reference").</span></td></tr>
+          <tr><td>\(s_t,\ g_t,\ a_t\)</td><td><span data-lang="zh">狀態(近三步姿勢+動作)、目標(未來 4 個參考姿勢)、動作(各關節 PD 目標角)。</span><span data-lang="en">State (last three poses+actions), goal (four future reference poses), action (per-joint PD targets).</span></td></tr>
+          <tr><td>\(\mu\)</td><td><span data-lang="zh">模擬動態參數(質量、摩擦、延遲…),訓練時每 episode 隨機抽;真實世界的 \(\mu\) 不可知。</span><span data-lang="en">Simulator dynamics parameters (mass, friction, latency, …), resampled each training episode; unknown in the real world.</span></td></tr>
+          <tr><td>\(E(z|\mu)\)</td><td><span data-lang="zh">隨機編碼器:把 \(\mu\) 壓成 latent 高斯分佈;策略只透過 \(z\) 認識動態。</span><span data-lang="en">Stochastic encoder squeezing \(\mu\) into a Gaussian over latents; the policy senses dynamics only through \(z\).</span></td></tr>
+          <tr><td>\(\beta,\ \rho(z)\)</td><td><span data-lang="zh">資訊瓶頸強度(KL 懲罰係數)與先驗 \(\mathcal N(0,I)\);\(\beta\) 越大 \(z\) 攜帶的動態資訊越少。</span><span data-lang="en">Bottleneck strength (KL penalty) and the prior \(\mathcal N(0,I)\); larger \(\beta\) = less dynamics information in \(z\).</span></td></tr>
+          <tr><td>\(\omega_k(z),\ \alpha\)</td><td><span data-lang="zh">實機上第 \(k\) 輪的 latent 搜尋分佈,與 AWR 的溫度(\(\alpha=0.01\))。</span><span data-lang="en">The latent search distribution at hardware iteration \(k\), and the AWR temperature (\(\alpha=0.01\)).</span></td></tr>
+          <tr><td>\(z^{*}\)</td><td><span data-lang="zh">最終部署用的編碼:搜尋分佈收斂後取其平均。</span><span data-lang="en">The deployed encoding: the mean of the converged search distribution.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">模擬裡先學會「一整族依動態而異的走法」,並用一個低維旋鈕 \(z\) 索引;上了實機,不重訓網路,<b>只轉這顆旋鈕</b>,轉到機器人不跌倒為止。</span>
+        <span data-lang="en">In simulation, learn a whole family of dynamics-dependent walking styles indexed by a low-dimensional knob \(z\); on hardware, retrain nothing — <b>just turn the knob</b> until the robot stops falling.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何搜 latent 而非 finetune 權重?</span><span data-lang="en">Why search a latent, not fine-tune weights?</span></span>
+        <span data-lang="zh">實機上做 RL 微調要梯度、要大量 rollout、還要承受探索期的跌倒。latent 搜尋把問題降成<b>低維黑箱最佳化</b>:每個樣本只是「跑一次、記個分」,50 次內收斂。代價是:能調的行為<mark class="m-assume" data-t="ASSUMPTION/CLAIM">僅限訓練時 \(z\) 空間裡已學到的變體</mark>——超出分佈的實機效應,旋鈕再怎麼轉也補不了。</span>
+        <span data-lang="en">RL fine-tuning on hardware needs gradients, many rollouts, and survives exploration falls. Latent search reduces the problem to <b>low-dimensional black-box optimization</b>: each sample is "run once, record a score," converging within ~50 trials. The cost: only behavior variants <mark class="m-assume" data-t="ASSUMPTION/CLAIM">already learned inside the \(z\) space</mark> are reachable — out-of-distribution hardware effects cannot be fixed by any knob setting.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意:非對稱資訊設計</span><span data-lang="en">Note: asymmetric information</span></div>
+        <span data-lang="zh">value function \(V(s,g,\mu)\) 直接吃<b>真實的 \(\mu\)</b>(訓練時的特權資訊),策略只透過瓶頸後的 \(z\)。這是 privileged-critic 設計的早期實例;部署時 value function 直接丟棄。</span>
+        <span data-lang="en">The value function \(V(s,g,\mu)\) consumes the <b>true \(\mu\)</b> (privileged, training-only), while the policy sees only the bottlenecked \(z\). An early instance of the privileged-critic design; the value net is discarded at deployment.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">網路規模(小得驚人)</span><span data-lang="en">Network sizes (strikingly small)</span></span>
+        <span data-lang="zh">編碼器 FC 256→128;策略 FC 512→256;值函數 512→256。<b>全是小 MLP</b>——敏捷性來自資料與訓練框架,不是模型容量。PPO:\(\gamma=0.95\)、batch 10000;AWR:lr \(5\times10^{-3}\)、每輪 10 步梯度。</span>
+        <span data-lang="en">Encoder FC 256→128; policy FC 512→256; value net 512→256. <b>All small MLPs</b> — the agility comes from data and the training framework, not model capacity. PPO: \(\gamma=0.95\), batch 10000; AWR: lr \(5\times10^{-3}\), 10 gradient steps per iteration.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">學到什麼技能?多快?</span><span data-lang="en">Which skills, and how fast?</span></h3>
+        <p data-lang="zh">10 種技能:5 種來自真狗 mocap(Dog Pace / Trot / Backwards Pace / Backwards Trot / Spin),5 種來自美術動畫(In-Place Steps / Side-Steps / Turn / Hop-Turn / Running Man)。<mark class="m-result" data-t="RESULT/EVIDENCE">Dog Trot 實測 1.08 m/s、倒退 trot 1.20 m/s,均快過原廠控制器最快的 0.84 m/s</mark>;Hop-Turn 是空中完成 90° 轉身的高動態動作。把 mocap 倒放就能學出倒退步態——展示了「換片段=換技能」的便利。</p>
+        <p data-lang="en">Ten skills: five from real-dog mocap (Dog Pace / Trot / Backwards Pace / Backwards Trot / Spin) and five from artist animations (In-Place Steps / Side-Steps / Turn / Hop-Turn / Running Man). <mark class="m-result" data-t="RESULT/EVIDENCE">Dog Trot reaches 1.08 m/s and backwards trot 1.20 m/s, both beating the fastest manufacturer gait at 0.84 m/s</mark>; Hop-Turn performs a 90° turn midair. Playing mocap backwards yields backwards gaits — "swap the clip, swap the skill."</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">失敗案例也誠實給出:<mark class="m-limit" data-t="LIMITATION/FUTURE">Running Man(向後移動卻做向前走的動作)學不像</mark>——策略讓腳貼地向後蹭,而不是抬腳踏步。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">A failure case is honestly reported: <mark class="m-limit" data-t="LIMITATION/FUTURE">Running Man (moving backwards with a forward-walking motion) is not reproduced</mark> — the policy shuffles backwards with feet on the ground instead of stepping.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果表 — 實機正規化回報(Table IV,0~1)</span><span data-lang="en">Main results — real-world normalized return (Table IV, 0–1)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">技能</span><span data-lang="en">Skill</span></th><th>No Rand</th><th>Robust</th><th><span data-lang="zh">Adaptive(適應前)</span><span data-lang="en">Adaptive (before)</span></th><th><span data-lang="zh">Adaptive(適應後)</span><span data-lang="en">Adaptive (after)</span></th></tr>
+          <tr><td>Dog Pace</td><td>0.128</td><td>0.350</td><td>0.395</td><td class="win">0.827</td></tr>
+          <tr><td>Dog Trot</td><td>0.171</td><td>0.471</td><td>0.237</td><td class="win">0.593</td></tr>
+          <tr><td>Dog Backwards Pace</td><td>0.067</td><td class="win">0.421</td><td>0.401</td><td>0.390</td></tr>
+          <tr><td>Dog Backwards Trot</td><td>0.072</td><td>0.120</td><td>0.167</td><td class="win">0.656</td></tr>
+          <tr><td>Dog Spin</td><td>0.098</td><td>0.209</td><td>0.121</td><td class="win">0.751</td></tr>
+          <tr><td>In-Place Steps</td><td>0.822</td><td class="win">0.845</td><td>0.771</td><td>0.778</td></tr>
+          <tr><td>Side-Steps</td><td>0.541</td><td class="win">0.782</td><td>0.310</td><td>0.710</td></tr>
+          <tr><td>Turn</td><td>0.108</td><td>0.410</td><td>0.594</td><td class="win">0.606</td></tr>
+          <tr><td>Hop-Turn</td><td>0.174</td><td>0.478</td><td>0.493</td><td class="win">0.518</td></tr>
+          <tr><td>Running Man</td><td>0.149</td><td>0.430</td><td>0.488</td><td class="win">0.503</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">讀法:<b>No Rand 幾乎全軍覆沒</b>(不隨機化就上不了實機);<mark class="m-result" data-t="RESULT/EVIDENCE">動態技能(Pace、Spin、Backwards Trot)靠適應才能成立,增幅 2~5 倍</mark>;但<mark class="m-limit" data-t="LIMITATION/FUTURE">簡單技能(In-Place / Side-Steps)Robust 反而略勝,Backwards Pace 的適應甚至沒有幫助</mark>——適應不是萬靈丹。每格為 3 seeds × 5 episodes 的平均。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">How to read: <b>No Rand collapses almost everywhere</b> (no randomization = no transfer); <mark class="m-result" data-t="RESULT/EVIDENCE">dynamic skills (Pace, Spin, Backwards Trot) only work after adaptation, gaining 2–5×</mark>; but <mark class="m-limit" data-t="LIMITATION/FUTURE">on simple skills (In-Place / Side-Steps) Robust actually edges ahead, and adaptation does not help Backwards Pace at all</mark> — adaptation is no panacea. Each cell averages 3 seeds × 5 episodes.</p>
+        <figure class="fig"><img src="figs/Peng2020/fig5_realworld.png" alt="Figure 5 real-world performance bar chart">
+          <figcaption data-lang="zh"><b>Fig.5</b> 實機表現長條圖(含誤差棒)。注意誤差棒之大——尤其 Robust 與 Adaptive(Before)在多個技能上跨越彼此;真正拉開差距的是適應後(亮綠)的動態技能。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> Real-world performance bars (with error bars). Note how large the bars are — Robust and Adaptive (Before) overlap on several skills; the clear separation appears after adaptation (bright green) on dynamic skills.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融解讀</span><span data-lang="en">Reading the ablations</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">拿掉什麼</span><span data-lang="en">Removed</span></th><th><span data-lang="zh">代價</span><span data-lang="en">Cost</span></th><th><span data-lang="zh">證明了什麼</span><span data-lang="en">What it proves</span></th></tr>
+          <tr><td><span data-lang="zh">域隨機化(No Rand)</span><span data-lang="en">Randomization (No Rand)</span></td><td class="bad"><span data-lang="zh">實機幾乎全滅(0.07~0.17)</span><span data-lang="en">Near-total real-world failure (0.07–0.17)</span></td><td><span data-lang="zh">dynamics gap 是主要死因;模擬分數(≈0.6~0.9)完全騙人。</span><span data-lang="en">The dynamics gap is the killer; sim scores (≈0.6–0.9) are utterly misleading.</span></td></tr>
+          <tr><td><span data-lang="zh">適應(只留 Robust)</span><span data-lang="en">Adaptation (Robust only)</span></td><td class="bad"><span data-lang="zh">動態技能掉 2~5 倍</span><span data-lang="en">2–5× drop on dynamic skills</span></td><td><span data-lang="zh">「一招打天下」的策略保守到做不出高動態動作;OOD 模擬測試同樣領先(Dog Pace:回報&gt;0.6 的環境 50% vs 38%)。</span><span data-lang="en">One-size-fits-all policies are too conservative for dynamic skills; adaptive also leads in OOD sim tests (Dog Pace: return &gt;0.6 in 50% vs 38% of envs).</span></td></tr>
+          <tr><td><span data-lang="zh">資訊瓶頸(No IB)</span><span data-lang="en">The bottleneck (No IB)</span></td><td class="bad"><span data-lang="zh">適應前後皆較差</span><span data-lang="en">Worse both before and after</span></td><td><span data-lang="zh">限制 \(z\) 的資訊量同時買到穩健與可適應;\(\beta\) 掃描顯示明確的 trade-off(大 \(\beta\)=穩、小 \(\beta\)=可調),\(\beta=10^{-4}\) 最平衡。</span><span data-lang="en">Capping the information in \(z\) buys robustness and adaptability together; the \(\beta\) sweep shows a clean trade-off (large \(\beta\)=robust, small \(\beta\)=tunable), with \(\beta=10^{-4}\) best balanced.</span></td></tr>
+        </table>
+        <figure class="fig"><img src="figs/Peng2020/fig10_bottleneck.png" alt="Figure 10 information bottleneck beta sweep">
+          <figcaption data-lang="zh"><b>Fig.10</b> 資訊瓶頸係數 \(\beta\) 掃描(虛線=適應前、實線=適應後;OOD 模擬環境)。看 Dog Pace:大 \(\beta\)(綠/紅)適應前曲線就高;小 \(\beta\)(橘)與 No IB(藍)適應前低、適應後跳升——<b>穩健與可適應之間的旋鈕</b>被具象化成一張圖。</figcaption>
+          <figcaption data-lang="en"><b>Fig.10</b> Sweep of the bottleneck coefficient \(\beta\) (dotted = before adaptation, solid = after; OOD sim environments). See Dog Pace: large \(\beta\) (green/red) is already high before adaptation; small \(\beta\) (orange) and No IB (blue) start low and jump after — the <b>robustness-vs-adaptability dial</b> made visible in one plot.</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">另外:適應的學習曲線顯示<mark class="m-result" data-t="RESULT/EVIDENCE">多數環境在幾十個 episodes 內收斂</mark>;跌倒時間統計(Fig.7/11)顯示適應後的策略常撐滿整個 episode 不跌倒。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Also: adaptation learning curves show <mark class="m-result" data-t="RESULT/EVIDENCE">convergence within a few dozen episodes</mark> in most environments; time-before-fall stats (Fig.7/11) show adapted policies often survive the full episode.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實驗證明了什麼、沒證明什麼</span><span data-lang="en">What the experiments do and do not prove</span></h3>
+        <p data-lang="zh"><b>證明了:</b>模仿 + 隨機化 + latent 適應能把多樣、超越原廠速度的步態搬上真實 Laikago;適應對動態技能是必要的;IB 正則化在前後兩端都有淨收益。<br><b>沒證明:</b><mark class="m-limit" data-t="LIMITATION/FUTURE">沒有與任何外部方法(SysID、meta-learning、直接 finetune)對比</mark>;沒有地形、負載、戶外等真實變因;「敏捷」上限止於 hop-turn——<mark class="m-limit" data-t="LIMITATION/FUTURE">大跳躍與奔跑仍做不到</mark>(作者自承)。</p>
+        <p data-lang="en"><b>Proven:</b> imitation + randomization + latent adaptation puts diverse, faster-than-manufacturer gaits on a real Laikago; adaptation is necessary for dynamic skills; IB regularization nets gains on both ends.<br><b>Not proven:</b> <mark class="m-limit" data-t="LIMITATION/FUTURE">no comparison against any external method (SysID, meta-learning, direct fine-tuning)</mark>; no terrain, payload, or outdoor variation; agility tops out at hop-turn — <mark class="m-limit" data-t="LIMITATION/FUTURE">big jumps and running remain out of reach</mark> (authors admit).</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">實機上,<b>No Rand 全滅、Robust 只能做保守動作、Adaptive 才撐起動態技能</b>——三欄對照本身就是 sim-to-real 的教科書級證據。</span>
+        <span data-lang="en">On hardware, <b>No Rand collapses, Robust manages only conservative motions, and Adaptive carries the dynamic skills</b> — the three-column contrast is textbook sim-to-real evidence.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">模擬中三種方法分數幾乎相同(如 Dog Pace 0.84/0.82/0.81)——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">所有差異都只在實機端顯現</mark>,而實機統計僅 3 seeds × 5 episodes,不少格子的標準差高達 ±0.17~0.28,部分結論(哪個方法「贏」)在統計上其實很脆。</span>
+        <span data-lang="en">In simulation the three methods score nearly identically (e.g. Dog Pace 0.84/0.82/0.81) — <mark class="m-assume" data-t="ASSUMPTION/CLAIM">every difference shows up only on hardware</mark>, where stats are just 3 seeds × 5 episodes with std devs up to ±0.17–0.28; some "who wins" conclusions are statistically fragile.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">變異數與顯著性</span><span data-lang="en">variance</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">回報怎麼在實機量?</span><span data-lang="en">measuring return</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>基線全是自家消融。</b>論文引用了 finetuning、meta-learning(MAML、\(\mathrm{RL}^2\))、SysID 等替代適應路線,<mark class="m-limit" data-t="LIMITATION/FUTURE">卻沒有和其中任何一個做實驗對比</mark>。「latent 搜尋比較好」是論述出來的,不是量測出來的;甚至沒和「AWR 換成 CMA-ES / 隨機搜尋」比,無法確認 AWR 本身的貢獻。</li>
+          <li data-lang="en"><b>All baselines are in-house ablations.</b> The paper cites fine-tuning, meta-learning (MAML, \(\mathrm{RL}^2\)) and SysID as alternative adaptation routes, <mark class="m-limit" data-t="LIMITATION/FUTURE">yet compares experimentally against none of them</mark>. "Latent search is better" is argued, not measured; there is not even a comparison of AWR vs CMA-ES / random search within the same latent space, so the contribution of AWR itself is unverified.</li>
+          <li data-lang="zh"><b>實機適應的真實成本被輕描淡寫。</b>50 次試驗聽起來便宜,但其中包含<mark class="m-assume" data-t="ASSUMPTION/CLAIM">大量跌倒</mark>(Fig.7 的 robust 策略常在數秒內倒)、每次人工復位、硬體磨損;而且計算回報需要追蹤參考動作的誤差——<mark class="m-limit" data-t="LIMITATION/FUTURE">實機上如何量測 root 位置/姿態(是否用外部 mocap 系統)論文沒有交代</mark>,這是重現該工作的實際門檻。</li>
+          <li data-lang="en"><b>The true cost of hardware adaptation is understated.</b> Fifty trials sound cheap, but they include <mark class="m-assume" data-t="ASSUMPTION/CLAIM">many falls</mark> (robust policies topple within seconds in Fig.7), manual resets, and hardware wear; moreover the return requires measuring tracking error against the reference — <mark class="m-limit" data-t="LIMITATION/FUTURE">how root pose is measured on hardware (an external mocap system?) is never specified</mark>, a real barrier to reproduction.</li>
+          <li data-lang="zh"><b>統計太薄。</b>3 seeds × 5 episodes,多格標準差 ±0.1~0.28;Dog Backwards Pace 上 Robust(0.421)、Before(0.401)、After(0.390)根本無法區分。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「adaptive 在多數技能上勝出」的主張,在幾個技能上落在雜訊裡</mark>。</li>
+          <li data-lang="en"><b>Thin statistics.</b> 3 seeds × 5 episodes, std devs of ±0.1–0.28 in many cells; on Dog Backwards Pace, Robust (0.421), Before (0.401) and After (0.390) are indistinguishable. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">The claim "adaptive wins on most skills" sits inside the noise for several skills</mark>.</li>
+          <li data-lang="zh"><b>「不用設計獎勵」只對了一半。</b>獎勵形式固定,但那組指數核係數(5、40、20/10、0.5/0.05/0.2/0.15/0.1)<mark class="m-assume" data-t="ASSUMPTION/CLAIM">仍是一次性的人工調參</mark>,retargeting 的 keypoints 與 \(W\) 也是。人工先驗沒有消失,只是從「每技能一次」攤成「每框架一次」。</li>
+          <li data-lang="en"><b>"No reward design" is half-true.</b> The reward form is fixed, but its kernel coefficients (5, 40, 20/10, 0.5/0.05/0.2/0.15/0.1) <mark class="m-assume" data-t="ASSUMPTION/CLAIM">were still hand-tuned once</mark>, as were the retargeting keypoints and \(W\). Manual priors did not vanish; they amortized from per-skill to per-framework.</li>
+          <li data-lang="zh"><b>一技能一策略、一技能一次適應。</b>沒有多技能共用策略,也沒展示同一個 \(z^*\) 能否跨技能共用;每學一招都要 2 億模擬樣本 + 50 次實機試驗。<mark class="m-limit" data-t="LIMITATION/FUTURE">「技能庫隨資料 scale」目前只是願景</mark>。</li>
+          <li data-lang="en"><b>One skill = one policy = one adaptation run.</b> No multi-skill policy, and no evidence a single \(z^*\) transfers across skills; each new skill costs 200M sim samples + 50 hardware trials. <mark class="m-limit" data-t="LIMITATION/FUTURE">"Skill libraries scale with data" remains a vision, not a result</mark>.</li>
+          <li data-lang="zh"><b>環境單一。</b>平坦室內地面、無地形、無外部擾動、無感知;\(z\) 適應的是「這一天、這顆電池、這塊地板」的動態——<mark class="m-limit" data-t="LIMITATION/FUTURE">環境一變是否要重新適應,論文未測</mark>。</li>
+          <li data-lang="en"><b>A single environment.</b> Flat indoor ground, no terrain, no perturbations, no perception; \(z\) adapts to the dynamics of this day, this battery, this floor — <mark class="m-limit" data-t="LIMITATION/FUTURE">whether a changed environment demands re-adaptation is untested</mark>.</li>
+          <li data-lang="zh"><b>與原廠的速度比較不對等。</b>1.08 vs 0.84 m/s 的對照裡,原廠控制器優化的目標(穩定、安全、通用)和模仿策略(單一步態的追蹤)不同;<mark class="m-assume" data-t="ASSUMPTION/CLAIM">用「更快」證明「更敏捷」有偷換概念的成分</mark>,且學到的行為穩定性不如最好的手工控制器(作者自承)。</li>
+          <li data-lang="en"><b>The manufacturer speed comparison is apples-to-oranges.</b> In 1.08 vs 0.84 m/s, the stock controller optimizes stability, safety and generality, not top speed; <mark class="m-assume" data-t="ASSUMPTION/CLAIM">using "faster" as proof of "more agile" smuggles the conclusion</mark> — and the learned behaviors are less stable than the best hand-designed controllers (authors admit).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>Q1 適應方法的對照:</b>同樣 50 次試驗預算,拿去做隨機搜尋 / CMA-ES / 少步 finetune 最後一層,會不會一樣好?AWR 與 latent 結構各貢獻多少?</li>
+          <li data-lang="en"><b>Q1 Adaptation baselines:</b> with the same 50-trial budget, would random search / CMA-ES / few-step last-layer fine-tuning do just as well? How much is AWR vs the latent structure itself?</li>
+          <li data-lang="zh"><b>Q2 實機量測:</b>實機回報中的 root 位置與姿態誤差是怎麼量的?若需要實驗室級 mocap 設備,「50 次試驗很省」的實務意義就要打折。</li>
+          <li data-lang="en"><b>Q2 Hardware measurement:</b> how are root position/orientation errors measured for the real-world return? If a lab mocap rig is required, the practical value of "only 50 trials" shrinks.</li>
+          <li data-lang="zh"><b>Q3 顯著性:</b>±0.25 級的標準差下,Backwards Pace、In-Place、Side-Steps 的方法排序還可信嗎?若跑 10 seeds,「adaptive 多數勝出」還成立嗎?</li>
+          <li data-lang="en"><b>Q3 Significance:</b> with ±0.25-level std devs, are the method rankings on Backwards Pace, In-Place and Side-Steps trustworthy? Would "adaptive mostly wins" survive 10 seeds?</li>
+          <li data-lang="zh"><b>Q4 \(z\) 到底編了什麼:</b>latent 維度多大?\(z^*\) 是否對應可解讀的物理量(延遲?摩擦?)?同一技能在不同日子搜到的 \(z^*\) 一致嗎?這決定它是「系統辨識的壓縮版」還是「行為風格開關」。</li>
+          <li data-lang="en"><b>Q4 What does \(z\) actually encode:</b> what is its dimension? Does \(z^*\) map to interpretable physics (latency? friction?)? Is \(z^*\) consistent across days for the same skill? This decides whether it is compressed system identification or a behavior-style switch.</li>
+          <li data-lang="zh"><b>Q5 上限在哪:</b>作者說大跳躍與奔跑做不到是「硬體與演算法限制」——具體卡在哪?馬達扭矩?PD 頻寬?還是 mocap 裡的動態超出 \(z\) 空間能補償的範圍?</li>
+          <li data-lang="en"><b>Q5 Where is the ceiling:</b> the authors blame "hardware and algorithmic limitations" for missing jumps and runs — what binds, concretely? Motor torque? PD bandwidth? Or dynamics in the mocap beyond what the \(z\) space can compensate?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把本文讀成「機器狗已達動物級敏捷」。實際上技能止於步態、轉身與小跳;<mark class="m-limit" data-t="LIMITATION/FUTURE">大跳躍、奔跑明確做不到</mark>,穩定性也不如最佳手工控制器。它證明的是<b>一條自動化生產技能的路線</b>,不是敏捷度的天花板。</span>
+        <span data-lang="en">Reading this as "robot dogs now have animal-level agility." The skills stop at gaits, turns and a small hop; <mark class="m-limit" data-t="LIMITATION/FUTURE">big jumps and runs are explicitly out of reach</mark>, and stability trails the best hand-designed controllers. What it proves is <b>an automated skill-production pipeline</b>, not an agility ceiling.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">失敗案例(Running Man)、與手工控制器的穩定性差距、跳躍/奔跑的缺席,都寫得直白;主表也誠實保留了「Robust 在簡單技能上反而較好」「Backwards Pace 適應無效」這些對自己不利的格子——比多數系統論文誠實。</span>
+        <span data-lang="en">The failure case (Running Man), the stability gap to hand-designed controllers, and the absence of jumps/runs are all stated plainly; the main table honestly keeps unfavorable cells ("Robust beats us on simple skills," "adaptation does not help Backwards Pace") — more candid than most systems papers.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>可複用的 sim-to-real 配方:</b>「隨機化參數 → 編碼成 latent → 策略以 latent 為條件 → 實機上黑箱搜尋 latent」。任何有模擬器、有硬體、怕在硬體上做梯度更新的任務(操作、無人機、外骨骼)都能套。</li>
+          <li data-lang="en"><b>A reusable sim-to-real recipe:</b> randomize parameters → encode into a latent → condition the policy on it → black-box-search the latent on hardware. Applicable to any task with a simulator, hardware, and a fear of on-hardware gradient updates (manipulation, drones, exoskeletons).</li>
+          <li data-lang="zh"><b>示範資料是最便宜的獎勵函數。</b>當行為「長什麼樣」比「達成什麼指標」更好定義時,追蹤獎勵 + 參考資料勝過手工 shaping——這個原則後來擴散到人形機器人與操作(把 mocap 換成人類影片/遙操作示範)。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>Demonstration data is the cheapest reward function.</b> When "what the behavior looks like" is easier to define than "what metric it achieves," tracking rewards + reference data beat manual shaping — a principle that later spread to humanoids and manipulation (swap mocap for human video / teleop demos). <span class="add">[guide note]</span></li>
+          <li data-lang="zh"><b>資訊瓶頸當設計旋鈕,不只是正則化。</b>「策略可以依賴多少特權資訊」在這裡變成一個可掃描、可視化的超參數 \(\beta\)。任何 teacher-student / privileged-learning 設計都值得借這個透鏡。</li>
+          <li data-lang="en"><b>The information bottleneck as a design dial, not just regularization.</b> "How much privileged information may the policy depend on" becomes a sweepable, plottable hyperparameter \(\beta\). Any teacher-student / privileged-learning design can borrow this lens.</li>
+          <li data-lang="zh"><b>報告你的失敗格。</b>本文的可信度有一大半來自那些對自己不利的數字(Robust 贏兩格、Backwards Pace 適應無效)。寫系統論文時照做。</li>
+          <li data-lang="en"><b>Report your losing cells.</b> Much of this paper&#39;s credibility comes from the unfavorable numbers it keeps (Robust wins two rows; adaptation fails on Backwards Pace). Do the same in systems papers.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">歷史位置:這條家譜的根</span><span data-lang="en">Historical position: root of a lineage</span></h3>
+        <p data-lang="zh">本文是「learning-based 四足運動」的根節點之一,往後看得到三條支線:<span class="add">[導讀補充]</span></p>
+        <p data-lang="en">This paper is a root node of learning-based quadruped locomotion; three branches grow out of it: <span class="add">[guide note]</span></p>
+        <table>
+          <tr><th><span data-lang="zh">後續工作</span><span data-lang="en">Later work</span></th><th><span data-lang="zh">與本文的關係</span><span data-lang="en">Relation to this paper</span></th></tr>
+          <tr><td><b>RMA</b><br><small>Kumar et al. 2021</small></td><td><span data-lang="zh">同樣「把動態編碼成 latent 外參 \(z\)」,但把<b>實機上的 50 次搜尋</b>換成一個從本體感受歷史<b>即時回歸 \(z\) 的 adaptation module</b>——零試驗、毫秒級適應。可視為本文第三階段的「線上化」。</span><span data-lang="en">Also encodes dynamics into a latent extrinsics vector \(z\), but replaces the <b>50-trial on-robot search</b> with an <b>adaptation module regressing \(z\) online</b> from proprioceptive history — zero trials, millisecond adaptation. Effectively an "online-ization" of Stage 3 here.</span></td></tr>
+          <tr><td><b>Walk These Ways</b><br><small>Margolis &amp; Agrawal 2022</small></td><td><span data-lang="zh">不模仿動物,改用<b>行為參數(步頻、步高、步態相位)條件化</b>一個策略,一樣是「低維旋鈕索引一族行為」的思想,但旋鈕變成人可直接指定的語義參數。</span><span data-lang="en">Skips animal imitation; conditions one policy on <b>behavior parameters (cadence, foot height, gait phase)</b> — the same "low-dimensional knob indexes a behavior family" idea, with the knob now human-interpretable.</span></td></tr>
+          <tr><td><b>DreamWaQ</b><br><small>Nahrendra et al. 2023</small></td><td><span data-lang="zh">把「環境資訊壓進 latent」推進成<b>從觀測歷史隱式估計</b>(VAE 式 context estimator),不再需要顯式 \(\mu\) 列表——本文 encoder 思想的感知化版本。</span><span data-lang="en">Pushes "compress environment into a latent" to <b>implicit estimation from observation history</b> (a VAE-style context estimator), dropping the explicit \(\mu\) list — a perceptual descendant of the encoder here.</span></td></tr>
+          <tr><td><b>AMP / 影片模仿</b><br><small>Peng et al. 2021+</small></td><td><span data-lang="zh">把「逐幀追蹤獎勵」換成<b>對抗式動作先驗</b>,解掉 phase 對齊的僵硬;並朝作者在結論許的願——從影片學動作——前進。也與 imitation learning 各線(行為複製、遙操作示範)概念相通。</span><span data-lang="en">Replaces per-frame tracking with an <b>adversarial motion prior</b>, removing rigid phase alignment; and advances the paper&#39;s own closing wish — learning from video. Conceptually adjacent to the broader imitation-learning threads (behavior cloning, teleop demos).</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What is worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「參考動作可取代逐技能獎勵工程」</span><span data-lang="en">"Reference motions can replace per-skill reward engineering"</span></td><td><span data-lang="zh">實體四足上的第一個系統性正例(10 技能、同一框架)。</span><span data-lang="en">The first systematic positive example on a physical quadruped (10 skills, one framework).</span></td></tr>
+          <tr><td><span data-lang="zh">「latent 空間搜尋是實用的 sim-to-real 適應法」</span><span data-lang="en">"Latent-space search is a practical sim-to-real adaptation method"</span></td><td><span data-lang="zh">引它的三欄消融(No Rand / Robust / Adaptive)與 ~50 trials 的成本數字。</span><span data-lang="en">Cite the three-column ablation (No Rand / Robust / Adaptive) and the ~50-trial cost figure.</span></td></tr>
+          <tr><td><span data-lang="zh">「資訊瓶頸能同時買到穩健與可適應」</span><span data-lang="en">"An information bottleneck buys robustness and adaptability together"</span></td><td><span data-lang="zh">引 \(\beta\) 掃描(Fig.10)與 IB vs No-IB 的前後對比。</span><span data-lang="en">Cite the \(\beta\) sweep (Fig.10) and the IB vs No-IB before/after contrast.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">這篇把「機器人技能的來源」從工程師的手改成動物的身體:mocap 當獎勵、模擬吃樣本、實機只轉一顆 latent 旋鈕。它的敏捷度天花板不高,但它立下的「示範資料 + 隨機化 + latent 適應」配方,成了此後五年 learning-based legged locomotion 反覆引用與改造的起點。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">This paper moves the source of robot skills from the engineer&#39;s hands to the animal&#39;s body: mocap as the reward, simulation absorbing the samples, hardware only turning one latent knob. Its agility ceiling is modest, but its recipe — demonstrations + randomization + latent adaptation — became the starting point that learning-based legged locomotion kept citing and remixing for the next five years.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">DeepMimic (2018)</span>
+          <span class="chip">Tan et al. 2018 (Minitaur)</span>
+          <span class="chip">Hwangbo et al. 2019 (ANYmal)</span>
+          <span class="chip">Yu et al. 2019 (latent transfer)</span>
+          <span class="chip">AWR</span>
+          <span class="chip">RMA (2021)</span>
+          <span class="chip">Walk These Ways (2022)</span>
+          <span class="chip">DreamWaQ (2023)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論(含後續文獻的關係梳理),其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences (including the lineage mapping to later work); all other facts and numbers come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Peng et al. 2020 (Motion Imitation) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Motion imitation reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

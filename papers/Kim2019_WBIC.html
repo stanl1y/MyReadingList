@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>WBIC + MPC — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Highly Dynamic Quadruped Locomotion via Whole-Body Impulse Control and Model Predictive Control","authors":"Donghyun Kim, Jared Di Carlo, Benjamin Katz, Gerardo Bledt, Sangbae Kim","year":"2019","venue":"arXiv (cs.RO)","tags":["Legged Robotics","Quadruped","MPC","Whole-Body Control","Model-based Control"],"tldr":"凸 MPC 以集中質量模型規劃一個步態週期的地面反作用力,WBIC 以 500 Hz 全身動力學 QP「追力而非追軌跡」;Mini-Cheetah 用同一組參數跑出六種步態、最高 3.7 m/s(Froude 4.65),成為模型式四足控制的經典疊層。","tldr_en":"Convex MPC plans a gait-cycle reaction-force profile on a lumped-mass model; WBIC tracks those forces (not body trajectories) at 500 Hz via full-body dynamics and QP, driving Mini-Cheetah to six gaits and 3.7 m/s (Froude 4.65) with one parameter set - the canonical model-based quadruped stack."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:130px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">這篇 MIT 論文把兩個控制器疊成一個階層:<b>凸 MPC</b> 用集中質量(lumped-mass)簡化模型,以 0.04 kHz 規劃<b>一整個步態週期的最佳地面反作用力剖面</b>;新提出的 <b>Whole-Body Impulse Control(WBIC)</b>則以 0.5 kHz 用全身動力學 + QP <mark class="m-method" data-t="METHOD/IDEA">追蹤這些「力命令」而非身體軌跡</mark>。結果:Mini-Cheetah 用<b>同一組參數</b>跑出六種步態,<mark class="m-result" data-t="RESULT/EVIDENCE">最高 3.7 m/s(Froude number 4.65)</mark>,是當時文獻記錄中最敏捷的四足奔跑之一。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">This MIT paper stacks two controllers into one hierarchy: <b>convex MPC</b> plans an <b>optimal ground-reaction-force profile over a full gait cycle</b> on a lumped-mass model at 0.04 kHz, while the new <b>Whole-Body Impulse Control (WBIC)</b> runs at 0.5 kHz with full-body dynamics + QP, <mark class="m-method" data-t="METHOD/IDEA">tracking those force commands rather than body trajectories</mark>. Result: with <b>one fixed parameter set</b>, Mini-Cheetah runs six gaits, <mark class="m-result" data-t="RESULT/EVIDENCE">topping out at 3.7 m/s (Froude number 4.65)</mark>—among the most agile documented quadruped locomotion at the time.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Kim2019/fig1_architecture.png" alt="Figure 1 control architecture">
+        <figcaption data-lang="zh"><b>Fig.1</b> 控制架構的核心圖像:MPC 只看見一個<b>帶質量的箱子</b>(simplified model,0.04 kHz)並規劃反作用力 \(f_{\mathrm{FL}}, f_{\mathrm{FR}}\);WBC 看見<b>全身動力學</b>(0.5 kHz),在 MPC 的力命令上加修正量 \(\delta f\) 以兼顧姿態與擺腿。注意:兩層之間傳遞的是「力」,不是軌跡。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> The key mental image: MPC sees only a <b>box with mass</b> (simplified model, 0.04 kHz) and plans reaction forces \(f_{\mathrm{FL}}, f_{\mathrm{FR}}\); WBC sees <b>full-body dynamics</b> (0.5 kHz) and adds corrections \(\delta f\) on top of the MPC forces to handle posture and swing legs. Notice: what flows between the layers is <em>force</em>, not a trajectory.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 高動態奔跑充滿<mark class="m-problem" data-t="PROBLEM/GAP">騰空期、極短觸地、高速擺腿</mark>。傳統 WBC 只會「追軌跡」,但在騰空或奔馳(gallop)時 <mark class="m-problem" data-t="PROBLEM/GAP">CoM 根本不可控</mark>;MPC-only 又因低更新率(40 Hz)+ 過簡模型,姿態控制不穩——前作 Mini-Cheetah 只到 2.45 m/s,且受限於控制器而非硬體。</li>
+          <li data-lang="en"><b>Problem</b> — Dynamic running is full of <mark class="m-problem" data-t="PROBLEM/GAP">aerial phases, short stance times, high-speed leg swings</mark>. Classic WBCs only track trajectories, but during flight or galloping the <mark class="m-problem" data-t="PROBLEM/GAP">CoM is simply uncontrollable</mark>; MPC-only suffers from a low update rate (40 Hz) + oversimplified model—the previous Mini-Cheetah controller peaked at 2.45 m/s, limited by control, not hardware.</li>
+          <li data-lang="zh"><b>方法</b> — 凸 MPC 在集中質量模型上解出一個步態週期的力剖面;WBIC 把它當 <mark class="m-method" data-t="METHOD/IDEA">desired reaction force</mark>,用 null-space 任務階層算運動學命令、再用一個小 QP 只鬆弛「力偏差 \(\delta_{f_r}\)」與「浮動基座加速度 \(\delta_f\)」,同時輸出關節<b>力矩+位置+速度</b>三種命令給 40 kHz 關節 PD。</li>
+          <li data-lang="en"><b>Method</b> — Convex MPC solves a gait-cycle force profile on the lumped-mass model; WBIC treats it as the <mark class="m-method" data-t="METHOD/IDEA">desired reaction force</mark>, computes kinematic commands via a null-space task hierarchy, then runs a small QP that relaxes only the force deviation \(\delta_{f_r}\) and floating-base acceleration \(\delta_f\), outputting joint <b>torque + position + velocity</b> commands to 40 kHz joint PD loops.</li>
+          <li data-lang="zh"><b>結果</b> — <mark class="m-result" data-t="RESULT/EVIDENCE">3.7 m/s 穩定奔跑</mark>(觀測到 4 m/s 後跌倒)、<mark class="m-result" data-t="RESULT/EVIDENCE">六種步態、室外草地/礫石皆穩</mark>,關節速度/力矩/功率幾乎打滿硬體極限——證明瓶頸真的從硬體移回了控制器。</li>
+          <li data-lang="en"><b>Results</b> — <mark class="m-result" data-t="RESULT/EVIDENCE">Stable running at 3.7 m/s</mark> (4 m/s observed, then a fall), <mark class="m-result" data-t="RESULT/EVIDENCE">six gaits, robust outdoors on wet grass and gravel</mark>, with joint velocity/torque/power near hardware limits—showing the bottleneck really had been the controller, not the machine.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">2019 年之前,四足控制有兩條主線。第一條是 <mark class="m-method" data-t="METHOD/IDEA">whole-body control(WBC)</mark> 系譜:operational space control、null-space 任務階層、QP 力分配 [5]–[7]——動力學一致、架構通用,但全都假設「上游給我一條軌跡,我來追」;<mark class="m-problem" data-t="PROBLEM/GAP">遇到頻繁離地的運動就失效</mark>。第二條是本團隊自己的 <mark class="m-method" data-t="METHOD/IDEA">convex MPC</mark> 系譜:Cheetah 3(IROS 2018)[8] 與 Mini-Cheetah(ICRA 2019)[9] 用簡化模型 + 凸 QP 直接規劃反作用力,換步態只要改接觸序列——但<mark class="m-problem" data-t="PROBLEM/GAP">40 Hz 的更新率與模型簡化讓位置控制先天不足</mark>。</p>
+        <p data-lang="en">Before 2019, quadruped control had two main lines. First, the <mark class="m-method" data-t="METHOD/IDEA">whole-body control (WBC)</mark> lineage: operational space control, null-space task hierarchies, QP force distribution [5]–[7]—dynamically consistent and general, but all assume "someone hands me a trajectory to track," which <mark class="m-problem" data-t="PROBLEM/GAP">breaks down for motions with frequent non-contact phases</mark>. Second, this group&#39;s own <mark class="m-method" data-t="METHOD/IDEA">convex MPC</mark> lineage: Cheetah 3 (IROS 2018) [8] and Mini-Cheetah (ICRA 2019) [9] plan reaction forces directly on a simplified model with a convex QP, switching gaits by merely changing the contact sequence—but <mark class="m-problem" data-t="PROBLEM/GAP">the 40 Hz update rate and model simplifications cripple position control</mark>.</p>
+        <p data-lang="zh">關鍵的思想源頭是 Cheetah 2 的 <mark class="m-method" data-t="METHOD/IDEA">impulse planning</mark> [4]:極端動態、大量欠驅動的運動中,「規劃力(衝量)」比「規劃 CoM 軌跡」實際得多。另一頭,全身非線性 MPC [10][11] 想一步到位,但<mark class="m-problem" data-t="PROBLEM/GAP">高度優化的求解器也只擠得進 ~200 Hz,實測動態性反而不如</mark>;而同期的 RL 路線(Hwangbo et al., Science Robotics 2019 [16])則是完全不同的另一極。本文站在兩條模型式路線的交會點:把 MPC 的「遠見」與 WBC 的「反應力」,用「力」這個介面縫起來。</p>
+        <p data-lang="en">The key intellectual ancestor is Cheetah 2&#39;s <mark class="m-method" data-t="METHOD/IDEA">impulse planning</mark> [4]: for extremely dynamic, heavily underactuated motion, planning forces (impulses) is far more practical than planning a CoM trajectory. At the other extreme, full-body nonlinear MPC [10][11] tries to do everything at once, but <mark class="m-problem" data-t="PROBLEM/GAP">even highly optimized solvers barely reach ~200 Hz, and the demonstrated motions are less dynamic</mark>; meanwhile the RL line (Hwangbo et al., Science Robotics 2019 [16]) was emerging as a wholly different pole. This paper sits at the junction of the two model-based lines: stitching the foresight of MPC to the reflexes of WBC through the interface of <em>force</em>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這是一篇「分工」哲學的論文:<b>慢層用簡單模型看得遠</b>(凸性保證永遠解得出全域最優),<b>快層用完整模型反應快</b>(500 Hz 回授吸收模型誤差)。作者刻意避開「用一個大優化解決一切」的誘惑——這個取捨後來被證明是對的。</p>
+          <p data-lang="en" style="margin-top:6px">This is a paper about division of labor: <b>the slow layer sees far with a simple model</b> (convexity guarantees a global optimum every time), <b>the fast layer reacts quickly with the full model</b> (500 Hz feedback absorbs model error). The authors deliberately resist the temptation of one big optimization that solves everything—a trade-off later vindicated.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不是「MPC+WBC 拼在一起」,而是底下幾個更深的觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">The takeaway is not "MPC glued to WBC" but these deeper ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">控制的介面從「軌跡」換成「力」。</b>騰空時 CoM 不可控、galloping 時 CoM <em>永遠</em>不可控——追一條追不到的軌跡沒有意義;<mark class="m-method" data-t="METHOD/IDEA">接觸力是物理上永遠可以執行的量</mark>,所以拿它當兩層之間的契約。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Swap the control interface from trajectory to force.</b> The CoM is uncontrollable during flight and <em>never</em> controllable in galloping—tracking an untrackable trajectory is meaningless; <mark class="m-method" data-t="METHOD/IDEA">contact force is the one quantity physics always lets you execute</mark>, so make it the contract between layers.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">兩層互補,各治對方的病。</b>MPC 治 WBC 的「只看一步」(單時步視野);WBC 治 MPC 的「低頻+粗模型」(500 Hz 全身動力學回授)。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Two layers, each curing the other&#39;s disease.</b> MPC cures WBC&#39;s single-timestep myopia; WBC cures MPC&#39;s low rate + coarse model with 500 Hz full-body feedback.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">凸性 = 實機可靠性。</b>預先固定接觸序列讓 MPC 保持凸,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">永遠可解到唯一全域最優、不會卡在怪異局部解</mark>——對真實硬體,「每次都解得出」比「解得更精」重要。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Convexity = hardware reliability.</b> Fixing the contact sequence keeps MPC convex, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">always solvable to a unique global optimum with no weird local minima</mark>—on real hardware, "solves every time" beats "solves slightly better."</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">鬆弛對的變數,而不是上重型武器。</b>只鬆弛 6 維浮動基座加速度 \(\delta_f\) 與力偏差 \(\delta_{f_r}\),QP 小到 500 Hz 可解;<mark class="m-method" data-t="METHOD/IDEA">刻意不用 hierarchical QP</mark> 那類複雜機制。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Relax the right variables instead of deploying heavy machinery.</b> Relaxing only the 6-D floating-base acceleration \(\delta_f\) and the force deviation \(\delta_{f_r}\) keeps the QP small enough for 500 Hz; <mark class="m-method" data-t="METHOD/IDEA">hierarchical QP is deliberately avoided</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">力矩之外,還回傳位置/速度。</b>WBIC 額外輸出關節位置與速度給 <b>40 kHz</b> 關節 PD(比 WBC 快 80 倍)——collocated 高頻回授是實機動態運動穩定的無名英雄。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Return position/velocity, not just torque.</b> WBIC also outputs joint positions and velocities to <b>40 kHz</b> joint PD loops (80× faster than the WBC)—collocated high-rate feedback is the unsung hero of real-hardware dynamic motion.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">工程效率是成果的一半。</b>含轉子動力學的自製動力學引擎 + 模板化線性代數,讓 MPC 30 Hz、WBIC 500 Hz 跑在 Mini-Cheetah 機上的<b>低功耗電腦</b>上。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Engineering efficiency is half the result.</b> A custom dynamics engine with rotor dynamics + template-based linear algebra runs MPC at 30 Hz and WBIC at 500 Hz on the <b>low-power onboard computer</b> of Mini-Cheetah.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Highly Dynamic Quadruped Locomotion via Whole-Body Impulse Control and Model Predictive Control</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>D. Kim, J. Di Carlo, B. Katz, G. Bledt, S. Kim</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>MIT (MechE + EECS), Biomimetic Robotics Lab</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2019 · arXiv:1909.06586 (cs.RO)</span>
+          <b><span data-lang="zh">平台</span><span data-lang="en">Platform</span></b><span>Mini-Cheetah (12 proprioceptive actuators)</span>
+          <b><span data-lang="zh">影片</span><span data-lang="en">Video</span></b><span>youtu.be/6JlVol3eyNI</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它把「凸 MPC 規劃力 + WBC 高頻執行」定型為<b>模型式四足控制的標準疊層</b>。<span class="add">[導讀補充]</span> 隨 MIT Mini-Cheetah 軟體開源,這套架構成為之後學界/業界四足控制器的 de facto 起點,也是 RL locomotion 論文最常對照的 model-based baseline。</span>
+        <span data-lang="en">It crystallized "convex MPC plans forces + WBC executes at high rate" into <b>the standard model-based quadruped stack</b>. <span class="add">[guide note]</span> With the MIT Mini-Cheetah software open-sourced, this architecture became the de facto starting point for later academic/industrial quadruped controllers—and the model-based baseline RL locomotion papers compare against.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Convex MPC</span><span class="chip">WBIC</span>
+          <span class="chip">Reaction force tracking</span><span class="chip">Null-space priority</span>
+          <span class="chip">QP</span><span class="chip">Mini-Cheetah</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">名詞速記</span><span data-lang="en">Jargon</span></span>
+        <span data-lang="zh"><b>Froude number</b>:\(\mathrm{Fr}=v^2/(gh)\),以腿長 \(h\) 正規化的速度指標,用來跨體型比較敏捷度。<b>浮動基座 (floating base)</b>:機身 6 自由度,無馬達直接驅動,只能靠接觸力間接控制。<b>Proprioceptive actuator</b>:高背驅、可由電流開環控扭矩的致動器。</span>
+        <span data-lang="en"><b>Froude number</b>: \(\mathrm{Fr}=v^2/(gh)\), speed normalized by leg length \(h\), for comparing agility across body sizes. <b>Floating base</b>: the 6-DoF trunk, driven by no motor—only controllable indirectly through contact forces. <b>Proprioceptive actuator</b>: highly backdrivable, with open-loop torque control via motor current.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">傳統 WBC</span><span data-lang="en">Classic WBC</span></b> [5]–[7]</td><td><span data-lang="zh">預設「<mark class="m-problem" data-t="PROBLEM/GAP">追蹤給定的身體軌跡</mark>、由接觸力來實現」;騰空期 CoM 不可控、gallop 時 CoM 永不可控,追軌跡本身就是病。且<mark class="m-problem" data-t="PROBLEM/GAP">只看一個時步</mark>,毫無視野。</span><span data-lang="en">Built to <mark class="m-problem" data-t="PROBLEM/GAP">track a given body trajectory</mark> by manipulating contact forces; the CoM is uncontrollable in flight and never controllable in gallop—trajectory tracking is itself the disease. Also <mark class="m-problem" data-t="PROBLEM/GAP">sees one timestep</mark>, no horizon.</span></td></tr>
+          <tr><td><b>MPC-only</b><br><small><span data-lang="zh">凸 MPC + 簡化模型 [8][9]</span><span data-lang="en">convex MPC + simple model [8][9]</span></small></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">40 Hz 更新率 + 集中質量簡化</mark> → 位置/姿態控制先天不足;Mini-Cheetah 上限 2.45 m/s,<mark class="m-problem" data-t="PROBLEM/GAP">受限於控制器穩定度而非硬體</mark>。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">40 Hz update + lumped-mass simplification</mark> → inherently weak position/posture control; Mini-Cheetah capped at 2.45 m/s, <mark class="m-problem" data-t="PROBLEM/GAP">limited by controller stability, not hardware</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">全身非線性 MPC</span><span data-lang="en">Full-body nonlinear MPC</span></b> [10][11]</td><td><span data-lang="zh">高度優化的求解器<mark class="m-problem" data-t="PROBLEM/GAP">也只擠得進 ~200 Hz</mark>,同平台展示的動態性反而較弱;非線性優化<mark class="m-problem" data-t="PROBLEM/GAP">可能卡在怪異局部解</mark>。</span><span data-lang="en">Even highly optimized solvers <mark class="m-problem" data-t="PROBLEM/GAP">barely fit 200 Hz</mark>, with less dynamic demos on the same robots; nonlinear optimization <mark class="m-problem" data-t="PROBLEM/GAP">can stall in strange local minima</mark>.</span></td></tr>
+          <tr><td><b>Cheetah 2 impulse planning</b> [4]</td><td><span data-lang="zh">「規劃力而非軌跡」思想的來源,成功 bounding/jumping,但<mark class="m-problem" data-t="PROBLEM/GAP">規劃器與特定步態綁定</mark>,不通用。</span><span data-lang="en">The origin of "plan forces, not trajectories," with successful bounding/jumping—but <mark class="m-problem" data-t="PROBLEM/GAP">the planner is gait-specific</mark>, not general.</span></td></tr>
+          <tr><td><b>MPC + WBC</b><br><small>Grandia et al. [15]</small></td><td><span data-lang="zh">整合已存在,但 WBC 拿 MPC 的 <mark class="m-problem" data-t="PROBLEM/GAP">CoM 軌跡來追</mark>,力只用來調內力——CoM 永不可控的 gallop 依然行不通。</span><span data-lang="en">Integration exists, but its WBC <mark class="m-problem" data-t="PROBLEM/GAP">tracks the CoM trajectory from MPC</mark>, using forces only to regulate internal forces—still hopeless for gallop, where the CoM is never controllable.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>MPC 的遠見與 WBC 的反應力如何接起來,而且介面必須容忍騰空與欠驅動?</b>本文的答案:介面 = 反作用力剖面。</p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>how do you connect the foresight of MPC to the reflexes of WBC through an interface that tolerates flight and underactuation?</b> The answer here: the interface = the reaction-force profile.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,本文怎麼補</span><span data-lang="en">Gap table — who lacks what, and how this paper fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">本文如何補上</span><span data-lang="en">How this paper fills it</span></th></tr>
+          <tr>
+            <td><b><span data-lang="zh">傳統 WBC</span><span data-lang="en">Classic WBC</span></b></td>
+            <td><span data-lang="zh">追軌跡 + 單步視野</span><span data-lang="en">Trajectory tracking + one-step horizon</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">改追 MPC 的力命令</mark>;浮動基座加速度以 \(\delta_f\) 鬆弛,允許機身在騰空時「不受控」;視野交給 MPC。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Track MPC force commands instead</mark>; relax floating-base acceleration via \(\delta_f\) so the trunk may go uncontrolled in flight; delegate the horizon to MPC.</span></td>
+          </tr>
+          <tr>
+            <td><b>MPC-only</b> [8][9]</td>
+            <td><span data-lang="zh">40 Hz、粗模型,姿態控制弱</span><span data-lang="en">40 Hz, coarse model, weak posture control</span></td>
+            <td><span data-lang="zh">WBIC 以 <mark class="m-method" data-t="METHOD/IDEA">500 Hz 全身動力學</mark>把力命令翻成準確力矩,並補上擺腿與姿態的高頻回授 → <mark class="m-result" data-t="RESULT/EVIDENCE">2.45 → 3.7 m/s</mark>。</span><span data-lang="en">WBIC translates force commands into accurate torques with <mark class="m-method" data-t="METHOD/IDEA">500 Hz full-body dynamics</mark>, adding high-rate swing/posture feedback → <mark class="m-result" data-t="RESULT/EVIDENCE">2.45 → 3.7 m/s</mark>.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">全身 MPC</span><span data-lang="en">Full-body MPC</span></b> [10][11]</td>
+            <td><span data-lang="zh">算力天花板,實測不夠動態</span><span data-lang="en">Compute ceiling, less dynamic in practice</span></td>
+            <td><span data-lang="zh">把「看遠」與「看細」拆開:凸 MPC(簡模型)+ WBIC(全模型)各跑各的頻率,<mark class="m-method" data-t="METHOD/IDEA">兩個小問題取代一個大問題</mark>。</span><span data-lang="en">Split "seeing far" from "seeing fine": convex MPC (simple model) + WBIC (full model) at their own rates—<mark class="m-method" data-t="METHOD/IDEA">two small problems instead of one big one</mark>.</span></td>
+          </tr>
+          <tr>
+            <td><b>[15] MPC+WBC</b></td>
+            <td><span data-lang="zh">WBC 追 CoM 軌跡,force 只調內力</span><span data-lang="en">WBC tracks CoM trajectory; forces only regulate internal forces</span></td>
+            <td><span data-lang="zh">顛倒主從:<mark class="m-method" data-t="METHOD/IDEA">力命令是主角</mark>(QP 權重 \(Q_1{=}1\) vs \(Q_2{=}0.1\)),軌跡只是參考 → jump/bound/gallop 這類 CoM 不可控步態變可行。</span><span data-lang="en">Invert the hierarchy: <mark class="m-method" data-t="METHOD/IDEA">force commands are primary</mark> (QP weights \(Q_1{=}1\) vs \(Q_2{=}0.1\)), the trajectory is only a reference → gaits with uncontrollable CoM (jump/bound/gallop) become feasible.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意作者的誠實定位:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「新穎之處不在整合 MPC 與 WBC」(那已是 established framework [12]–[15]),而在「MPC 的結果如何被 WBC 使用」</mark>。看似只是介面選擇的小差異,卻決定了整個系統能不能處理 CoM 不可控的步態——這是讀這篇論文時最該盯住的一句話。</p>
+          <p data-lang="en" style="margin-top:6px">Note the authors&#39; honest framing: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the novelty is NOT integrating MPC with WBC (already an established framework [12]–[15]) but HOW the MPC result is consumed by the WBC</mark>. A seemingly small interface choice—yet it decides whether the system can handle gaits with an uncontrollable CoM. This is the sentence to watch in the whole paper.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把貢獻讀成「第一個把 MPC 和 WBC 接起來的人」。作者自己否認了。真正的貢獻是<b>介面</b>:MPC 輸出的力直接成為 WBC 的追蹤目標(desired reaction force),而不是把 MPC 的軌跡塞給 WBC 追。</span>
+        <span data-lang="en">Do not read the contribution as "first to connect MPC and WBC." The authors themselves deny that. The real contribution is the <b>interface</b>: MPC output forces become the WBC tracking target (desired reaction forces), instead of feeding the MPC trajectory to the WBC to track.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">介面選對了,「換步態」就簡化成「換接觸序列」:hopping、pronking、bounding 這些有大量騰空期的步態,<b>不需要為騰空期手工特判</b>,控制器自動處理。這是「versatile」宣稱的來源。</span>
+        <span data-lang="en">With the right interface, switching gaits reduces to switching contact sequences: hopping, pronking, bounding—gaits full of flight—need <b>no manual special-casing of aerial phases</b>. That is where the versatility claim comes from.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">介面 ablation</span><span data-lang="en">interface ablation</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">接觸時序</span><span data-lang="en">contact timing</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">雙層架構:兩個模型、三種頻率</span><span data-lang="en">The two-layer architecture: two models, three rates</span></h3>
+        <figure class="fig"><img src="figs/Kim2019/fig2_framework.png" alt="Figure 2 overall control framework">
+          <figcaption data-lang="zh"><b>Fig.2</b> 完整控制框架。注意三個頻率層:MPC(含 gait scheduler / step planner)0.04 kHz → WBIC 0.5 kHz → 關節 PD 40 kHz;紅線是命令流、黑線是狀態流。MPC 給 WBIC 的是「接觸狀態 + 反作用力 + 足/身位置命令」;WBIC 給關節的是 \(\boldsymbol{\tau}\) 加上 \(\mathbf{q}^d,\dot{\mathbf{q}}^d\)(前饋力矩 + 位置/速度回授並行)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> The full control framework. Note the three rate layers: MPC (with gait scheduler / step planner) at 0.04 kHz → WBIC at 0.5 kHz → joint PD at 40 kHz; red lines carry commands, black lines carry state. MPC hands WBIC contact states + reaction forces + foot/body position commands; WBIC hands each joint \(\boldsymbol{\tau}\) plus \(\mathbf{q}^d,\dot{\mathbf{q}}^d\) (feedforward torque in parallel with position/velocity feedback).</figcaption></figure>
+        <div class="flow">
+          <div class="step"><span class="ph mono">PLAN · 0.04 kHz</span><b>Convex MPC</b><small data-lang="zh">集中質量模型;解一個步態週期的反作用力剖面(QP,全域最優)</small><small data-lang="en">Lumped-mass model; solves a gait-cycle reaction-force profile (QP, global optimum)</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">EXECUTE · 0.5 kHz</span><b>WBIC</b><small data-lang="zh">全身動力學;任務階層 IK + 小 QP 微調力,輸出 \(\boldsymbol{\tau},\mathbf{q}^{d},\dot{\mathbf{q}}^{d}\)</small><small data-lang="en">Full-body dynamics; task-priority IK + a small QP adjusting forces, outputs \(\boldsymbol{\tau},\mathbf{q}^{d},\dot{\mathbf{q}}^{d}\)</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">SERVO · 40 kHz</span><b>Joint PD</b><small data-lang="zh">collocated 位置/速度回授 + 前饋力矩,吸收高頻擾動</small><small data-lang="en">Collocated position/velocity feedback + feedforward torque, absorbing high-frequency disturbance</small></div>
+        </div>
+        <p data-lang="zh">MPC 看到的世界(式 1–2)只有一個會飛的箱子:</p>
+        <p data-lang="en">The world MPC sees (Eqs. 1–2) is just a flying box:</p>
+        <div class="eq">$$m\ddot{\mathbf{p}}=\sum_{i=1}^{n_c}\mathbf{f}_i-\mathbf{c}_g,\qquad \frac{d}{dt}\big(\mathbf{I}\boldsymbol{\omega}\big)=\sum_{i=1}^{n_c}\mathbf{r}_i\times\mathbf{f}_i$$</div>
+        <p data-lang="zh">WBIC 看到的世界(式 3)則是帶接觸的完整多體動力學:</p>
+        <p data-lang="en">The world WBIC sees (Eq. 3) is full multi-body dynamics with contact:</p>
+        <div class="eq">$$\mathbf{A}\begin{bmatrix}\ddot{\mathbf{q}}_f\\[2pt] \ddot{\mathbf{q}}_j\end{bmatrix}+\mathbf{b}+\mathbf{g}=\begin{bmatrix}\mathbf{0}_6\\[2pt] \boldsymbol{\tau}\end{bmatrix}+\mathbf{J}_c^{\top}\mathbf{f}_r$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">上式左邊前 6 列(浮動基座)沒有任何 \(\boldsymbol{\tau}\)——機身只能靠 \(\mathbf{J}_c^{\top}\mathbf{f}_r\) 間接推動,這正是「力才是根本介面」的數學根源。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The first 6 rows (floating base) contain no \(\boldsymbol{\tau}\) on the right—the trunk can only be moved indirectly through \(\mathbf{J}_c^{\top}\mathbf{f}_r\). This is the mathematical root of "force is the fundamental interface."</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">MPC 層:三個假設換一個凸 QP</span><span data-lang="en">The MPC layer: three assumptions buy one convex QP</span></h3>
+        <p data-lang="zh">集中質量模型仍非線性(力臂外積、姿態動力學)。沿用 [8],以三個假設凸化:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">(i) roll/pitch 角小</mark> → \(\dot{\Theta}\approx R_z(\psi)\,\boldsymbol{\omega}\)、\(^G\mathbf{I}\approx R_z(\psi)\,^B\mathbf{I}\,R_z(\psi)^{\top}\);<mark class="m-assume" data-t="ASSUMPTION/CLAIM">(ii) 狀態貼近命令軌跡</mark> → 用命令的 \(\psi\) 與預定步點的力臂 \(\mathbf{r}_i\) 做時變線性化;<mark class="m-assume" data-t="ASSUMPTION/CLAIM">(iii) 角速度小、慣量非對角項小</mark> → \(\frac{d}{dt}(\mathbf{I}\boldsymbol{\omega})\approx \mathbf{I}\dot{\boldsymbol{\omega}}\)。得到線性離散動態:</p>
+        <p data-lang="en">The lumped-mass model is still nonlinear (moment-arm cross product, orientation dynamics). Following [8], three assumptions convexify it: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">(i) small roll/pitch</mark> → \(\dot{\Theta}\approx R_z(\psi)\,\boldsymbol{\omega}\), \(^G\mathbf{I}\approx R_z(\psi)\,^B\mathbf{I}\,R_z(\psi)^{\top}\); <mark class="m-assume" data-t="ASSUMPTION/CLAIM">(ii) states stay near the commanded trajectory</mark> → time-varying linearization with commanded \(\psi\) and moment arms \(\mathbf{r}_i\) from planned footholds; <mark class="m-assume" data-t="ASSUMPTION/CLAIM">(iii) small angular rates and off-diagonal inertia</mark> → \(\frac{d}{dt}(\mathbf{I}\boldsymbol{\omega})\approx \mathbf{I}\dot{\boldsymbol{\omega}}\). This yields linear discrete dynamics:</p>
+        <div class="eq">$$\mathbf{x}(k+1)=\mathbf{A}_k\,\mathbf{x}(k)+\mathbf{B}_k\,\hat{\mathbf{f}}(k)+\hat{\mathbf{g}},\qquad \mathbf{x}=\begin{bmatrix}\Theta^{\top} & \mathbf{p}^{\top} & \boldsymbol{\omega}^{\top} & \dot{\mathbf{p}}^{\top}\end{bmatrix}^{\top}$$</div>
+        <p data-lang="zh">在此之上解 QP(式 10),並以摩擦金字塔約束力(式 11):</p>
+        <p data-lang="en">On top of this, a QP (Eq. 10) with friction-pyramid force constraints (Eq. 11):</p>
+        <div class="eq">$$\min_{\mathbf{x},\mathbf{f}}\ \sum_{k=0}^{m}\ \big\|\mathbf{x}(k+1)-\mathbf{x}_{\mathrm{ref}}(k+1)\big\|_{\mathbf{Q}}+\big\|\mathbf{f}(k)\big\|_{\mathbf{R}}$$</div>
+        <div class="eq">$$|f_x|\le \mu f_z,\qquad |f_y|\le \mu f_z,\qquad f_z&gt;0$$</div>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>變數消去</b>:不在地上的腳,其力變數直接刪除 → cost/constraint 矩陣同時縮小,<mark class="m-result" data-t="RESULT/EVIDENCE">實務提速 10 倍以上</mark>;點接觸故不需 [18] 的 non-flip 條件。</li>
+          <li data-lang="en"><b>Variable elimination</b>: force variables of feet not on the ground are deleted → both cost and constraint matrices shrink, <mark class="m-result" data-t="RESULT/EVIDENCE">a &gt;10× practical speedup</mark>; point contacts need no non-flip condition from [18].</li>
+          <li data-lang="zh"><b>Gait scheduler</b> [19]:每腳只需 2 個參數(phase offset、stance 比例)即可定義步態;改週期長度就能變頻,<mark class="m-method" data-t="METHOD/IDEA">步態型態不隨頻率改變</mark>。</li>
+          <li data-lang="en"><b>Gait scheduler</b> [19]: two parameters per foot (phase offset, stance portion) define a gait; changing the cycle duration changes frequency while <mark class="m-method" data-t="METHOD/IDEA">preserving the gait type</mark>.</li>
+        </ul>
+        <p data-lang="zh" style="margin-top:8px">落腳點規劃(式 12–15)= 肩位置 + Raibert 對稱項 + 離心補償:</p>
+        <p data-lang="en" style="margin-top:8px">Foothold planning (Eqs. 12–15) = shoulder position + Raibert symmetry + centrifugal compensation:</p>
+        <div class="eq">$$\mathbf{r}_i^{\mathrm{cmd}}=\mathbf{p}_{\mathrm{shoulder},i}+\underbrace{\tfrac{t_{\mathrm{stance}}}{2}\,\mathbf{v}+k\,(\mathbf{v}-\mathbf{v}^{\mathrm{cmd}})}_{\mathbf{p}_{\mathrm{symmetry}}}+\underbrace{\tfrac{1}{2}\sqrt{\tfrac{h}{g}}\;\mathbf{v}\times\boldsymbol{\omega}^{\mathrm{cmd}}}_{\mathbf{p}_{\mathrm{centrifugal}}}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">Raibert heuristic [20] 讓落地角=離地角(對稱步),回授增益 \(k=0.03\)。高速時另加一招:<mark class="m-method" data-t="METHOD/IDEA">前腳收窄、後腳放寬</mark>,避免前後腿高速交錯時互撞(Fig.4a 可見腿交叉而不碰)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The Raibert heuristic [20] equalizes touchdown and liftoff angles (symmetric step), feedback gain \(k=0.03\). At high speed one more trick: <mark class="m-method" data-t="METHOD/IDEA">narrow the front step width, widen the hind</mark>, so fast-crossing legs never collide (visible in Fig.4a).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">WBIC 層 · 第一步:嚴格階層的運動學命令</span><span data-lang="en">The WBIC layer, step 1: strictly prioritized kinematic commands</span></h3>
+        <p data-lang="zh">先用 null-space 投影逐一執行任務(優先序:<b>身體姿態 ≻ 身體位置 ≻ 擺腿足端</b>,Table I;所有任務 \(K_p=100\,\mathrm{s}^{-2}\)、\(K_d=10\,\mathrm{s}^{-1}\)),疊代出位置、速度、加速度命令:</p>
+        <p data-lang="en">First, tasks are executed one by one via null-space projection (priority: <b>body orientation ≻ body position ≻ swing-foot position</b>, Table I; all tasks \(K_p=100\,\mathrm{s}^{-2}\), \(K_d=10\,\mathrm{s}^{-1}\)), iterating out position, velocity, and acceleration commands:</p>
+        <div class="eq">$$\Delta\mathbf{q}_i=\Delta\mathbf{q}_{i-1}+\mathbf{J}_{i|\mathrm{pre}}^{\dagger}\big(\mathbf{e}_i-\mathbf{J}_i\,\Delta\mathbf{q}_{i-1}\big),\qquad
+        \ddot{\mathbf{q}}_i^{\mathrm{cmd}}=\ddot{\mathbf{q}}_{i-1}^{\mathrm{cmd}}+\overline{\mathbf{J}}{}_{i|\mathrm{pre}}^{\,\mathrm{dyn}}\big(\ddot{\mathbf{x}}_i^{\mathrm{cmd}}-\dot{\mathbf{J}}_i\dot{\mathbf{q}}-\mathbf{J}_i\,\ddot{\mathbf{q}}_{i-1}^{\mathrm{cmd}}\big)$$</div>
+        <div class="eq">$$\ddot{\mathbf{x}}_i^{\mathrm{cmd}}=\ddot{\mathbf{x}}_i^{\mathrm{des}}+\mathbf{K}_p\big(\mathbf{x}_i^{\mathrm{des}}-\mathbf{x}_i\big)+\mathbf{K}_d\big(\dot{\mathbf{x}}_i^{\mathrm{des}}-\dot{\mathbf{x}}_i\big),\qquad
+        \mathbf{J}_{i|\mathrm{pre}}=\mathbf{J}_i\,\mathbf{N}_{i-1},\quad \mathbf{N}_0=\mathbf{I}-\mathbf{J}_c^{\dagger}\mathbf{J}_c$$</div>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">接觸腳排第 0 位</mark>:\(\mathbf{N}_0=\mathbf{I}-\mathbf{J}_c^{\dagger}\mathbf{J}_c\) 先把所有任務投影進「接觸腳不動」的零空間——支撐腳打滑之前,任何任務都不許動它。</li>
+          <li data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Contact comes zeroth</mark>: \(\mathbf{N}_0=\mathbf{I}-\mathbf{J}_c^{\dagger}\mathbf{J}_c\) projects every task into the null space of "stance feet do not move"—no task may perturb a support foot.</li>
+          <li data-lang="zh"><b>兩種 pseudo-inverse</b>:運動學(位置/速度)用 SVD 型 \(\{\cdot\}^{\dagger}\);加速度用<mark class="m-method" data-t="METHOD/IDEA">動力學一致</mark>的 \(\overline{\mathbf{J}}=\mathbf{A}^{-1}\mathbf{J}^{\top}\big(\mathbf{J}\mathbf{A}^{-1}\mathbf{J}^{\top}\big)^{-1}\)(式 23),把慣量納入投影。</li>
+          <li data-lang="en"><b>Two pseudo-inverses</b>: kinematics (position/velocity) uses the SVD-based \(\{\cdot\}^{\dagger}\); acceleration uses the <mark class="m-method" data-t="METHOD/IDEA">dynamically consistent</mark> \(\overline{\mathbf{J}}=\mathbf{A}^{-1}\mathbf{J}^{\top}\big(\mathbf{J}\mathbf{A}^{-1}\mathbf{J}^{\top}\big)^{-1}\) (Eq. 23), folding inertia into the projection.</li>
+          <li data-lang="zh"><b>三種輸出、兩條去路</b>:\(\mathbf{q}^{\mathrm{cmd}}_j=\mathbf{q}_j+\Delta\mathbf{q}_j\) 與 \(\dot{\mathbf{q}}^{\mathrm{cmd}}_j\) 直接餵 <mark class="m-method" data-t="METHOD/IDEA">40 kHz 關節 PD</mark>(\(k_p=3\,\mathrm{Nm/rad}\)、\(k_d=0.3\);abduction \(k_d=1\));\(\ddot{\mathbf{q}}^{\mathrm{cmd}}\) 進下一步的 QP。用位置回授是刻意的:collocated、超高頻,是動態動作在實機上站得住的關鍵(承襲作者的 passive-ankle biped 經驗 [14],但因 Mini-Cheetah 用 proprioceptive actuator,改用 operational space control 而非組態阻抗)。</li>
+          <li data-lang="en"><b>Three outputs, two destinations</b>: \(\mathbf{q}^{\mathrm{cmd}}_j=\mathbf{q}_j+\Delta\mathbf{q}_j\) and \(\dot{\mathbf{q}}^{\mathrm{cmd}}_j\) feed the <mark class="m-method" data-t="METHOD/IDEA">40 kHz joint PD</mark> (\(k_p=3\,\mathrm{Nm/rad}\), \(k_d=0.3\); abduction \(k_d=1\)); \(\ddot{\mathbf{q}}^{\mathrm{cmd}}\) goes to the QP below. Position feedback is deliberate: collocated and ultra-fast, it is what keeps dynamic motion stable on hardware (inherited from the passive-ankle biped work [14], but switched to operational space control since Mini-Cheetah uses proprioceptive actuators, not SEAs).</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">WBIC 層 · 第二步:一個小 QP 決定最終的力</span><span data-lang="en">The WBIC layer, step 2: one small QP settles the final forces</span></h3>
+        <div class="eq">$$\min_{\boldsymbol{\delta}_{f_r},\,\boldsymbol{\delta}_f}\ \ \boldsymbol{\delta}_{f_r}^{\top}\mathbf{Q}_1\,\boldsymbol{\delta}_{f_r}+\boldsymbol{\delta}_f^{\top}\mathbf{Q}_2\,\boldsymbol{\delta}_f$$</div>
+        <div class="eq">$$\text{s.t.}\quad
+        \mathbf{S}_f\big(\mathbf{A}\ddot{\mathbf{q}}+\mathbf{b}+\mathbf{g}\big)=\mathbf{S}_f\mathbf{J}_c^{\top}\mathbf{f}_r,\qquad
+        \ddot{\mathbf{q}}=\ddot{\mathbf{q}}^{\mathrm{cmd}}+\begin{bmatrix}\boldsymbol{\delta}_f\\[2pt] \mathbf{0}_{n_j}\end{bmatrix},\qquad
+        \mathbf{f}_r=\mathbf{f}_r^{\mathrm{MPC}}+\boldsymbol{\delta}_{f_r},\qquad
+        \mathbf{W}\mathbf{f}_r\ge\mathbf{0}$$</div>
+        <p data-lang="zh">讀法:最終反作用力 = <b>MPC 的力 + 小偏差 \(\boldsymbol{\delta}_{f_r}\)</b>;最終加速度 = <b>WBIC 的加速度命令 + 僅浮動基座的鬆弛 \(\boldsymbol{\delta}_f\)</b>(6 維)。等式約束只留浮動基座那 6 條無驅動的動力學(\(\mathbf{S}_f\) 挑出它們),不等式 \(\mathbf{W}\mathbf{f}_r\ge\mathbf{0}\) 是摩擦錐。權重 <mark class="m-method" data-t="METHOD/IDEA">\(Q_1=1 \gg Q_2=0.1\)</mark>:偏離 MPC 力的懲罰是偏離基座加速度命令的 10 倍——<b>力命令才是主角,身體軌跡只是參考</b>。最後把解出的 \(\ddot{\mathbf{q}},\mathbf{f}_r\) 代回全身動力學取關節力矩:</p>
+        <p data-lang="en">How to read it: final reaction force = <b>MPC force + a small deviation \(\boldsymbol{\delta}_{f_r}\)</b>; final acceleration = <b>WBIC acceleration command + a floating-base-only relaxation \(\boldsymbol{\delta}_f\)</b> (6-D). The only equality kept is the 6 unactuated floating-base rows (selected by \(\mathbf{S}_f\)); the inequality \(\mathbf{W}\mathbf{f}_r\ge\mathbf{0}\) is the friction cone. Weights <mark class="m-method" data-t="METHOD/IDEA">\(Q_1=1 \gg Q_2=0.1\)</mark>: deviating from MPC forces costs 10× more than deviating from the commanded base acceleration—<b>force commands are primary; the body trajectory is only a reference</b>. Finally, plug the solved \(\ddot{\mathbf{q}},\mathbf{f}_r\) back into the full dynamics for joint torques:</p>
+        <div class="eq">$$\begin{bmatrix}\boldsymbol{\tau}_f\\[2pt] \boldsymbol{\tau}_j\end{bmatrix}=\mathbf{A}\ddot{\mathbf{q}}+\mathbf{b}+\mathbf{g}-\mathbf{J}_c^{\top}\mathbf{f}_r$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">鬆弛 \(\boldsymbol{\delta}_f\) 的本意是<mark class="m-method" data-t="METHOD/IDEA">允許機身在騰空期「不受控」</mark>。代價:其他任務的加速度會出現追蹤誤差。作者<mark class="m-assume" data-t="ASSUMPTION/CLAIM">明言選擇忽略這個影響</mark>——在實機上,讓任務命令隨不可預測的基座運動起舞並無好處;與其上 hierarchical QP [22] 這類重型機制,不如簡單鬆弛。這是全文最「工程哲學」的一段。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The intent of \(\boldsymbol{\delta}_f\) is to <mark class="m-method" data-t="METHOD/IDEA">let the base go uncontrolled during flight</mark>. The cost: tracking error leaks into other task accelerations. The authors <mark class="m-assume" data-t="ASSUMPTION/CLAIM">explicitly choose to ignore this effect</mark>—on real hardware, letting task commands dance to unpredictable base motion helps nothing; better a simple relaxation than heavy machinery like hierarchical QP [22]. The most engineering-philosophy passage of the paper.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\mathbf{p},\ \boldsymbol{\omega}\)</td><td><span data-lang="zh">機身位置與角速度(全域座標);\(\Theta=[\phi\;\theta\;\psi]\) 為 roll/pitch/yaw。</span><span data-lang="en">Body position and angular velocity (global frame); \(\Theta=[\phi\;\theta\;\psi]\) is roll/pitch/yaw.</span></td></tr>
+          <tr><td>\(\mathbf{f}_i,\ \mathbf{r}_i\)</td><td><span data-lang="zh">第 \(i\) 個接觸點的反作用力,與其相對 CoM 的力臂。</span><span data-lang="en">Reaction force at contact \(i\), and its moment arm relative to the CoM.</span></td></tr>
+          <tr><td>\(\mathbf{A},\mathbf{b},\mathbf{g}\)</td><td><span data-lang="zh">廣義質量矩陣、Coriolis 力、重力(全身模型;含轉子慣量)。</span><span data-lang="en">Generalized mass matrix, Coriolis, gravity (full-body model; rotor inertia included).</span></td></tr>
+          <tr><td>\(\ddot{\mathbf{q}}_f,\ \ddot{\mathbf{q}}_j\)</td><td><span data-lang="zh">浮動基座加速度(\(\mathbb{R}^6\),無驅動)與關節加速度(\(\mathbb{R}^{n_j}\))。</span><span data-lang="en">Floating-base acceleration (\(\mathbb{R}^6\), unactuated) and joint accelerations (\(\mathbb{R}^{n_j}\)).</span></td></tr>
+          <tr><td>\(\mathbf{J}_c,\ \mathbf{f}_r\)</td><td><span data-lang="zh">接觸 Jacobian 與堆疊的接觸反作用力向量。</span><span data-lang="en">Contact Jacobian and the stacked contact reaction-force vector.</span></td></tr>
+          <tr><td>\(\mathbf{J}_{i|\mathrm{pre}}\)</td><td><span data-lang="zh">第 \(i\) 個任務的 Jacobian 投影到「所有更高優先任務的零空間」後的版本。</span><span data-lang="en">Task-\(i\) Jacobian projected into the null space of all higher-priority tasks.</span></td></tr>
+          <tr><td>\(\overline{\mathbf{J}}\)</td><td><span data-lang="zh">動力學一致 pseudo-inverse(式 23):以 \(\mathbf{A}^{-1}\) 加權,最小化加速度能量。</span><span data-lang="en">Dynamically consistent pseudo-inverse (Eq. 23): weighted by \(\mathbf{A}^{-1}\), minimizing acceleration energy.</span></td></tr>
+          <tr><td>\(\boldsymbol{\delta}_{f_r},\ \boldsymbol{\delta}_f\)</td><td><span data-lang="zh">兩個鬆弛變數:對 MPC 力命令的偏差、浮動基座加速度的偏差(QP 的唯二決策變數)。</span><span data-lang="en">The two relaxations: deviation from MPC forces, and floating-base acceleration deviation (the only QP decision variables).</span></td></tr>
+          <tr><td>\(\mathbf{S}_f,\ \mathbf{W}\)</td><td><span data-lang="zh">浮動基座選擇矩陣(挑出無驅動的 6 列)、接觸力約束(摩擦錐)矩陣。</span><span data-lang="en">Floating-base selection matrix (picks the 6 unactuated rows) and contact-force constraint (friction cone) matrix.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">MPC 決定「接下來一個步態週期,四隻腳該怎麼推地」;WBIC 決定「此刻 12 顆馬達怎麼出力,既尊重那份推地計畫、又順手穩住姿態和擺腿」。<b>力,是兩層之間的共同語言。</b></span>
+        <span data-lang="en">MPC decides how the four feet should push on the ground over the next gait cycle; WBIC decides how the 12 motors should act right now—honoring that push plan while stabilizing posture and swing legs on the side. <b>Force is the shared language between the layers.</b></span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何不追 MPC 的軌跡?</span><span data-lang="en">Why not track the MPC trajectory?</span></span>
+        <span data-lang="zh">因為那條軌跡常常<b>物理上追不到</b>:騰空期機身是拋體,gallop 的 CoM 從頭到尾不可控。強行追蹤(如 [15])= 拿高增益去打一場必輸的仗;<mark class="m-method" data-t="METHOD/IDEA">追力則永遠可行</mark>,姿態只需「盡力而為」(\(Q_2=0.1\))。</span>
+        <span data-lang="en">Because that trajectory is often <b>physically untrackable</b>: in flight the trunk is a projectile, and in gallop the CoM is never controllable. Forcing it (as in [15]) means fighting a losing battle with high gains; <mark class="m-method" data-t="METHOD/IDEA">tracking forces is always feasible</mark>, with posture handled best-effort (\(Q_2=0.1\)).</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">名字的陷阱</span><span data-lang="en">A naming trap</span></div>
+        <span data-lang="zh">「Impulse」不是說 WBIC 內部另有衝量優化——名字致敬 Cheetah 2 的 impulse planning 血統 [4]。作者直說:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">WBIC 的公式與既有 WBC 差異不大</mark>,關鍵新意只在「納入預先算好的反作用力 + 鬆弛浮動基座」。</span>
+        <span data-lang="en">The word impulse does not mean WBIC runs an internal impulse optimization—the name honors the Cheetah 2 impulse-planning lineage [4]. The authors say it plainly: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the WBIC formulation is not significantly different from existing WBCs</mark>; the new bit is consuming precomputed reaction forces + relaxing the floating base.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">頻率備忘</span><span data-lang="en">Rate cheat-sheet</span></span>
+        <span data-lang="zh">MPC:0.04 kHz(文中亦寫 30 Hz)· WBIC:0.5 kHz · 關節 PD:40 kHz · 狀態估計(Kalman filter):0.5 kHz。MPC 力命令在一次 stance 內只更新 ~4 次,其餘全靠 WBIC 每 2 ms 補位。</span>
+        <span data-lang="en">MPC: 0.04 kHz (also stated as 30 Hz) · WBIC: 0.5 kHz · joint PD: 40 kHz · state estimator (Kalman filter): 0.5 kHz. MPC forces refresh only ~4 times per stance; WBIC fills the gap every 2 ms.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果:高速奔跑(跑步機,trot)</span><span data-lang="en">Main result: high-speed running (treadmill, trot)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">指標</span><span data-lang="en">Metric</span></th><th><span data-lang="zh">本文(MPC+WBIC)</span><span data-lang="en">This work (MPC+WBIC)</span></th><th><span data-lang="zh">對照</span><span data-lang="en">Reference points</span></th></tr>
+          <tr><td><span data-lang="zh">最高穩定速度</span><span data-lang="en">Top stable speed</span></td><td class="win">3.7 m/s</td><td><span data-lang="zh">前作 MPC-only(同一台 Mini-Cheetah):2.45 m/s → <b>+51%</b>,且瓶頸是控制器而非硬體</span><span data-lang="en">Prior MPC-only (same Mini-Cheetah): 2.45 m/s → <b>+51%</b>, bottleneck was control, not hardware</span></td></tr>
+          <tr><td><span data-lang="zh">瞬間觀測速度</span><span data-lang="en">Peak observed speed</span></td><td>4.0 m/s</td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">達到後隨即跌倒</mark>,故正式記錄取 3.7</span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">Fell immediately after</mark>, so 3.7 is the official record</span></td></tr>
+          <tr><td>Froude number</td><td class="win">4.65</td><td><span data-lang="zh">多數文獻四足 &lt; 2 [2][16];Cheetah 2 bounding 6.4 m/s(Fr 7.1)[4];WildCat 8 m/s(未文檔化)</span><span data-lang="en">Most documented robots &lt; 2 [2][16]; Cheetah 2 bounding 6.4 m/s (Fr 7.1) [4]; WildCat 8 m/s (undocumented)</span></td></tr>
+          <tr><td><span data-lang="zh">髖關節速度 / 力矩</span><span data-lang="en">Hip joint velocity / torque</span></td><td>34 rad/s · 25.5 N·m<span class="add" data-lang="zh">命令值</span><span class="add" data-lang="en">commanded</span></td><td><span data-lang="zh">硬體上限 40 rad/s / 17 N·m(命令超過即截斷)→ <mark class="m-result" data-t="RESULT/EVIDENCE">硬體能力被打滿</mark></span><span data-lang="en">Hardware limits 40 rad/s / 17 N·m (over-limit commands truncated) → <mark class="m-result" data-t="RESULT/EVIDENCE">hardware capacity saturated</mark></span></td></tr>
+          <tr><td><span data-lang="zh">關節功率峰值</span><span data-lang="en">Peak joint power</span></td><td>280 W<span class="add" data-lang="zh">命令值</span><span class="add" data-lang="en">commanded</span></td><td><span data-lang="zh">致動器規格 250 W</span><span data-lang="en">Actuator spec 250 W</span></td></tr>
+        </table>
+        <figure class="fig"><img src="figs/Kim2019/fig4_running.png" alt="Figure 4 running experiment">
+          <figcaption data-lang="zh"><b>Fig.4</b> 跑步機 3.7 m/s trot。看三個地方:(b) 速度沿命令斜坡爬到 3.7–4;<b>(d) 身高/roll/pitch 在恆定命令附近規律起伏</b>——WBIC 沒有硬壓軌跡,機身隨跳躍-落地自然波動,這正是「追力不追位」的視覺證據;(e) 橘色階梯是 MPC 力命令(一次 stance 僅更新 4 次),藍色是 WBIC 每 2 ms 的實際輸出——WBIC 在 MPC 的粗剖面上疊加高頻修正。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Treadmill trot at 3.7 m/s. Look at three things: (b) velocity ramps along the command to 3.7–4; <b>(d) height/roll/pitch oscillate rhythmically around constant commands</b>—WBIC never clamps the trajectory; the trunk naturally rises and falls with jump-land cycles, the visual signature of force-over-position tracking; (e) the orange staircase is the MPC force command (only 4 updates per stance), blue is the WBIC output every 2 ms—high-rate corrections layered on the coarse profile.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">多步態與戶外 robust 測試</span><span data-lang="en">Multi-gait and outdoor robustness tests</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.85">
+          <li data-lang="zh"><b>同一組參數跑遍全部實驗</b>:所有任務增益、QP 權重、關節 PD 增益<mark class="m-result" data-t="RESULT/EVIDENCE">在六種步態與所有地形上完全不變</mark>;操作者只透過遙控器給三個輸入——步態、速度、方向。</li>
+          <li data-lang="en"><b>One parameter set for every experiment</b>: all task gains, QP weights, and joint PD gains <mark class="m-result" data-t="RESULT/EVIDENCE">stay identical across six gaits and all terrains</mark>; the operator sends only three RC inputs—gait type, speed, direction.</li>
+          <li data-lang="zh"><b>每種步態皆可 &gt;1 m/s</b>(戶外);Fig.5(b) 顯示換步態時<mark class="m-result" data-t="RESULT/EVIDENCE">控制器自動產生正確的力剖面型態</mark>(gallop 四腳錯開、pronk 四腳齊推、pace 同側成對…)。</li>
+          <li data-lang="en"><b>Every gait runs &gt;1 m/s</b> outdoors; Fig.5(b) shows the controller <mark class="m-result" data-t="RESULT/EVIDENCE">automatically produces the right force-profile pattern per gait</mark> (staggered feet in gallop, all-four push in pronk, lateral pairs in pace…).</li>
+          <li data-lang="zh"><b>地形魯棒</b>:雨後濕滑草地上姿態穩定、擺腿精準;<mark class="m-result" data-t="RESULT/EVIDENCE">礫石地(高粗糙度+滾動元素)也能跑</mark>。結論並提及崎嶇地形上的 push-recovery(見影片)。</li>
+          <li data-lang="en"><b>Terrain robustness</b>: stable posture and accurate swing control on rain-slicked grass; <mark class="m-result" data-t="RESULT/EVIDENCE">runs over gravel (high roughness + rolling elements)</mark>. The conclusion also mentions push-recovery on rough terrain (see video).</li>
+        </ul>
+        <figure class="fig"><img src="figs/Kim2019/fig5_gaits.png" alt="Figure 5 various gaits">
+          <figcaption data-lang="zh"><b>Fig.5</b> 戶外五種步態(gallop / pronk / bound / pace / trot;摘要宣稱共測六種)。要注意的是中欄:<b>每種步態的垂直反作用力「指紋」都不同</b>,但全部由同一控制器、同一組參數生成——換步態只換了 gait scheduler 的相位表。右欄:速度與 yaw 都貼著命令走。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> Five outdoor gaits (gallop / pronk / bound / pace / trot; the abstract claims six tested in total). The middle column is the point: <b>each gait has a distinct vertical reaction-force fingerprint</b>, yet all come from one controller with one parameter set—switching gaits only swaps the phase table in the gait scheduler. Right column: velocity and yaw hug their commands.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融怎麼讀(這篇沒有正式 ablation)</span><span data-lang="en">Reading the ablation (there is no formal one)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">拿掉什麼</span><span data-lang="en">What is removed</span></th><th><span data-lang="zh">代價</span><span data-lang="en">Cost</span></th><th><span data-lang="zh">證明什麼</span><span data-lang="en">What it proves</span></th></tr>
+          <tr><td><span data-lang="zh">拿掉 WBIC(= 前作 MPC-only [9])</span><span data-lang="en">Remove WBIC (= prior MPC-only [9])</span></td><td class="bad"><span data-lang="zh">3.7 → 2.45 m/s</span><span data-lang="en">3.7 → 2.45 m/s</span></td><td><span data-lang="zh">高頻全身層價值 +51% 速度;<mark class="m-limit" data-t="LIMITATION/FUTURE">但這是跨論文比較,非同日同設定 A/B</mark></span><span data-lang="en">The high-rate whole-body layer is worth +51% speed; <mark class="m-limit" data-t="LIMITATION/FUTURE">but this is a cross-paper comparison, not a same-day A/B</mark></span></td></tr>
+          <tr><td><span data-lang="zh">拿掉 MPC 視野(= 純 WBC)</span><span data-lang="en">Remove the MPC horizon (= pure WBC)</span></td><td class="bad"><span data-lang="zh">無法規劃騰空期</span><span data-lang="en">Cannot plan through flight</span></td><td><span data-lang="zh">論文以論證(單步視野)而非實驗支持</span><span data-lang="en">Argued (one-step myopia), not shown experimentally</span></td></tr>
+          <tr><td><span data-lang="zh">拿掉變數消去</span><span data-lang="en">Remove variable elimination</span></td><td class="bad"><span data-lang="zh">MPC 慢 &gt;10×</span><span data-lang="en">MPC &gt;10× slower</span></td><td><span data-lang="zh">實時性依賴這項工程優化</span><span data-lang="en">Real-time feasibility hinges on this engineering optimization</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><b>實驗證明了什麼/沒證明什麼:</b>證明——單一參數組的分層控制器能在真實硬體上覆蓋六種步態、打滿硬體極限、在濕滑與礫石地穩定。<mark class="m-limit" data-t="LIMITATION/FUTURE">沒證明——與其他控制器在同硬體上的量化對比、統計穩健性(試驗次數/成功率未報)、以及「追力 vs 追軌跡」的獨立貢獻</mark>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><b>What the experiments do and do not prove:</b> They do—one fixed-parameter layered controller covers six gaits on real hardware, saturates hardware limits, stays stable on slippery grass and gravel. <mark class="m-limit" data-t="LIMITATION/FUTURE">They do not—quantified same-hardware comparison against other controllers, statistical robustness (trial counts/success rates unreported), or the isolated contribution of force- vs trajectory-tracking</mark>.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">從 2.45 到 3.7 m/s 的躍升<b>沒有換任何硬體</b>——只是把控制介面從「追軌跡」換成「追力」,再補上 500 Hz 的全身回授。</span>
+        <span data-lang="en">The jump from 2.45 to 3.7 m/s involved <b>zero hardware change</b>—just swapping the control interface from trajectory to force, plus 500 Hz whole-body feedback.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">數字的性質</span><span data-lang="en">Nature of the numbers</span></div>
+        <span data-lang="zh">力矩 25.5 N·m 與功率 280 W 都是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「命令值」而非量測值</mark>(作者有註明):超過致動器上限(17 N·m / 250 W)的部分實際上被截斷。「打滿硬體」的結論來自命令飽和的間接證據。</span>
+        <span data-lang="en">The 25.5 N·m torque and 280 W power are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">commanded, not measured, values</mark> (the authors note this): anything beyond actuator limits (17 N·m / 250 W) is truncated in reality. The saturation of commands is indirect evidence for the "hardware fully utilized" conclusion.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">量測 vs 命令</span><span data-lang="en">measured vs commanded</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">統計樣本</span><span data-lang="en">statistics</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>展示型評估,無同場對照</b>:全文沒有任何控制器 A/B 對比表。唯一的「baseline」是<mark class="m-limit" data-t="LIMITATION/FUTURE">引用前作的 2.45 m/s(不同論文、不同時間)</mark>。robotics 慣例如此,但「versatile &amp; robust」的宣稱主要靠質性展示支撐。</li>
+          <li data-lang="en"><b>Demonstration-style evaluation, no in-situ baseline</b>: no controller A/B table anywhere. The only baseline is <mark class="m-limit" data-t="LIMITATION/FUTURE">the 2.45 m/s cited from prior work (different paper, different time)</mark>. Standard practice in robotics, but the versatile-and-robust claim rests mostly on qualitative demos.</li>
+          <li data-lang="zh"><b>核心主張缺 ablation</b>:2.45→3.7 的進步同時混入「多了一整層 WBC」與「WBC 用力介面」兩件事。<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有「同一 MPC + 追軌跡式 WBC」的對照</mark>,故「追力優於追軌跡」在本文中是論證而非實測。</li>
+          <li data-lang="en"><b>The central claim lacks an ablation</b>: the 2.45→3.7 gain conflates adding a whole WBC layer with choosing the force interface. <mark class="m-limit" data-t="LIMITATION/FUTURE">No control condition of same MPC + trajectory-tracking WBC</mark>—so force-beats-trajectory is argued, not measured, here.</li>
+          <li data-lang="zh"><b>凸化假設 vs 高動態的內在張力</b>:MPC 假設 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">roll/pitch 小、\(\boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})\approx 0\)、狀態貼近命令</mark>——但 bounding/galloping 恰恰有大幅 pitch 振盪。線性化誤差未量化;實際上是 WBIC 的 500 Hz 回授在暗中吸收這些誤差,<mark class="m-limit" data-t="LIMITATION/FUTURE">分工的邊界(MPC 錯多少、WBIC 救多少)沒被分析</mark>。</li>
+          <li data-lang="en"><b>Inherent tension between convexifying assumptions and high dynamics</b>: MPC assumes <mark class="m-assume" data-t="ASSUMPTION/CLAIM">small roll/pitch, \(\boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})\approx 0\), states near command</mark>—yet bounding/galloping feature large pitch oscillations. Linearization error is never quantified; in practice WBIC&#39;s 500 Hz feedback silently absorbs it, and <mark class="m-limit" data-t="LIMITATION/FUTURE">the division of labor (how wrong MPC is, how much WBIC rescues) goes unanalyzed</mark>.</li>
+          <li data-lang="zh"><b>接觸時序是預定的</b>:gait scheduler 是開迴路相位表;礫石地上腳必然提早/延後觸地,<mark class="m-limit" data-t="LIMITATION/FUTURE">contact-state 不匹配如何處理,文中僅引 [19] 帶過</mark>。地形魯棒性有多少來自控制器、多少來自硬體的機械柔順,無從分辨。</li>
+          <li data-lang="en"><b>Contact timing is predefined</b>: the gait scheduler is an open-loop phase table; on gravel, feet inevitably touch down early/late, and <mark class="m-limit" data-t="LIMITATION/FUTURE">contact-state mismatch handling is waved at via [19]</mark>. How much terrain robustness comes from control vs the mechanical compliance of the hardware is indistinguishable.</li>
+          <li data-lang="zh"><b>兩個被承認重要卻不解釋的元件</b>:Kalman 狀態估計器與含轉子動力學的自製動力學引擎,作者說<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「對性能貢獻顯著」但 out of scope</mark>——復現門檻被低估。<span class="add">[導讀補充]</span> 後來 MIT 開源 Cheetah Software,此問題大幅緩解。</li>
+          <li data-lang="en"><b>Two components admitted crucial yet unexplained</b>: the Kalman state estimator and the custom rotor-dynamics engine—<mark class="m-assume" data-t="ASSUMPTION/CLAIM">"contributed significantly" but out of scope</mark>—understating the reproduction barrier. <span class="add">[guide note]</span> Largely mitigated later by the open-sourced MIT Cheetah Software.</li>
+          <li data-lang="zh"><b>未驗證的外推主張</b>:「移植到 Cheetah 3 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">不需要額外工作</mark>」「可自然延伸到雙足與 loco-manipulation」皆為展望而非結果。另有小瑕疵:MPC 頻率一處寫 40 Hz、一處寫 30 Hz;Fig.4 有兩個子圖都標 (d)——preprint 品質的痕跡。</li>
+          <li data-lang="en"><b>Unverified extrapolations</b>: "porting to Cheetah 3 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">requires no additional work</mark>" and "naturally extends to bipeds and loco-manipulation" are outlook, not results. Minor blemishes too: MPC rate stated as 40 Hz in one place and 30 Hz in another; Fig.4 labels two panels (d)—preprint fingerprints.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>介面 ablation</b>:同一 MPC、同一硬體,把 WBIC 換成 CoM-trajectory-tracking WBC([15] 式),3.7 m/s 還能到嗎?trot(CoM 尚可控)與 bound(不可控)的差距會不會不同?</li>
+          <li data-lang="en"><b>Interface ablation</b>: same MPC, same hardware, swap WBIC for a CoM-trajectory-tracking WBC (à la [15])—does 3.7 m/s survive? Would the gap differ between trot (CoM controllable) and bound (not)?</li>
+          <li data-lang="zh"><b>量測 vs 命令</b>:有無電流量測可以回推實際輸出力矩/功率?截斷發生的時間占比多少?「打滿硬體」能否用量測數據坐實?</li>
+          <li data-lang="en"><b>Measured vs commanded</b>: is there current sensing to back out actual torque/power? What fraction of time is the command truncated? Can "hardware fully utilized" be grounded in measurements?</li>
+          <li data-lang="zh"><b>統計</b>:3.7 m/s 成功了幾次、跑了多久?六種步態各自的速度上限與典型跌倒模式?沒有這些,「robust」只能當形容詞讀。</li>
+          <li data-lang="en"><b>Statistics</b>: how many runs at 3.7 m/s, and for how long? Per-gait speed ceilings and typical failure modes? Without these, robust reads as an adjective, not a result.</li>
+          <li data-lang="zh"><b>線性化誤差</b>:bounding 的大 pitch 下,凸 MPC 的預測軌跡與全模型 rollout 差多遠?誤差是否幾乎全靠 WBIC 高頻回授吸收?若是,MPC 的「最優性」還剩多少意義?</li>
+          <li data-lang="en"><b>Linearization error</b>: under the large pitch of bounding, how far does the convex-MPC prediction drift from a full-model rollout? Is the error absorbed almost entirely by WBIC feedback—and if so, how much does MPC optimality still mean?</li>
+          <li data-lang="zh"><b>接觸時序錯位</b>:礫石上實際觸地時刻與相位表差多少?MPC(假設的接觸狀態)與 WBIC(實際接觸 Jacobian)不一致時,誰說了算?</li>
+          <li data-lang="en"><b>Contact-timing mismatch</b>: on gravel, how far do real touchdowns deviate from the phase table? When MPC (assumed contact states) and WBIC (actual contact Jacobian) disagree, who wins?</li>
+          <li data-lang="zh"><b>Froude 比較的公平性</b>:用 Froude number 跨體型比敏捷度,對 9 kg 的 Mini-Cheetah 是否天然有利(小型機器人相對力矩餘裕大)?與 Cheetah 2 的 bounding(不同步態)直接比 Fr 合理嗎?</li>
+          <li data-lang="en"><b>Fairness of Froude comparisons</b>: does Froude-normalized agility naturally favor the 9 kg Mini-Cheetah (small robots enjoy relative torque headroom)? Is comparing Fr against Cheetah 2 bounding—a different gait—apples to apples?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">兩個:(1) 把貢獻讀成「發明了 MPC+WBC」——作者明言那是既有框架,新意在<b>力介面</b>;(2) 把 3.7 m/s 讀成可保證、可重複的性能——那是單次最佳記錄,4 m/s 時隨即跌倒,且<mark class="m-limit" data-t="LIMITATION/FUTURE">試驗統計未報告</mark>。</span>
+        <span data-lang="en">Two: (1) reading the contribution as inventing MPC+WBC—the authors state that framework already existed; the novelty is the <b>force interface</b>; (2) reading 3.7 m/s as guaranteed, repeatable performance—it is a best single record, the robot fell right after touching 4 m/s, and <mark class="m-limit" data-t="LIMITATION/FUTURE">trial statistics are unreported</mark>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">作者處處誠實:力矩/功率標明是命令值;4 m/s 跌倒直接寫出來;「整合不是新貢獻」自己先講。且<b>同一組增益跑遍所有步態與地形</b>——這是「versatile」最有力、也最難造假的證據。</span>
+        <span data-lang="en">The authors are honest throughout: torque/power flagged as commanded values; the fall at 4 m/s reported plainly; "integration is not the novelty" volunteered upfront. And <b>one gain set runs every gait and terrain</b>—the strongest, hardest-to-fake evidence of versatility.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">歷史的裁決</span><span data-lang="en">The verdict of history</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 上面多數質疑(缺 ablation、缺統計)後來被社群的大規模採用實質回答:這套 stack 被無數團隊復現並沿用,穩健性在野外被反覆驗證——但這是後見之明,不是這篇 preprint 自身提供的證據。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> Most of the above (missing ablations, missing statistics) was later answered in practice by mass adoption: countless teams reproduced and built on this stack, validating its robustness in the wild—but that is hindsight, not evidence contained in this preprint.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>分層食譜可直接遷移</b>:慢層 = 簡單模型 + 凸優化 + 長視野,輸出一個「物理上永遠可執行」的介面量(力/衝量);快層 = 全模型 + 高頻回授負責執行與穩定。凡是欠驅動、有 flight phase 的系統(雙足、跳躍機器人、腿臂混合)都適用——作者自己也把雙足與 loco-manipulation 列為下一步。</li>
+          <li data-lang="en"><b>The layering recipe transfers directly</b>: slow layer = simple model + convex optimization + long horizon, outputting an interface quantity physics can always execute (force/impulse); fast layer = full model + high-rate feedback for execution and stabilization. Applies to any underactuated system with flight phases (bipeds, jumpers, legged manipulators)—the authors themselves list bipeds and loco-manipulation as next steps.</li>
+          <li data-lang="zh"><b>介面設計是被低估的自由度</b>:同樣兩個模組,傳「軌跡」會失敗、傳「力」就成功。設計層間契約時,先問「哪個量在最壞情況下仍然可控/可行?」</li>
+          <li data-lang="en"><b>Interface design is an underrated degree of freedom</b>: the same two modules fail when passing trajectories and succeed when passing forces. When designing inter-layer contracts, first ask: which quantity remains controllable/feasible in the worst case?</li>
+          <li data-lang="zh"><b>鬆弛變數 &gt; 重型階層機制</b>:挑對 6+12 維變數鬆弛(基座加速度+力偏差),QP 小到 500 Hz;不必動用 hierarchical QP。工程上「夠簡單才跑得快、跑得快才穩」。</li>
+          <li data-lang="en"><b>Relaxation variables &gt; heavy hierarchy machinery</b>: relax the right 6+12 dimensions (base acceleration + force deviation) and the QP fits in 500 Hz; no hierarchical QP needed. Engineering truth: simple enough to run fast, fast enough to be stable.</li>
+          <li data-lang="zh"><b>讀 RL locomotion 論文前的必修課</b>:<span class="add">[導讀補充]</span> 這篇是 RL 方法(Hwangbo 2019 [16] 及其後的 sim-to-real 系列)最常見的 model-based 對照組原型。理解它,才能判斷 RL 論文宣稱的「超越 MPC baseline」到底超越了什麼、在哪些條件下成立。</li>
+          <li data-lang="en"><b>Prerequisite for reading RL locomotion papers</b>: <span class="add">[guide note]</span> this is the prototype of the model-based baseline that RL work (Hwangbo 2019 [16] and the sim-to-real line after it) most often compares against. Understanding it lets you judge what "beats the MPC baseline" actually beats, and under which conditions.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What&#39;s worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「凸 MPC + WBC 分層是模型式四足的標準架構」</span><span data-lang="en">"Convex MPC + WBC layering is the standard model-based quadruped stack"</span></td><td><span data-lang="zh">引本文(架構定型之作)+ [8](凸 MPC 前身)。</span><span data-lang="en">Cite this paper (the stack-defining work) + [8] (the convex-MPC ancestor).</span></td></tr>
+          <tr><td><span data-lang="zh">「高動態/欠驅動運動應追蹤力而非 CoM 軌跡」</span><span data-lang="en">"Highly dynamic / underactuated motion should track forces, not CoM trajectories"</span></td><td><span data-lang="zh">引本文 WBIC + Cheetah 2 impulse planning [4]。</span><span data-lang="en">Cite the WBIC here + Cheetah 2 impulse planning [4].</span></td></tr>
+          <tr><td><span data-lang="zh">「null-space 任務階層 + 小 QP 可在實機 500 Hz 運行」</span><span data-lang="en">"Null-space task hierarchy + a small QP runs at 500 Hz on hardware"</span></td><td><span data-lang="zh">引本文 WBIC 公式(式 16–26)。</span><span data-lang="en">Cite the WBIC formulation (Eqs. 16–26).</span></td></tr>
+          <tr><td><span data-lang="zh">需要具體數據:Mini-Cheetah 3.7 m/s、Froude 4.65、六步態單一參數組</span><span data-lang="en">Concrete numbers: Mini-Cheetah 3.7 m/s, Froude 4.65, six gaits on one parameter set</span></td><td><span data-lang="zh">引本文實驗章節。</span><span data-lang="en">Cite the experiments here.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">用「反作用力」這個介面,把凸 MPC 的遠見縫上 WBC 的反應速度——一台 9 kg 的 Mini-Cheetah 就用同一組參數跑出六種步態與 3.7 m/s。模型式四足控制自此有了標準疊層;之後的每一篇四足論文,無論 model-based 或 RL,幾乎都得跟它對話。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">Through the interface of reaction force, it stitches the foresight of convex MPC to the reflexes of WBC—and a 9 kg Mini-Cheetah runs six gaits up to 3.7 m/s on one parameter set. Model-based quadruped control gained its standard stack here; nearly every quadruped paper since, model-based or RL, has had to converse with it.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Di Carlo 2018 (Convex MPC)</span>
+          <span class="chip">Katz 2019 (Mini-Cheetah)</span>
+          <span class="chip">Park 2017 (Cheetah 2 impulse)</span>
+          <span class="chip">Kim 2018 (WBC)</span>
+          <span class="chip">Hwangbo 2019 (RL locomotion)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Kim et al. 2019 (WBIC + MPC) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'WBIC MPC reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

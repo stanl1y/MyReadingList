@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Walk These Ways — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Walk These Ways: Tuning Robot Control for Generalization with Multiplicity of Behavior","authors":"Gabriel B. Margolis, Pulkit Agrawal","year":"2022","venue":"CoRL","tags":["Legged Robotics","Locomotion","Reinforcement Learning","Sim-to-Real","Quadruped","Multiplicity of Behavior"],"tldr":"只在平地訓練的一條四足策略,靠 MoB 同時學會同一任務的多種解法:8 維行為參數(步態時序、頻率、身高、俯仰、站寬、抬腳高)即時切換,讓人類駕駛在未見過的樓梯、灌木、推撞場景現場調參泛化,免重訓;開源成廣為使用的 Walk These Ways 控制器。","tldr_en":"One flat-ground quadruped policy learns many ways to solve the same task (MoB): an 8-D behavior vector (gait timing, frequency, height, pitch, stance width, footswing) is switched in real time, letting a human pilot tune the robot through unseen stairs, bushes and shoves without retraining - released as the widely used open-source Walk These Ways controller."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:110px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">一條<b>只在平地訓練</b>的四足策略,卻能上下樓梯、鑽過灌木、扛住踢擊。訣竅是 <b>Multiplicity of Behavior(MoB)</b>:<mark class="m-method" data-t="METHOD/IDEA">讓單一策略同時學會「同一任務的多種解法」</mark>,以 8 維行為參數(步態時序、頻率、身高、俯仰、站寬、抬腳高)即時切換。策略在部署現場失敗時,<mark class="m-method" data-t="METHOD/IDEA">不必重調獎勵重訓,人類駕駛轉個旋鈕就能換一種走法</mark>——不同走法泛化到不同場景。成果開源為 <b>Walk These Ways</b> 控制器。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">A quadruped policy trained <b>only on flat ground</b> that still climbs stairs, pushes through bushes, and shrugs off kicks. The trick is <b>Multiplicity of Behavior (MoB)</b>: <mark class="m-method" data-t="METHOD/IDEA">one policy learns many ways of solving the same task</mark>, switched in real time by an 8-D behavior vector (gait timing, frequency, body height, pitch, stance width, footswing height). When the policy fails in the field, <mark class="m-method" data-t="METHOD/IDEA">no reward re-tuning or retraining—a human pilot just turns a knob to walk another way</mark>, and different ways generalize to different scenarios. Released as the open-source <b>Walk These Ways</b> controller.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Margolis2022/fig1_teaser.png" alt="Figure 1 teaser: MoB tuning across environments">
+        <figcaption data-lang="zh"><b>Fig.1(論文)</b> 同一條策略,人類調不同「步態旋鈕」應對不同場景:高頻步態才能在濕滑地衝刺(左);低頻+高抬腳才能上樓梯(中);低抬腳+寬站距才扛得住推撞(右)——<b>沒有一組參數在三個場景都贏</b>,這正是需要 MoB 的理由。下排:路緣、載物傾倒、鑽低杆、節奏舞蹈等衍生能力。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1 (paper)</b> One policy, different knob settings for different scenes: only a high-frequency gait sprints on slippery ground (left); stairs need low frequency + high footswing (middle); surviving shoves needs low footswing + wide stance (right)—<b>no single setting wins all three</b>, which is exactly the case for MoB. Bottom row: curbs, payload dumping, crawling under a bar, rhythmic dance.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 學習式運動控制器能在訓練分布內自動適應,但 <mark class="m-problem" data-t="PROBLEM/GAP">out-of-distribution 失敗時沒有快速調整機制</mark>:只能重調獎勵/環境再重訓,又慢又煩;更糟的是有些環境(厚灌木)<mark class="m-problem" data-t="PROBLEM/GAP">根本無法模擬、無法感知</mark>。</li>
+          <li data-lang="en"><b>Problem</b> — Learned locomotion controllers adapt within the training distribution, but <mark class="m-problem" data-t="PROBLEM/GAP">have no fast tuning mechanism when they fail out-of-distribution</mark>: the only recourse is reward/environment redesign plus retraining. Worse, some environments (thick bushes) <mark class="m-problem" data-t="PROBLEM/GAP">cannot be simulated or sensed at all</mark>.</li>
+          <li data-lang="zh"><b>方法</b> — MoB:訓練條件策略 \(\pi(\cdot\mid \mathbf{c}_t,\mathbf{b}_t)\),把過去<b>寫死在輔助獎勵裡的步態偏好</b>參數化成 8 維行為向量 \(\mathbf{b}_t\)(接觸時序 \(\boldsymbol\theta^{\text{cmd}}\)、頻率 \(f^{\text{cmd}}\)、身高、俯仰、站寬、抬腳高),<mark class="m-method" data-t="METHOD/IDEA">一條策略內含一整族步態</mark>,部署時即時切換。</li>
+          <li data-lang="en"><b>Method</b> — MoB: train a conditional policy \(\pi(\cdot\mid \mathbf{c}_t,\mathbf{b}_t)\), turning the gait preferences <b>formerly hard-coded in auxiliary rewards</b> into an 8-D behavior vector \(\mathbf{b}_t\) (contact timing \(\boldsymbol\theta^{\text{cmd}}\), frequency \(f^{\text{cmd}}\), height, pitch, stance width, footswing height): <mark class="m-method" data-t="METHOD/IDEA">one policy carries a whole family of gaits</mark>, switchable at deployment.</li>
+          <li data-lang="zh"><b>結果</b> — 只在平地訓練,真機 Unitree Go1 零重訓完成:樓梯/路緣平滑跨越、16 cm 平台地形(<mark class="m-result" data-t="RESULT/EVIDENCE">存活 0.88 vs gait-free 0.83</mark>)、鑽 22 cm 橫杆、抗側踢、3 m/s 衝刺跨 60 cm 溝、90 bpm 編舞;<mark class="m-limit" data-t="LIMITATION/FUTURE">代價是平地任務性能略降</mark>(vx 追蹤 0.92 vs 0.94)。</li>
+          <li data-lang="en"><b>Results</b> — Trained on flat ground only, on a real Unitree Go1 with zero retraining: smooth stair/curb traversal, 16 cm platform terrain (<mark class="m-result" data-t="RESULT/EVIDENCE">survival 0.88 vs 0.83 gait-free</mark>), crawling under a 22 cm bar, bracing against shoves, a 3 m/s sprint leaping a 60 cm gap, 90 bpm choreography; <mark class="m-limit" data-t="LIMITATION/FUTURE">the cost is slightly lower in-distribution performance</mark> (vx tracking 0.92 vs 0.94).</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">2020–2022 的腿式機器人主流是「<mark class="m-method" data-t="METHOD/IDEA">模擬大規模訓練 + 自動適應</mark>」:Lee et al. 2020、<b>RMA</b>(Kumar et al. 2021)從觀測歷史線上估計環境參數(online system identification)再讓策略適應。這條路的前提有二:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">環境變化要先被建模進訓練</mark>,且<mark class="m-assume" data-t="ASSUMPTION/CLAIM">參數要能從感測觀測中估出來</mark>。兩者在真實世界常常不成立。</p>
+        <p data-lang="en">The 2020–2022 mainstream in legged robotics was "<mark class="m-method" data-t="METHOD/IDEA">large-scale sim training + automatic adaptation</mark>": Lee et al. 2020 and <b>RMA</b> (Kumar et al. 2021) estimate environment parameters online from observation history (online system identification) and let the policy adapt. This rests on two premises: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">environment variation must be modeled into training a priori</mark>, and <mark class="m-assume" data-t="ASSUMPTION/CLAIM">its parameters must be estimable from sensing</mark>. Both often fail in the real world.</p>
+        <p data-lang="zh">另一條共識:只用任務獎勵(速度追蹤)學出的步態<mark class="m-problem" data-t="PROBLEM/GAP">從未成功轉移到真機</mark>,必須加<b>輔助獎勵</b>(接觸節奏、平滑度、抬腳高…)。本文的關鍵重讀:<mark class="m-method" data-t="METHOD/IDEA">輔助獎勵其實就是「泛化偏置」</mark>——固定它,就固定了機器人失敗的方式。</p>
+        <p data-lang="en">Another consensus: gaits learned from the task reward alone (velocity tracking) <mark class="m-problem" data-t="PROBLEM/GAP">have never transferred to real hardware</mark>; <b>auxiliary rewards</b> (contact schedule, smoothness, foot clearance...) are mandatory. The key re-reading in this paper: <mark class="m-method" data-t="METHOD/IDEA">auxiliary rewards are really generalization biases</mark>—fixing them fixes the way the robot fails.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇把泛化問題從「<b>機器自動估計環境</b>」改寫成「<b>人(或未來的高層策略)選擇行為</b>」。它刻意選了一個極端設定——只在平地訓練、測試於非平地——來證明:訓練分布內的<b>解法多樣性</b>本身就是一種對付分布外的資源。<span class="add">[導讀補充]</span> 這與 RMA 是互補而非對立:一個調「對環境的估計」,一個調「自己的行為」。</p>
+          <p data-lang="en" style="margin-top:6px">The paper rewrites generalization from "<b>the machine estimates the environment</b>" to "<b>a human (or a future high-level policy) selects the behavior</b>." It deliberately picks an extreme setting—train on flat ground only, test off it—to show that <b>solution diversity within the training distribution</b> is itself a resource against out-of-distribution scenarios. <span class="add">[guide note]</span> This is complementary to RMA rather than opposed: one tunes the estimate of the world, the other tunes the behavior itself.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不是「又一個四足控制器」,而是底下幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What to take away is not "yet another quadruped controller" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">任務規格不足(under-specification)是資源,不是 bug。</b> 平地行走只約束身體速度,不約束腿怎麼擺、身體多高;典型 RL 隨機收斂到<b>單一解=單一泛化偏置</b>,MoB 把整個解族結構化地保留下來,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">賭的是其中總有一種解在新環境還能用</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Task under-specification is a resource, not a bug.</b> Flat-ground walking constrains body velocity but not leg motion or torso height; vanilla RL collapses to <b>one solution = one generalization bias</b>. MoB keeps the whole solution family, structured, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">betting that some member still works in a new environment</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">把「會被重調的獎勵超參」升格成策略輸入。</b> 過去每換任務就重調輔助獎勵+重訓;MoB 把這些偏好接進 \(\mathbf b_t\),<b>調參從訓練期搬到部署期</b>,迭代從「天」變「秒」。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Promote re-tunable reward hyper-parameters into policy inputs.</b> Auxiliary rewards used to be re-tuned and retrained per task; MoB wires those preferences into \(\mathbf b_t\), <b>moving tuning from training time to deployment time</b>—iteration drops from days to seconds.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">可解釋的行為空間才可駕駛。</b> 相比無監督多樣性(DIAYN、QD)學出的「不知所云的技能」,MoB 用運動學傳統的語彙(兩拍步態時序、Raibert heuristic、抬腳高)當座標軸,<mark class="m-result" data-t="RESULT/EVIDENCE">人類能直覺地即時操作,也真的上了真機</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Only an interpretable behavior space is pilotable.</b> Unlike the inscrutable skills of unsupervised diversity (DIAYN, QD), MoB uses the vocabulary of locomotion tradition (two-beat gait timing, the Raibert heuristic, footswing height) as its axes—<mark class="m-result" data-t="RESULT/EVIDENCE">humans can operate it intuitively in real time, and it actually runs on hardware</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">多樣性不是免費的。</b> 平地上 gait-free baseline 的速度追蹤更好(0.94 vs 0.92;高線速+高角速組合差距最大)——<mark class="m-limit" data-t="LIMITATION/FUTURE">用 in-distribution 性能換 out-of-distribution 選項</mark>,這個 trade-off 論文自己量化了。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Diversity is not free.</b> On flat ground the gait-free baseline tracks velocity better (0.94 vs 0.92, worst at high linear + angular velocity combos)—<mark class="m-limit" data-t="LIMITATION/FUTURE">in-distribution performance is traded for out-of-distribution options</mark>, a trade-off the paper itself quantifies.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">副產品同樣重要:一個可靠的開源低層。</b> 可解釋的高層介面 + 穩健 sim-to-real 配方,讓它成為採集示範資料、掛高層策略的<b>平台</b>。<span class="add">[導讀補充]</span> Walk These Ways 之後成為 Go1 世代最常用的開源社群控制器之一。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">The by-product matters too: a reliable open-source low level.</b> An interpretable high-level interface plus a robust sim-to-real recipe make it a <b>platform</b> for demonstration collection and hierarchical stacks. <span class="add">[guide note]</span> Walk These Ways went on to become one of the most-used open-source community controllers of the Go1 era.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Walk These Ways: Tuning Robot Control for Generalization with Multiplicity of Behavior</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Gabriel B. Margolis, Pulkit Agrawal</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Improbable AI Lab, MIT</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2022 · CoRL(arXiv:2212.03238)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Legged Locomotion · RL</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>gmargo11.github.io/walk-these-ways</span>
+          <b><span data-lang="zh">硬體</span><span data-lang="en">Hardware</span></b><span>Unitree Go1 Edu + Jetson TX2 NX</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它給了 sim-to-real RL 一條「重訓之外」的路:當機器人在現場失敗,<b>換一種行為</b>常常比<b>重新學一個行為</b>快得多。同時它交付了一個人人可用的開源四足控制器,把研究成果變成了社群基礎設施。</span>
+        <span data-lang="en">It gives sim-to-real RL a path other than retraining: when the robot fails in the field, <b>switching behavior</b> is often far faster than <b>learning a new one</b>. And it ships a usable open-source quadruped controller, turning a paper into community infrastructure.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Multiplicity of Behavior</span><span class="chip">Gait parameters</span>
+          <span class="chip">Auxiliary rewards</span><span class="chip">Raibert heuristic</span>
+          <span class="chip">Isaac Gym + PPO</span><span class="chip">Unitree Go1</span>
+        </div>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">讀前先校準</span><span data-lang="en">Calibrate before reading</span></div>
+        <span data-lang="zh">這<b>不是</b>一篇「自動適應」論文:泛化的最後一步是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">人類駕駛在現場挑參數</mark>。它主張的是「可調性」的價值,自動選擇行為被明確留給 future work。</span>
+        <span data-lang="en">This is <b>not</b> an "automatic adaptation" paper: the last step of generalization is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a human pilot picking parameters in the field</mark>. The claim is the value of tunability; automatic behavior selection is explicitly left to future work.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">自動適應 / 線上系統辨識</span><span data-lang="en">Adaptation / online sysID</span></b><br><small>(Lee 2020, RMA 2021)</small></td><td><span data-lang="zh">只能適應<mark class="m-problem" data-t="PROBLEM/GAP">訓練時建模過、且感測得到</mark>的變化;參數全開又會造出學不動的地獄課程,實務上只敢在窄範圍隨機化。</span><span data-lang="en">Adapts only to variation that was <mark class="m-problem" data-t="PROBLEM/GAP">modeled at training time and is sensable</mark>; randomizing everything creates an unlearnable curriculum, so practitioners restrict ranges.</span></td></tr>
+          <tr><td><b><span data-lang="zh">失敗就重調獎勵重訓</span><span data-lang="en">Fail, re-tune rewards, retrain</span></b></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">緩慢的訓練—部署迭代圈</mark>,而且調好的輔助獎勵是任務特定的,換任務又要重來。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">A slow train-deploy iteration loop</mark>; the tuned auxiliary rewards are task-specific and must be redone per task.</span></td></tr>
+          <tr><td><b><span data-lang="zh">無法模擬/感知的場景</span><span data-lang="en">Unsimulatable / unsensable scenes</span></b></td><td><span data-lang="zh">厚灌木<mark class="m-problem" data-t="PROBLEM/GAP">難模擬(整身柔性接觸)、難感知(深度相機看起來像牆)</mark>——重訓迭代根本無從下手,機器人只會把它當岩石硬爬或卡死。</span><span data-lang="en">Thick bushes are <mark class="m-problem" data-t="PROBLEM/GAP">hard to simulate (whole-body compliance) and hard to sense (depth cameras see a wall)</mark>—no amount of retraining iterations helps; the robot climbs them like rocks or gets stuck.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心觀察:同一個訓練任務有<b>多個同樣好的解</b>(under-specification)。crouch(壓低身體)與 stomp(高抬腳)都能走平地,但 crouch 能鑽障礙、上不了樓梯;stomp 相反。<mark class="m-problem" data-t="PROBLEM/GAP">典型 RL 只會隨機留下其中一個解</mark>——機器人的泛化偏置從此被鎖死。</p>
+        <p data-lang="en" style="margin-top:14px">Core observation: a training task has <b>many equally good solutions</b> (under-specification). Crouching and stomping both walk on flat ground, but crouch goes under obstacles and fails stairs; stomp is the reverse. <mark class="m-problem" data-t="PROBLEM/GAP">Vanilla RL randomly keeps just one solution</mark>—locking in the generalization bias of the robot.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,MoB 怎麼補</span><span data-lang="en">Gap table — who lacks what, how MoB fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">MoB 如何補上</span><span data-lang="en">How MoB fills it</span></th></tr>
+          <tr>
+            <td><b><span data-lang="zh">雙足步態參數化獎勵</span><span data-lang="en">Bipedal parameterized gait rewards</span></b><br><small>(Siekmann 2021 [8])</small></td>
+            <td><span data-lang="zh">參數空間小(兩腳相位差+擺動時長),<mark class="m-problem" data-t="PROBLEM/GAP">不支援組合任務與 OOD 環境的應用</mark>。</span><span data-lang="en">A small command space (two-foot offset + swing duration), <mark class="m-problem" data-t="PROBLEM/GAP">not aimed at compositional tasks or OOD environments</mark>.</span></td>
+            <td><span data-lang="zh">承襲其獎勵結構,擴成四足 <mark class="m-method" data-t="METHOD/IDEA">3 個時序偏移 + 5 個姿態/步態參數</mark>,並第一次把它當「泛化工具」使用。</span><span data-lang="en">Inherits the reward structure, extends it to quadrupeds with <mark class="m-method" data-t="METHOD/IDEA">3 timing offsets + 5 posture/gait parameters</mark>, and is the first to use it as a generalization tool.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">參考軌跡庫 / 模仿</span><span data-lang="en">Reference-trajectory libraries</span></b><br><small>([10][11][12])</small></td>
+            <td><span data-lang="zh">要先造軌跡庫;風格是<mark class="m-problem" data-t="PROBLEM/GAP">離散的、庫外不可內插</mark>。</span><span data-lang="en">Needs a trajectory library first; styles are <mark class="m-problem" data-t="PROBLEM/GAP">discrete, no interpolation beyond the library</mark>.</span></td>
+            <td><span data-lang="zh">獎勵直接以參數定義,\(\boldsymbol\theta^{\text{cmd}}\) <mark class="m-method" data-t="METHOD/IDEA">連續涵蓋所有兩拍接觸模式</mark>(可內插出 galloping 等)。</span><span data-lang="en">Rewards are defined directly on parameters; \(\boldsymbol\theta^{\text{cmd}}\) <mark class="m-method" data-t="METHOD/IDEA">continuously covers all two-beat contact patterns</mark> (interpolations like galloping included).</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">無監督多樣性 / QD</span><span data-lang="en">Unsupervised diversity / QD</span></b><br><small>(DIAYN, MAP-Elites…)</small></td>
+            <td><span data-lang="zh">學到的技能<mark class="m-problem" data-t="PROBLEM/GAP">不保證有用、不可人為解讀</mark>,且未擴展到真實機器人。</span><span data-lang="en">Learned skills are <mark class="m-problem" data-t="PROBLEM/GAP">not guaranteed useful, not human-interpretable</mark>, and have not scaled to real robots.</span></td>
+            <td><span data-lang="zh">用<mark class="m-method" data-t="METHOD/IDEA">人類直覺挑選的、有語意的行為參數</mark>當多樣性座標,直接可駕駛、可上真機。</span><span data-lang="en">Uses <mark class="m-method" data-t="METHOD/IDEA">human-chosen, semantically grounded behavior parameters</mark> as the diversity axes—pilotable and hardware-ready.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">階層式:高層學習 + MPC 低層</span><span data-lang="en">Hierarchies: learned high level + MPC low level</span></b><br><small>([19][20][21])</small></td>
+            <td><span data-lang="zh">低層是模型預測控制器,<mark class="m-problem" data-t="PROBLEM/GAP">缺一個「步態可調的學習式低層」</mark>。</span><span data-lang="en">The low level is model-predictive control; <mark class="m-problem" data-t="PROBLEM/GAP">a gait-conditioned learned low level was missing</mark>.</span></td>
+            <td><span data-lang="zh">提供該低層,<mark class="m-method" data-t="METHOD/IDEA">讓「高層+低層都用學習」的階層式方案成為可能</mark>。</span><span data-lang="en">Supplies exactly that, <mark class="m-method" data-t="METHOD/IDEA">enabling hierarchies with learning at both levels</mark>.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意作者的實驗設計哲學:<b>刻意把訓練環境做窄</b>(只有平地、不隨機化地形幾何),讓「泛化必須來自行為多樣性」這個因果關係無從混淆。若同時上了地形課程,你就分不清是 MoB 還是課程在泛化。</p>
+          <p data-lang="en" style="margin-top:6px">Note the experimental philosophy: the training environment is <b>deliberately narrow</b> (flat ground only, no terrain-geometry randomization), so that "generalization must come from behavior diversity" cannot be confounded. With a terrain curriculum in the mix, you could not tell MoB apart from the curriculum.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 MoB 讀成「multi-task 學習」。任務(command \(\mathbf c_t\):往哪走多快)自始至終只有一個;MoB 加的是<b>同一任務的多種解法</b>(behavior \(\mathbf b_t\):怎麼走)。任務與行為在輸入層就被拆開,這是全文的概念軸心。</span>
+        <span data-lang="en">Do not read MoB as multi-task learning. There is only ever one task (command \(\mathbf c_t\): where and how fast to go); MoB adds <b>multiple ways of solving that same task</b> (behavior \(\mathbf b_t\): how to walk). Task and behavior are separated right at the input—the conceptual axis of the paper.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">「重訓一次」對四足是數小時 GPU + 現場往返;「換個 \(\mathbf b_t\)」是<b>手把上撥一下,50 Hz 生效</b>。當失敗場景無法模擬(灌木、突發推撞),後者是唯一可行的迭代方式。</span>
+        <span data-lang="en">"Retrain once" costs GPU-hours plus field trips; "change \(\mathbf b_t\)" is <b>a flick on the joystick, effective at 50 Hz</b>. When the failure scenario cannot be simulated (bushes, surprise shoves), the latter is the only workable iteration.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">人的先驗值多少</span><span data-lang="en">value of the pilot</span></span><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">vs RMA 對比缺席</span><span data-lang="en">missing RMA compare</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">任務 vs 行為:一條策略,兩組輸入</span><span data-lang="en">Task vs behavior: one policy, two input groups</span></h3>
+        <p data-lang="zh">MoB 的形式化很輕:訓練條件策略 \(\pi(\cdot\mid\mathbf c_t,\mathbf b_t)\)。<b>任務</b>是全向速度追蹤,由 3 維指令給定:\(\mathbf c_t=[v_x^{\text{cmd}},v_y^{\text{cmd}},\omega_z^{\text{cmd}}]\)(機體座標的縱向/側向線速度與偏航角速度)。<b>行為</b>由 8 維向量指定「怎麼完成」:</p>
+        <p data-lang="en">The MoB formalism is light: train a conditional policy \(\pi(\cdot\mid\mathbf c_t,\mathbf b_t)\). The <b>task</b> is omnidirectional velocity tracking given by a 3-D command \(\mathbf c_t=[v_x^{\text{cmd}},v_y^{\text{cmd}},\omega_z^{\text{cmd}}]\) (body-frame linear velocities and yaw rate). The <b>behavior</b> is an 8-D vector specifying how to do it:</p>
+        <div class="eq">$$\mathbf b_t=\big[\underbrace{\theta_1^{\text{cmd}},\,\theta_2^{\text{cmd}},\,\theta_3^{\text{cmd}}}_{\text{contact timing}},\;\underbrace{f^{\text{cmd}}}_{\text{freq}},\;\underbrace{h_z^{\text{cmd}},\,\phi^{\text{cmd}},\,s_y^{\text{cmd}}}_{\text{posture}},\;\underbrace{h_z^{f,\text{cmd}}}_{\text{footswing}}\big]$$</div>
+        <p data-lang="zh">三個時序偏移 \(\boldsymbol\theta^{\text{cmd}}\) 就能表達<b>所有兩拍四足接觸模式</b>:pronking \((0,0,0)\)、trotting \((0.5,0,0)\)、bounding \((0,0.5,0)\)、pacing \((0,0,0.5)\),以及連續內插如 galloping \((0.25,0,0)\)。\(f^{\text{cmd}}\) 是步頻(Hz);\(h_z^{\text{cmd}},\phi^{\text{cmd}},s_y^{\text{cmd}},h_z^{f,\text{cmd}}\) 分別是身高、俯仰、站寬、抬腳高。訓練時範圍:\(f^{\text{cmd}}\in[1.5,4]\) Hz、\(h_z^{\text{cmd}}\in[0.10,0.45]\) m、\(\phi^{\text{cmd}}\in[-0.4,0.4]\) rad、\(s_y^{\text{cmd}}\in[0.05,0.45]\) m、\(h_z^{f,\text{cmd}}\in[0.03,0.25]\) m。</p>
+        <p data-lang="en">The three timing offsets \(\boldsymbol\theta^{\text{cmd}}\) express <b>all two-beat quadrupedal contact patterns</b>: pronking \((0,0,0)\), trotting \((0.5,0,0)\), bounding \((0,0.5,0)\), pacing \((0,0,0.5)\), plus continuous interpolations such as galloping \((0.25,0,0)\). \(f^{\text{cmd}}\) is stepping frequency (Hz); \(h_z^{\text{cmd}},\phi^{\text{cmd}},s_y^{\text{cmd}},h_z^{f,\text{cmd}}\) are body height, pitch, stance width and footswing height. Training ranges: \(f^{\text{cmd}}\in[1.5,4]\) Hz, \(h_z^{\text{cmd}}\in[0.10,0.45]\) m, \(\phi^{\text{cmd}}\in[-0.4,0.4]\) rad, \(s_y^{\text{cmd}}\in[0.05,0.45]\) m, \(h_z^{f,\text{cmd}}\in[0.03,0.25]\) m.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">獎勵三層結構:把「風格」變成可調目標</span><span data-lang="en">Three-tier rewards: style becomes a tunable objective</span></h3>
+        <figure class="fig"><img src="figs/Margolis2022/tab1_rewards.png" alt="Table 1: reward structure">
+          <figcaption data-lang="zh"><b>Tab.1(論文)</b> 獎勵結構。<b>Task</b>(綠框):xy 速度與偏航追蹤。<b>Augmented Auxiliary</b>(藍框):8 個「以 \(\mathbf b_t\) 為目標」的追蹤項——擺動/支撐相位、身高、俯仰、Raibert 站寬、抬腳高。<b>Fixed Auxiliary</b>(黃框):與 \(\mathbf b_t\) 無關的 sim-to-real 正則(平滑度、關節極限、能耗…)。注意藍框各項的目標值全是指令,<b>這就是「把獎勵超參升格為輸入」的具體實作</b>。</figcaption>
+          <figcaption data-lang="en"><b>Tab.1 (paper)</b> Reward structure. <b>Task</b> (green box): xy-velocity and yaw tracking. <b>Augmented Auxiliary</b> (blue box): 8 tracking terms whose targets are \(\mathbf b_t\)—swing/stance phase, body height, pitch, Raibert stance width, footswing height. <b>Fixed Auxiliary</b> (gold box): \(\mathbf b_t\)-independent sim-to-real regularizers (smoothness, joint limits, energy...). Every blue-box target is a command—<b>the concrete implementation of promoting reward hyper-parameters into inputs</b>.</figcaption></figure>
+        <p data-lang="zh">為了避免負的輔助懲罰壓垮任務獎勵、讓機器人「乾脆躺平或自殺提早終止」,總獎勵採用 [7] 的<b>正值乘積形式</b>:</p>
+        <p data-lang="en">To keep negative auxiliary penalties from drowning the task reward (tempting the robot to give up or terminate early), the total reward uses the <b>positive-product form</b> of [7]:</p>
+        <div class="eq">$$r_{\text{total}}=r_{\text{task}}\cdot\exp\big(c_{\text{aux}}\,r_{\text{aux}}\big),\qquad c_{\text{aux}}=0.02$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">任務進展永遠有正報酬,滿足風格約束時報酬更高。另一個巧思:站寬不能天真地獎勵「左右腳固定距離」——快速轉彎本來就需要腳的側向運動。改用 <mark class="m-method" data-t="METHOD/IDEA">Raibert Heuristic</mark> 計算與速度、接觸節奏一致的期望落腳點 \(\mathbf p^{f,\text{cmd}}_{x,y,\text{foot}}(s_y^{\text{cmd}})\),把站寬當作對這個基準的調整,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">確保風格獎勵不與任務獎勵衝突</mark>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Task progress always pays, and pays more when the style constraints are met. Another subtlety: stance width cannot naively reward a fixed left-right foot distance—fast turns require lateral foot motion. Instead the <mark class="m-method" data-t="METHOD/IDEA">Raibert Heuristic</mark> computes foot placements \(\mathbf p^{f,\text{cmd}}_{x,y,\text{foot}}(s_y^{\text{cmd}})\) consistent with velocity and contact schedule, treating stance width as an adjustment to that baseline, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">so style rewards do not fight the task reward</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">步態的「時鐘」:接觸時序參數化</span><span data-lang="en">The gait clock: contact-schedule parameterization</span></h3>
+        <p data-lang="zh">一個全域計時變數 \(t\) 每個步態週期從 0 走到 1(每步進位 \(f^{\text{cmd}}/f_\pi\),控制頻率 \(f_\pi=50\) Hz)。每隻腳的相位由 \(\boldsymbol\theta^{\text{cmd}}\) 平移而得:</p>
+        <p data-lang="en">A global timer \(t\) runs 0 to 1 each gait cycle (incremented by \(f^{\text{cmd}}/f_\pi\) per step, control rate \(f_\pi=50\) Hz). Each foot gets a phase shifted by \(\boldsymbol\theta^{\text{cmd}}\):</p>
+        <div class="eq">$$[t_{\text{FR}},t_{\text{FL}},t_{\text{RR}},t_{\text{RL}}]=\operatorname{clip}\big([\,t+\theta_2^{\text{cmd}}+\theta_3^{\text{cmd}},\;t+\theta_1^{\text{cmd}}+\theta_3^{\text{cmd}},\;t+\theta_1^{\text{cmd}},\;t+\theta_2^{\text{cmd}}\,],\,0,\,1\big)$$</div>
+        <p data-lang="zh">期望接觸狀態(1=支撐、0=擺動)用常態 CDF \(\Phi\) 平滑化(近似 [8] 的 Von Mises):</p>
+        <p data-lang="en">The desired contact state (1 = stance, 0 = swing) is smoothed with the normal CDF \(\Phi\) (approximating the Von Mises of [8]):</p>
+        <div class="eq">$$C^{\text{cmd}}_{\text{foot}}(t_{\text{foot}})=\Phi(t_{\text{foot}},\sigma)\big(1-\Phi(t_{\text{foot}}-0.5,\sigma)\big)+\Phi(t_{\text{foot}}-1,\sigma)\big(1-\Phi(t_{\text{foot}}-1.5,\sigma)\big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">擺動相懲罰足底力 \(\sum_{\text{foot}}[1-C^{\text{cmd}}_{\text{foot}}]\exp\{-|\mathbf f^{\text{foot}}|^2/\sigma_{cf}\}\)、支撐相懲罰足底速度——<b>該踩的時候踩、該抬的時候抬</b>。策略還吃 4 維時鐘特徵 \(\mathbf t_t=[\sin(2\pi t_{\text{FR}}),\sin(2\pi t_{\text{FL}}),\sin(2\pi t_{\text{RR}}),\sin(2\pi t_{\text{RL}})]\),等於把節拍器直接接進網路。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Swing phase penalizes foot force via \(\sum_{\text{foot}}[1-C^{\text{cmd}}_{\text{foot}}]\exp\{-|\mathbf f^{\text{foot}}|^2/\sigma_{cf}\}\); stance phase penalizes foot velocity—<b>press when told to press, lift when told to lift</b>. The policy also receives a 4-D clock feature \(\mathbf t_t=[\sin(2\pi t_{\text{FR}}),\sin(2\pi t_{\text{FL}}),\sin(2\pi t_{\text{RR}}),\sin(2\pi t_{\text{RL}})]\)—a metronome wired straight into the network.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">訓練與 sim-to-real 配方</span><span data-lang="en">Training and sim-to-real recipe</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STEP 1</span><b>Isaac Gym × PPO</b>
+            <small data-lang="zh">4096 個平行環境、2.58B 步、只有平地;MLP [512,256,128] + ELU;動作=12 個關節位置目標(PD:kp 20 / kd 0.5)。</small>
+            <small data-lang="en">4096 parallel envs, 2.58B steps, flat ground only; MLP [512,256,128] + ELU; actions = 12 joint position targets (PD: kp 20 / kd 0.5).</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 2</span><b data-lang="zh">課程 + 行為取樣</b><b data-lang="en">Curriculum + behavior sampling</b>
+            <small data-lang="zh">速度指令用 [3] 的 grid adaptive curriculum(vx 至 ±3 m/s、ωz 至 ±5 rad/s);\(\boldsymbol\theta^{\text{cmd}}\) 從四種對稱步態取樣,其餘參數均勻取樣;<b>episode 內重取樣</b>以學會平滑線上切換。</small>
+            <small data-lang="en">Velocity commands via the grid adaptive curriculum of [3] (vx to ±3 m/s, ωz to ±5 rad/s); \(\boldsymbol\theta^{\text{cmd}}\) sampled from the four symmetric gaits, other params uniform; <b>resampled within episodes</b> to learn smooth online transitions.</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 3</span><b data-lang="zh">縮小 sim-to-real 差距</b><b data-lang="en">Close the sim-to-real gap</b>
+            <small data-lang="zh">域隨機化(質量、馬達強度、摩擦、回彈、重力、校準)+ actuator network 建模非理想扭矩 + 模擬 20 ms 動作延遲;<b>不隨機化地形幾何</b>。</small>
+            <small data-lang="en">Domain randomization (mass, motor strength, friction, restitution, gravity, calibration) + an actuator network for non-ideal torque + a modeled 20 ms action latency; <b>no terrain-geometry randomization</b>.</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 4</span><b data-lang="zh">真機部署</b><b data-lang="en">Deploy on hardware</b>
+            <small data-lang="zh">Unitree Go1 Edu,機上 Jetson TX2 NX 以 50 Hz 跑策略;手把即時映射 \(\mathbf b_t\)(肩鍵切模式);另有估測器(MLP [256,128])監督式預測體速與摩擦。</small>
+            <small data-lang="en">Unitree Go1 Edu, onboard Jetson TX2 NX at 50 Hz; the joystick maps to \(\mathbf b_t\) live (bumpers switch modes); an estimator (MLP [256,128]) predicts body velocity and friction, supervised.</small></div>
+        </div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">策略輸入是 <b>30 步歷史</b>:觀測 \(\mathbf o_t\)(關節位置/速度、機體重力向量)、指令 \(\mathbf c_t\)、行為 \(\mathbf b_t\)、上一動作與時鐘 \(\mathbf t_t\)。<b>Gait-free baseline</b> = 同配方但拔掉全部 augmented auxiliary rewards——它只學到一個解,動作與 \(\mathbf b_t\) 無關,是全文所有比較的對照組。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The policy input is a <b>30-step history</b>: observations \(\mathbf o_t\) (joint positions/velocities, body-frame gravity), commands \(\mathbf c_t\), behaviors \(\mathbf b_t\), previous actions, and the clock \(\mathbf t_t\). The <b>gait-free baseline</b> = the same recipe minus all augmented auxiliary rewards—it learns a single solution, ignores \(\mathbf b_t\), and serves as the control across all comparisons.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\mathbf c_t\)</td><td><span data-lang="zh">任務指令:往哪走、多快(\(v_x^{\text{cmd}},v_y^{\text{cmd}},\omega_z^{\text{cmd}}\))。</span><span data-lang="en">Task command: where and how fast (\(v_x^{\text{cmd}},v_y^{\text{cmd}},\omega_z^{\text{cmd}}\)).</span></td></tr>
+          <tr><td>\(\mathbf b_t\)</td><td><span data-lang="zh">行為向量(8 維):怎麼走——步態時序、步頻、身高、俯仰、站寬、抬腳高。</span><span data-lang="en">Behavior vector (8-D): how to walk—gait timing, frequency, height, pitch, stance width, footswing.</span></td></tr>
+          <tr><td>\(\boldsymbol\theta^{\text{cmd}}\)</td><td><span data-lang="zh">腳對之間的三個相位偏移;\((0,0,0)\)=pronk、\((0.5,0,0)\)=trot、\((0,0.5,0)\)=bound、\((0,0,0.5)\)=pace。</span><span data-lang="en">Three phase offsets between foot pairs; \((0,0,0)\)=pronk, \((0.5,0,0)\)=trot, \((0,0.5,0)\)=bound, \((0,0,0.5)\)=pace.</span></td></tr>
+          <tr><td>\(f^{\text{cmd}}\)</td><td><span data-lang="zh">步頻(Hz):每秒每腳觸地次數。</span><span data-lang="en">Stepping frequency (Hz): contacts per foot per second.</span></td></tr>
+          <tr><td>\(C^{\text{cmd}}_{\text{foot}}\)</td><td><span data-lang="zh">期望接觸狀態(0~1):由時鐘算出「這隻腳現在該踩還是該抬」。</span><span data-lang="en">Desired contact state (0–1): from the clock, should this foot press or lift now.</span></td></tr>
+          <tr><td>\(\mathbf t_t\)</td><td><span data-lang="zh">給策略的 4 維正弦時鐘特徵(每腳一個)。</span><span data-lang="en">The 4-D sinusoidal clock feature fed to the policy (one per foot).</span></td></tr>
+          <tr><td>\(\Phi(x;\sigma)\)</td><td><span data-lang="zh">常態分布 CDF:把踩/抬的方波平滑成可微目標。</span><span data-lang="en">Normal CDF: smooths the stance/swing square wave into a differentiable target.</span></td></tr>
+          <tr><td>\(r_{\text{task}},r_{\text{aux}}\)</td><td><span data-lang="zh">任務獎勵(正)與輔助獎勵總和(負);以 \(r_{\text{task}}e^{c_{\text{aux}}r_{\text{aux}}}\) 相乘保證任務進展永遠有利可圖。</span><span data-lang="en">Task reward (positive) and summed auxiliary rewards (negative); multiplied as \(r_{\text{task}}e^{c_{\text{aux}}r_{\text{aux}}}\) so task progress always pays.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">把「訓練前調的獎勵旋鈕」焊到手把上:獎勵函數的目標值=策略的輸入值,於是<b>調獎勵不再需要重訓,變成調輸入</b>。</span>
+        <span data-lang="en">Solder the pre-training reward knobs onto the joystick: reward targets = policy inputs, so <b>tuning rewards no longer needs retraining—it becomes tuning inputs</b>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何選這 8 維?</span><span data-lang="en">Why these 8 dims?</span></span>
+        <span data-lang="zh">作者坦言可以用無監督多樣性目標學行為,但那些行為<mark class="m-limit" data-t="LIMITATION/FUTURE">不保證有用、人也調不動</mark>;所以改用<b>運動學文獻的專家先驗</b>(步態時序、姿態、抬腳)。MoB 的「通用性」宣稱因此打了折——見 CRITIQUE。</span>
+        <span data-lang="en">The authors admit behaviors could be learned with unsupervised diversity objectives, but those are <mark class="m-limit" data-t="LIMITATION/FUTURE">not guaranteed useful and not human-tunable</mark>; so they use <b>expert priors from the locomotion literature</b> (gait timing, posture, footswing). This discounts the generality claim of MoB—see CRITIQUE.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">容易看漏的設計</span><span data-lang="en">Easily missed design</span></div>
+        <span data-lang="zh">訓練時 \(\boldsymbol\theta^{\text{cmd}}\) <b>只從四種對稱步態取樣</b>(pronk/trot/bound/pace),但部署時策略能執行連續內插(如 galloping)。<mark class="m-result" data-t="RESULT/EVIDENCE">內插能力是網路泛化出來的</mark>,不是取樣覆蓋出來的。</span>
+        <span data-lang="en">At training time \(\boldsymbol\theta^{\text{cmd}}\) is <b>sampled only from the four symmetric gaits</b> (pronk/trot/bound/pace), yet at deployment the policy executes continuous interpolations (e.g. galloping). <mark class="m-result" data-t="RESULT/EVIDENCE">Interpolation emerges from network generalization</mark>, not sampling coverage.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">8 維是上限嗎</span><span data-lang="en">is 8-D the ceiling</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">兩拍步態限制</span><span data-lang="en">two-beat limit</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">真機步態切換:sim-to-real 成立</span><span data-lang="en">Gait switching on hardware: sim-to-real holds</span></h3>
+        <figure class="fig"><img src="figs/Margolis2022/fig2_gaits.png" alt="Figure 2: gait transitions with contact states">
+          <figcaption data-lang="zh"><b>Fig.2(論文)</b> 同一條策略在真機上連續切換 trot → pronk → pace → bound,步頻在 2 Hz / 4 Hz 間交替。下方色帶=足底感測到的實際接觸;黑色底紋=指令時鐘 \(\mathbf t_t\)。<b>要看的重點:色帶與底紋對齊</b>——所有步態參數在 sim-to-real 後仍被一致追蹤。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2 (paper)</b> One policy on hardware switching trot → pronk → pace → bound with frequency alternating 2 Hz / 4 Hz. Colored bars = measured foot contacts; black shading = the commanded clock \(\mathbf t_t\). <b>What to notice: bars align with shading</b>—every gait parameter stays consistently tracked after sim-to-real transfer.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">免重訓調「新指標」:能耗(模擬,J/s ↓)</span><span data-lang="en">Tuning a new metric without retraining: energy (sim, J/s ↓)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">步態</span><span data-lang="en">Gait</span></th><th>0.0 m/s</th><th>1.0 m/s</th><th>2.0 m/s</th><th>3.0 m/s</th></tr>
+          <tr><td class="win">Trotting</td><td class="win">9±1</td><td class="win">24±1</td><td class="win">53±5</td><td class="win">98±9</td></tr>
+          <tr><td>Pronking</td><td>32±1</td><td>43±2</td><td>68±5</td><td>112±5</td></tr>
+          <tr><td>Pacing</td><td>13±3</td><td>25±2</td><td>55±3</td><td>99±6</td></tr>
+          <tr><td>Bounding</td><td>22±2</td><td>39±4</td><td>78±5</td><td>127±35</td></tr>
+          <tr><td><b>Gait-free baseline</b></td><td>17±5</td><td>35±5</td><td>64±10</td><td>102±14</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">機械功率 \(\sum_i\max(\tau_i\dot q_i,0)\)。能耗<b>從未出現在訓練目標裡</b>,但 trotting 與 pacing <mark class="m-result" data-t="RESULT/EVIDENCE">在所有速度下都比 gait-free 省電</mark>(3 m/s 時 98 vs 102 J/s;0 m/s 時 9 vs 17)。額外收穫:MoB 讓你能在<b>同一條策略內</b>做「步態 × 指標」的介入性研究。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Mechanical power \(\sum_i\max(\tau_i\dot q_i,0)\). Energy <b>never appeared in the training objective</b>, yet trotting and pacing <mark class="m-result" data-t="RESULT/EVIDENCE">beat gait-free at every speed</mark> (98 vs 102 J/s at 3 m/s; 9 vs 17 at standstill). Bonus: MoB enables interventional gait-vs-metric studies <b>within a single policy</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Zero-shot 上未見地形:16 cm 平台(模擬)</span><span data-lang="en">Zero-shot onto unseen terrain: 16 cm platforms (sim)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">步態</span><span data-lang="en">Gait</span></th><th>\(r_{v^{\text{cmd}}_{x,y}}\) ↑</th><th>\(r_{\omega^{\text{cmd}}_z}\) ↑</th><th><span data-lang="zh">存活時間 ↑</span><span data-lang="en">Survival ↑</span></th></tr>
+          <tr><td>Trotting</td><td>0.80 <small>(0.95)</small></td><td class="win">0.76 <small>(0.89)</small></td><td class="win">0.88 <small>(1.00)</small></td></tr>
+          <tr><td>Pronking</td><td class="win">0.84 <small>(0.94)</small></td><td>0.77 <small>(0.85)</small></td><td>0.82 <small>(1.00)</small></td></tr>
+          <tr><td>Pacing</td><td>0.76 <small>(0.91)</small></td><td>0.76 <small>(0.81)</small></td><td class="win">0.87 <small>(1.00)</small></td></tr>
+          <tr><td>Bounding</td><td>0.80 <small>(0.88)</small></td><td>0.73 <small>(0.86)</small></td><td>0.82 <small>(1.00)</small></td></tr>
+          <tr><td><b>Gait-free baseline</b></td><td>0.81 <small>(0.96)</small></td><td>0.74 <small>(0.92)</small></td><td>0.83 <small>(1.00)</small></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">括號=平地(訓練環境)成績。trotting / pacing 的存活時間<mark class="m-result" data-t="RESULT/EVIDENCE">超過 gait-free(0.88 / 0.87 vs 0.83)</mark>,pronking 速度追蹤最好——<b>沒有全能贏家,但族裡總有人贏</b>,這正是 MoB 的論點。抬高踏步同理:24 cm footswing 的 trot 在平台上存活明顯高於 gait-free(下圖左)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Parentheses = flat (training) scores. Trotting / pacing <mark class="m-result" data-t="RESULT/EVIDENCE">outlast gait-free (0.88 / 0.87 vs 0.83)</mark>; pronking tracks velocity best—<b>no single winner, but the family always contains one</b>, which is exactly the MoB thesis. Same story for footswing: a 24 cm-swing trot survives platforms far better than gait-free (figure below, left).</p>
+        <figure class="fig"><img src="figs/Margolis2022/fig9_10_generalization.png" alt="Figures 9 and 10: footswing vs robustness, frequency vs speed">
+          <figcaption data-lang="zh"><b>Fig.9 + Fig.10(論文)</b> 左:平台地形上,抬腳越高存活越久,24 cm(黃)全程壓過 gait-free(綠)。右:平地追速,2 Hz trot(紅)在高速崩掉,4 Hz 才撐得住 3 m/s;gait-free(黃)在最低與最高速略優。<b>兩張合讀:每個行為參數都有「對的場景」,也都有代價。</b></figcaption>
+          <figcaption data-lang="en"><b>Fig.9 + Fig.10 (paper)</b> Left: on platform terrain, higher footswing survives longer—24 cm (gold) dominates gait-free (green) throughout. Right: flat-ground speed tracking—a 2 Hz trot (red) collapses at speed, 4 Hz is needed for 3 m/s; gait-free (gold) is slightly better at the lowest and highest speeds. <b>Read together: every behavior parameter has its right scene, and its price.</b></figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">真實世界示範:一條平地策略的 OOD 清單</span><span data-lang="en">Real-world demos: the OOD checklist of one flat-ground policy</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">場景</span><span data-lang="en">Scenario</span></th><th><span data-lang="zh">調哪個旋鈕</span><span data-lang="en">Knob turned</span></th><th><span data-lang="zh">結果</span><span data-lang="en">Outcome</span></th></tr>
+          <tr><td><span data-lang="zh">樓梯 / 路緣</span><span data-lang="en">Stairs / curbs</span></td><td>\(h_z^{f,\text{cmd}}\) ↑<span data-lang="zh">(+低頻)</span><span data-lang="en"> (+ low freq)</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">平滑跨越、不絆腳</mark>——對比先前工作靠「絆到再抬」的反射。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Smooth traversal without tripping</mark>—unlike the trip-then-lift reflex of prior work.</span></td></tr>
+          <tr><td><span data-lang="zh">厚灌木</span><span data-lang="en">Thick bushes</span></td><td>\(f^{\text{cmd}}\) ↑, \(h_z^{f,\text{cmd}}\) ↑</td><td><span data-lang="zh">難模擬+難感知的場景,<mark class="m-result" data-t="RESULT/EVIDENCE">人在現場調參直接通過</mark>。</span><span data-lang="en">Unsimulatable + unsensable, yet <mark class="m-result" data-t="RESULT/EVIDENCE">passed by on-the-spot tuning</mark>.</span></td></tr>
+          <tr><td><span data-lang="zh">22 cm 橫杆下</span><span data-lang="en">Under a 22 cm bar</span></td><td>\(h_z^{\text{cmd}}\) ↓</td><td><span data-lang="zh">機身厚 13 cm,<mark class="m-result" data-t="RESULT/EVIDENCE">留 9 cm 淨空爬過</mark>;gait-free 收斂在固定高度、辦不到。</span><span data-lang="en">Body is 13 cm thick; <mark class="m-result" data-t="RESULT/EVIDENCE">crawled through with 9 cm clearance</mark>; gait-free converges to one fixed height and cannot.</span></td></tr>
+          <tr><td><span data-lang="zh">預期推撞</span><span data-lang="en">Anticipated shoves</span></td><td>\(s_y^{\text{cmd}}\) ↑</td><td><span data-lang="zh">駕駛預判踢擊時加寬站距,<mark class="m-result" data-t="RESULT/EVIDENCE">站穩不倒</mark>;平時窄站距保效率。</span><span data-lang="en">Widen the stance when a kick is anticipated and <mark class="m-result" data-t="RESULT/EVIDENCE">stay upright</mark>; keep it narrow otherwise for efficiency.</span></td></tr>
+          <tr><td><span data-lang="zh">載物傾倒</span><span data-lang="en">Payload dumping</span></td><td>\(\phi^{\text{cmd}}\)</td><td><span data-lang="zh">走到定點後改俯仰把球倒出——<mark class="m-result" data-t="RESULT/EVIDENCE">姿態控制被重用為操作能力</mark>。</span><span data-lang="en">Pitch the body at the goal to dump a ball—<mark class="m-result" data-t="RESULT/EVIDENCE">posture control repurposed as manipulation</mark>.</span></td></tr>
+          <tr><td><span data-lang="zh">高速跨溝</span><span data-lang="en">High-speed gap leap</span></td><td><span data-lang="zh">序列:trot 2→4 Hz 加速至 3 m/s → pronk 2 Hz 一秒 → trot 減速</span><span data-lang="en">Sequence: trot 2→4 Hz to 3 m/s → pronk 2 Hz for 1 s → trot decel</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">單跳前後腳距 60 cm</mark>(超過體長),高速下切換行為仍穩定。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">A 60 cm front-to-hind leap</mark> (beyond body length); behavior switches stay stable at speed.</span></td></tr>
+          <tr><td><span data-lang="zh">編舞</span><span data-lang="en">Choreography</span></td><td><span data-lang="zh">腳本序列 \(\boldsymbol\theta,f,h_z,\mathbf c\)</span><span data-lang="en">Scripted \(\boldsymbol\theta,f,h_z,\mathbf c\)</span></td><td><span data-lang="zh">90 bpm 爵士樂;1.5 / 3 Hz 配相位 0/0.25/0.5 對出八分到全音符的步點,<mark class="m-result" data-t="RESULT/EVIDENCE">開環照拍執行</mark>。</span><span data-lang="en">90 bpm jazz; 1.5 / 3 Hz with phases 0/0.25/0.5 yield eighth-to-whole-note footfalls, <mark class="m-result" data-t="RESULT/EVIDENCE">executed open-loop on the beat</mark>.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">MoB 的帳單:in-distribution 代價(平地,模擬)</span><span data-lang="en">The MoB bill: in-distribution cost (flat ground, sim)</span></h3>
+        <table>
+          <tr><th></th><th>\(r_{v^{\text{cmd}}_{x,y}}\) ↑</th><th>\(r_{\omega^{\text{cmd}}_z}\) ↑</th></tr>
+          <tr><td>Trotting(MoB)</td><td>0.92±0.01</td><td>0.70±0.04</td></tr>
+          <tr><td class="win">Gait-free baseline</td><td class="win">0.94±0.02</td><td class="win">0.76±0.01</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">拿掉步態約束後平地任務更強;熱圖顯示差距集中在<mark class="m-limit" data-t="LIMITATION/FUTURE">高線速 × 高角速的組合</mark>(衝刺極限受損)。作者的一句話總結很誠實:<b>策略犧牲訓練任務的部分性能,換取幫助新任務的多樣性;低速範圍內幾乎無損</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Dropping gait constraints improves the flat-ground task; heatmaps localize the gap to <mark class="m-limit" data-t="LIMITATION/FUTURE">high linear × high angular velocity combos</mark> (sprint envelope suffers). The honest one-liner from the authors: <b>the policy forgoes some training-task performance to buy diversity for new tasks; the low-speed range is nearly unharmed</b>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">實驗證明了什麼 / 沒證明什麼</span><span data-lang="en">What the experiments do and do not prove</span></span>
+          <p data-lang="zh" style="margin-top:6px"><b>證明了</b>:單一策略可靠地執行並切換整族步態(真機);族內不同成員在不同 OOD 場景/新指標上各自勝過單解 baseline。<b>沒證明</b>:MoB 勝過「自動適應」路線(無 RMA 類對比);真實世界的系統性成功率(真機部分是示範,量化 OOD 全在模擬);參數由人挑之外的自動選擇。</p>
+          <p data-lang="en" style="margin-top:6px"><b>Proven</b>: one policy reliably executes and switches a whole gait family (hardware); different members beat the single-solution baseline in different OOD scenes / new metrics. <b>Not proven</b>: that MoB beats the automatic-adaptation route (no RMA-style comparison); systematic real-world success rates (hardware results are demos; quantitative OOD is all in sim); any behavior selection beyond a human.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">量化上:MoB 在未見平台地形把存活從 0.83 拉到 0.88、在全速度域降低能耗;質性上:一條平地策略靠人調旋鈕完成樓梯、灌木、鑽杆、抗踢、跨溝、跳舞。<b>代價是平地衝刺性能 ~2% 的稅。</b></span>
+        <span data-lang="en">Quantitatively: MoB lifts survival on unseen platforms from 0.83 to 0.88 and cuts energy at every speed; qualitatively: one flat-ground policy, human-tuned, does stairs, bushes, bar-crawling, shove-bracing, gap-leaping and dance. <b>The tax: ~2% of flat-ground sprint performance.</b></span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">數字的邊界</span><span data-lang="en">Where the numbers live</span></div>
+        <span data-lang="zh">存活率、能耗、追蹤獎勵<b>全部來自模擬</b>;真機貢獻的是步態追蹤圖(Fig.2、Fig.7)與任務示範。論文沒有報告任何真機成功率或試驗次數——引用時別把 0.88 說成真機數字。</span>
+        <span data-lang="en">Survival, energy and tracking rewards are <b>all simulated</b>; hardware contributes gait-tracking plots (Fig.2, Fig.7) and task demos. No hardware success rates or trial counts are reported—do not cite 0.88 as a real-robot number.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">冷知識</span><span data-lang="en">Curiosities</span></span>
+        <span data-lang="zh">附錄兩則:平台地形上<b>倒著走比正著走穩</b>(幾乎所有失敗都發生在前進;可能與膝蓋朝向、配重有關);課程學習中 <b>pronk/trot 先被學會</b>,pace/bound 後來才被「發現」卻在部分下游任務勝出(Fig.4)。</span>
+        <span data-lang="en">Two appendix gems: on platforms the robot is <b>more robust walking backward</b> (nearly all failures occur moving forward; knee orientation and mass distribution are suspected); in the curriculum <b>pronk/trot are learned first</b> while pace/bound are discovered late yet win some downstream tasks (Fig.4).</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">baseline 公平性</span><span data-lang="en">baseline fairness</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">高速性能稅</span><span data-lang="en">the speed tax</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>泛化的主語其實是人。</b> 標題說 generalization,但每個 OOD 成功案例都有一位<mark class="m-assume" data-t="ASSUMPTION/CLAIM">知道該調哪個旋鈕的駕駛</mark>。論文沒有量化駕駛的專業程度、嘗試次數、失敗案例,也沒有「隨機/暴力搜索 \(\mathbf b_t\)」的對照——<b>系統的泛化能力與人的先驗被綁在一起評估</b>。</li>
+          <li data-lang="en"><b>The subject of "generalization" is really the human.</b> The title says generalization, but every OOD success involves <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a pilot who knows which knob to turn</mark>. Pilot expertise, number of attempts and failure cases are not quantified, and there is no random/exhaustive \(\mathbf b_t\)-search control—<b>the system and the human prior are evaluated as one</b>.</li>
+          <li data-lang="zh"><b>與「自動適應」路線的正面對比缺席。</b> 動機批評的是 RMA 式 sysID 的前提,結論卻沒有任何一個實驗把 MoB 与 RMA / 地形課程訓練的策略放在同一地形上比。<mark class="m-limit" data-t="LIMITATION/FUTURE">「平地+人調」是否勝過「地形隨機化+自動適應」仍是未回答的問題</mark>,而後者才是真正的機會成本。</li>
+          <li data-lang="en"><b>No head-to-head with the adaptation route.</b> The motivation critiques the premises of RMA-style sysID, yet no experiment pits MoB against RMA or a terrain-curriculum policy on the same terrain. <mark class="m-limit" data-t="LIMITATION/FUTURE">Whether "flat ground + human tuning" beats "terrain randomization + automatic adaptation" remains unanswered</mark>—and that is the true opportunity cost.</li>
+          <li data-lang="zh"><b>Gait-free baseline 在部分任務上是稻草人。</b> 它沒有姿態輸入,「不能鑽杆、不能倒球」是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">介面缺失的必然,不是學習品質的差距</mark>。這些比較證明「有旋鈕很有用」,不證明「MoB 訓練出的策略更強」。真正對等的量化比較只有平台地形與能耗兩處。</li>
+          <li data-lang="en"><b>The gait-free baseline is a strawman for some tasks.</b> Lacking posture inputs, "cannot crawl under bars or dump payloads" is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a necessity of the missing interface, not a learning-quality gap</mark>. Those comparisons prove knobs are useful, not that MoB-trained policies are stronger. The only apples-to-apples numbers are platform terrain and energy.</li>
+          <li data-lang="zh"><b>量化 OOD 證據窄而薄。</b> 系統性的 OOD 量測=<b>一種</b>模擬地形(≤16 cm 平台),survival 增益 0.83→0.88;其餘皆為示範。厚灌木、樓梯這些「賣點場景」<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有成功率、沒有重複試驗、沒有失敗統計</mark>。</li>
+          <li data-lang="en"><b>Quantitative OOD evidence is narrow and thin.</b> The systematic OOD measurement is <b>one</b> simulated terrain (≤16 cm platforms), survival 0.83→0.88; everything else is demos. The headline scenes—bushes, stairs—come with <mark class="m-limit" data-t="LIMITATION/FUTURE">no success rates, no repeated trials, no failure statistics</mark>.</li>
+          <li data-lang="zh"><b>行為空間是專家手工的,通用性宣稱要打折。</b> 作者自己承認無監督多樣性「不保證有用、不可調」而改用運動學先驗;所以「MoB 是 sim-to-real RL 的通用技術」目前只在<mark class="m-limit" data-t="LIMITATION/FUTURE">一個先驗極其成熟的領域(四足步態)</mark>得到驗證。換到操作(manipulation)這種缺乏「步態詞彙」的領域,\(\mathbf b\) 該是什麼並不顯然。</li>
+          <li data-lang="en"><b>The behavior space is hand-crafted; discount the generality claim.</b> The authors themselves reject unsupervised diversity as "not useful, not tunable" in favor of locomotion priors; so "MoB as a general sim-to-real technique" is validated only in <mark class="m-limit" data-t="LIMITATION/FUTURE">a domain with an exceptionally mature prior vocabulary (quadruped gaits)</mark>. What \(\mathbf b\) should be for, say, manipulation is far from obvious.</li>
+          <li data-lang="zh"><b>能耗結果的口徑。</b> 只算正向機械功率 \(\sum_i\max(\tau_i\dot q_i,0)\)、且在模擬中;不含電池側損耗與負功。同時 \(\boldsymbol\theta^{\text{cmd}}\) 只覆蓋兩拍步態,<mark class="m-limit" data-t="LIMITATION/FUTURE">四拍 walk、三拍 canter 等低速高效步態不可表達</mark>。</li>
+          <li data-lang="en"><b>The energy accounting.</b> Only positive mechanical power \(\sum_i\max(\tau_i\dot q_i,0)\), in sim; battery-side losses and negative work excluded. Also \(\boldsymbol\theta^{\text{cmd}}\) covers two-beat gaits only—<mark class="m-limit" data-t="LIMITATION/FUTURE">four-beat walk or three-beat canter are inexpressible</mark>.</li>
+          <li data-lang="zh"><b>與 model-based 步態控制的關係輕描淡寫。</b> MPC 控制器(MIT Cheetah 系)<b>本來就暴露步態參數</b>;本文的差異化是「學習式低層的魯棒性」,但沒有與 MPC 低層在相同任務上的對比實驗,只引用文獻討論帶過。</li>
+          <li data-lang="en"><b>The relation to model-based gait control is soft-pedaled.</b> MPC controllers (MIT Cheetah lineage) <b>already expose gait parameters</b>; the differentiation here is the robustness of a learned low level, yet there is no experiment against an MPC low level on the same tasks—only a citation to prior discussions.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>人的先驗值多少?</b> 把駕駛換成隨機取樣 \(\mathbf b_t\) 或粗網格搜索,多少 OOD 場景還能過?通過所需的嘗試次數分布是什麼?</li>
+          <li data-lang="en"><b>What is the pilot worth?</b> Replace the human with random \(\mathbf b_t\) sampling or a coarse grid search—how many OOD scenes still pass, and with what distribution of attempts?</li>
+          <li data-lang="zh"><b>機會成本:</b>同樣的訓練預算拿去做地形隨機化+RMA,在平台地形/樓梯上會不會直接贏過「平地 MoB+人調」?若會,MoB 的定位是否應收窄為「不可模擬場景專用」?</li>
+          <li data-lang="en"><b>Opportunity cost:</b> spend the same training budget on terrain randomization + RMA—does it simply beat "flat-ground MoB + human tuning" on platforms/stairs? If so, should MoB be repositioned as "for unsimulatable scenes only"?</li>
+          <li data-lang="zh"><b>行為維度的上限:</b>8 維是精心策劃的;加到 20、50 維(關節剛度、擺動軌跡形狀…)時,課程還學得動嗎?內插還可靠嗎?MoB 的可擴展性邊界在哪?</li>
+          <li data-lang="en"><b>The ceiling of behavior dimensions:</b> 8-D is curated; at 20 or 50 dims (joint stiffness, swing trajectory shape...), does the curriculum still learn, does interpolation stay reliable—where does MoB stop scaling?</li>
+          <li data-lang="zh"><b>兩拍之外:</b>把 \(\boldsymbol\theta^{\text{cmd}}\) 擴成可表達四拍 walk 的參數化(每腳獨立相位)會發生什麼?對稱步態取樣的「穩定性先驗」是必要的嗎?</li>
+          <li data-lang="en"><b>Beyond two beats:</b> what happens if \(\boldsymbol\theta^{\text{cmd}}\) is extended to express a four-beat walk (independent per-foot phases)? Is the symmetric-gait sampling prior actually necessary for stability?</li>
+          <li data-lang="zh"><b>性能稅可消除嗎?</b>高速×高角速的塌陷是 MoB 固有代價,還是獎勵設計問題(如 [29] 的約束式 intrinsic reward 優化可解)?當 \(\mathbf b\) 命令與任務物理上不相容時(4 Hz pronk + 急轉),策略該優先誰?</li>
+          <li data-lang="en"><b>Is the tax removable?</b> Is the high-speed × high-yaw collapse inherent to MoB or a reward-design artifact (fixable by constrained intrinsic-reward optimization as in [29])? When \(\mathbf b\) and the task are physically incompatible (4 Hz pronk + sharp turn), which should the policy obey?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把本文讀成「四足泛化已解,不用地形訓練了」。正確讀法:<b>MoB 是與自動適應正交的一根槓桿</b>——它假設<mark class="m-assume" data-t="ASSUMPTION/CLAIM">訓練分布內的某個行為恰好能解 OOD 場景</mark>,並且需要有人(或高層策略)找到它。地形課程、sysID、MoB 三者可以疊加,論文只示範了第三根槓桿單獨的力量。</span>
+        <span data-lang="en">Reading this as "quadruped generalization is solved, skip terrain training." The right reading: <b>MoB is a lever orthogonal to automatic adaptation</b>—it assumes <mark class="m-assume" data-t="ASSUMPTION/CLAIM">some in-distribution behavior happens to solve the OOD scene</mark>, and someone (human or high-level policy) must find it. Terrain curricula, sysID and MoB stack; the paper demonstrates only the third lever in isolation.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">Limitations 一節誠實:直接量化並展示了 in-distribution 性能損失(Table 5 + 熱圖),明說「需要人類駕駛」並指出兩條自動化路(模仿人類示範、階層式自調)。<b>實驗設計上「只訓平地」的自我設限</b>讓因果聲明乾淨,是很好的科學品味。</span>
+        <span data-lang="en">The Limitations section is honest: the in-distribution cost is quantified and shown (Table 5 + heatmaps), the human-pilot dependency is stated, and two automation paths are named (imitation of human demos, hierarchical self-tuning). <b>The self-imposed flat-ground-only design</b> keeps the causal claim clean—good scientific taste.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">導讀者評分</span><span data-lang="en">Guide verdict</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 概念貢獻(輔助獎勵=可調泛化偏置)清晰雋永;實證強度中等(量化 OOD 窄)。它的長尾影響力更多來自<b>開源工程品質</b>——這是「論文影響力 ≠ 實驗完備性」的好例子。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> The conceptual contribution (auxiliary rewards = tunable generalization biases) is crisp and durable; the empirical strength is moderate (narrow quantitative OOD). Its long-tail impact owes more to <b>open-source engineering quality</b>—a fine example of paper impact outrunning experimental completeness.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「會被重調的超參,就該變成輸入」</b>是可移植的設計模式:任何你預期部署後要調的獎勵權重/目標(速度風格、安全裕度、能耗偏好),都可以參數化進 conditioning,讓調參發生在推論期而非訓練期。</li>
+          <li data-lang="en"><b>"Any hyper-parameter you expect to re-tune should become an input"</b> is a portable design pattern: reward weights/targets you expect to adjust after deployment (style, safety margin, energy preference) can be parameterized into the conditioning, moving tuning from training time to inference time.</li>
+          <li data-lang="zh"><b>把 OOD 泛化拆成「解族 × 選擇器」</b>:MoB 負責解族,選擇器可以是人、搜索、或學出來的高層。做 hierarchical RL / teleoperation / 資料收集的人,可直接把這個低層當現成地基(這正是它被後續工作大量採用的方式)。</li>
+          <li data-lang="en"><b>Decompose OOD generalization into "solution family × selector"</b>: MoB supplies the family; the selector can be a human, a search, or a learned high level. If you work on hierarchical RL / teleoperation / data collection, this low level is a ready-made foundation (exactly how follow-up work adopted it).</li>
+          <li data-lang="zh"><b>Sim-to-real 配方本身可抄</b>:正值乘積獎勵 \(r_{\text{task}}e^{c_{\text{aux}}r_{\text{aux}}}\)、CDF 平滑接觸目標、Raibert heuristic 避免風格獎勵打架、actuator net + 20 ms 延遲建模、監督式估測器。這五件套與 MoB 無關也照樣好用。</li>
+          <li data-lang="en"><b>The sim-to-real recipe is copy-worthy on its own</b>: the positive-product reward \(r_{\text{task}}e^{c_{\text{aux}}r_{\text{aux}}}\), CDF-smoothed contact targets, the Raibert heuristic to stop style rewards fighting the task, actuator net + 20 ms latency modeling, and the supervised estimator. All five work fine without MoB.</li>
+          <li data-lang="zh"><b>評估警惕</b>:引用它的數字時記住量化 OOD 全在模擬、真機是示範;主張「MoB 勝過適應法」目前<b>沒有</b>證據支持,別替它多說。</li>
+          <li data-lang="en"><b>Evaluation caution</b>: when citing, remember quantitative OOD lives in sim and hardware is demonstrative; the claim "MoB beats adaptation methods" is currently <b>unsupported</b>—do not over-claim on its behalf.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What to cite this paper for</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「輔助獎勵是泛化偏置;固定它=固定失敗模式」</span><span data-lang="en">"Auxiliary rewards are generalization biases; fixing them fixes the failure mode"</span></td><td><span data-lang="zh">Background 一節的論述 + Fig.1 的三場景反例。</span><span data-lang="en">The Background argument + the three-scene counterexample of Fig.1.</span></td></tr>
+          <tr><td><span data-lang="zh">「任務 under-specification 可轉化為可控多樣性」</span><span data-lang="en">"Task under-specification can be turned into controllable diversity"</span></td><td><span data-lang="zh">MoB 概念與 8 維行為參數化(\(\boldsymbol\theta^{\text{cmd}}\) 覆蓋全部兩拍步態)。</span><span data-lang="en">The MoB concept and the 8-D behavior parameterization (\(\boldsymbol\theta^{\text{cmd}}\) spanning all two-beat gaits).</span></td></tr>
+          <tr><td><span data-lang="zh">「步態選擇影響 OOD 魯棒性/能耗」</span><span data-lang="en">"Gait choice affects OOD robustness / energy"</span></td><td><span data-lang="zh">平台地形 survival 0.88 vs 0.83、全速度域能耗表、footswing/frequency 掃描(Fig.9/10)。</span><span data-lang="en">Platform survival 0.88 vs 0.83, the all-speed energy table, footswing/frequency sweeps (Fig.9/10).</span></td></tr>
+          <tr><td><span data-lang="zh">「使用 Go1 開源步態可控低層控制器」</span><span data-lang="en">"Using an open-source gait-conditioned low-level controller on Go1"</span></td><td><span data-lang="zh">Walk These Ways 程式碼與遙控介面(附錄 B)。</span><span data-lang="en">The Walk These Ways code and teleop interface (Appendix B).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">與其教機器人「一種最好的走法」,不如教它「一族走法」外加一面可解釋的旋鈕面板:OOD 泛化於是可以由<b>選擇行為</b>(人,或未來的高層策略)完成,而不必依賴環境估計與重訓。概念上,它把輔助獎勵重新定義為可在部署期調整的泛化偏置;工程上,它留下了 Go1 世代最好用的開源低層控制器之一。<span class="add">[導讀補充]</span></p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">Rather than teaching a robot the one best way to walk, teach it a family of ways plus an interpretable knob panel: OOD generalization can then be done by <b>selecting behavior</b> (a human, or a future high-level policy) instead of estimating the environment and retraining. Conceptually it recasts auxiliary rewards as deployment-time-tunable generalization biases; in engineering terms it left behind one of the most useful open-source low-level controllers of the Go1 era. <span class="add">[guide note]</span></p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">RMA (Kumar 2021)</span>
+          <span class="chip">Rapid Locomotion (Margolis 2022)</span>
+          <span class="chip">Siekmann 2021 periodic rewards</span>
+          <span class="chip">Rudin 2021 Isaac Gym</span>
+          <span class="chip">Ji 2022 estimator</span>
+          <span class="chip">DIAYN / MAP-Elites</span>
+          <span class="chip">DreamWaQ 2023</span>
+        </div>
+        <p data-lang="zh" style="font-size:12.5px;color:var(--muted);margin:8px 0 0"><span class="add">[導讀補充]</span> 讀序建議:RMA(自動適應範式)→ 本文(行為多樣性範式)→ DreamWaQ(隱式估計續作),即可看清 2021–2023 四足 RL 的兩條路線之爭。</p>
+        <p data-lang="en" style="font-size:12.5px;color:var(--muted);margin:8px 0 0"><span class="add">[guide note]</span> Suggested order: RMA (automatic adaptation) → this paper (behavior diversity) → DreamWaQ (implicit estimation), to see the two competing routes of 2021–2023 quadruped RL.</p>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Margolis &amp; Agrawal 2022 (Walk These Ways) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Walk These Ways reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

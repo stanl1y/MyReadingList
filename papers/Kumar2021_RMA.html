@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>RMA — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"RMA: Rapid Motor Adaptation for Legged Robots","authors":"Ashish Kumar, Zipeng Fu, Deepak Pathak, Jitendra Malik","year":"2021","venue":"RSS","tags":["Legged Robotics","Sim-to-Real","Reinforcement Learning","Adaptation","Quadruped"],"tldr":"兩階段訓練:先以特權環境參數學 base policy,再學一個從 0.5 秒本體感覺歷史回歸環境潛向量 z 的 adaptation module;純模擬訓練、零微調部署到 A1,在沙地、泥地、油面、樓梯等真實地形上不到一秒即時適應,室內外成功率大幅領先。","tldr_en":"Two-phase recipe: a base policy conditioned on privileged extrinsics, plus an adaptation module that regresses the latent from 0.5s of proprioceptive history — trained fully in simulation, deployed zero-shot on the A1 quadruped, adapting within a second on sand, mud, oil and stairs."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:110px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">RMA(Rapid Motor Adaptation)讓四足機器人在<b>不到一秒內</b>適應沒見過的地形、負重與磨損。做法是兩個模組:<mark class="m-method" data-t="METHOD/IDEA">base policy</mark> 在模擬中以特權環境參數(摩擦、質量、地形高度…)壓縮成的<mark class="m-method" data-t="METHOD/IDEA">extrinsics 潛向量 \(z_t\)</mark> 為條件學會行走;<mark class="m-method" data-t="METHOD/IDEA">adaptation module</mark> 再學會只從 0.5 秒的本體感覺歷史「推回」\(z_t\)。<mark class="m-result" data-t="RESULT/EVIDENCE">全程模擬訓練、零微調部署到便宜的 Unitree A1</mark>,在沙地、泥地、草叢、油面、樓梯上即時適應。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">RMA (Rapid Motor Adaptation) lets a quadruped adapt to unseen terrain, payloads and wear <b>in under a second</b>. Two modules: a <mark class="m-method" data-t="METHOD/IDEA">base policy</mark> learns to walk in simulation conditioned on an <mark class="m-method" data-t="METHOD/IDEA">extrinsics latent \(z_t\)</mark> encoding privileged environment factors (friction, mass, terrain height…); an <mark class="m-method" data-t="METHOD/IDEA">adaptation module</mark> then learns to infer \(z_t\) from just 0.5s of proprioceptive history. <mark class="m-result" data-t="RESULT/EVIDENCE">Trained fully in simulation, deployed zero-shot on the low-cost Unitree A1</mark>, adapting on the fly on sand, mud, grass, oil and stairs.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Kumar2021/fig1_terrains.png" alt="Figure 1 real-world terrains">
+        <figcaption data-lang="zh"><b>Fig.1</b> 同一個策略、零校正零微調,走過岩灘、落葉小徑、草叢、沙地、水泥堆、土堆與碎石。沙、泥、草叢、土堆全程<b>零失敗</b>;下坡樓梯 70%、水泥堆與卵石堆 80% 成功——而訓練時從未見過下陷地面、纏腳植被或樓梯。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> One policy, zero calibration or fine-tuning, walking over rocky shores, leafy trails, grass, sand, cement piles, dirt and rubble. <b>No failures</b> on sand, mud, grass and dirt piles; 70% on trail stairs, 80% on cement/pebble piles — despite never seeing sinking ground, obstructive vegetation or stairs in training.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 模擬訓練的行走策略到真實世界會撞上 <mark class="m-problem" data-t="PROBLEM/GAP">sim-to-real gap</mark>;既有解法要嘛保守(domain randomization)、要嘛需要<mark class="m-problem" data-t="PROBLEM/GAP">在真實世界收數分鐘資料來適應</mark>——沒學會走路前收資料,機器人會摔壞。</li>
+          <li data-lang="en"><b>Problem</b> — Sim-trained walking policies hit the <mark class="m-problem" data-t="PROBLEM/GAP">sim-to-real gap</mark>; existing fixes are either conservative (domain randomization) or need <mark class="m-problem" data-t="PROBLEM/GAP">minutes of real-world data to adapt</mark> — collecting data before the robot can walk means falls and damage.</li>
+          <li data-lang="zh"><b>方法</b> — 兩階段:<mark class="m-method" data-t="METHOD/IDEA">Phase 1 用特權資訊 \(e_t\) 的低維編碼 \(z_t\) 訓練 base policy(RL);Phase 2 用監督學習訓練 adaptation module,從 50 步狀態-動作歷史回歸 \(\hat z_t\)</mark>。部署時兩者非同步跑(10 Hz / 100 Hz)。</li>
+          <li data-lang="en"><b>Method</b> — Two phases: <mark class="m-method" data-t="METHOD/IDEA">Phase 1 trains the base policy by RL on a low-dim encoding \(z_t\) of privileged info \(e_t\); Phase 2 trains an adaptation module by supervised learning to regress \(\hat z_t\) from 50 steps of state-action history</mark>. At deployment the two run asynchronously (10 Hz / 100 Hz).</li>
+          <li data-lang="zh"><b>結果</b> — 模擬測試成功率 <mark class="m-result" data-t="RESULT/EVIDENCE">73.5%,幾乎追平拿真值 \(z_t\) 的 Expert(76.2%)</mark>,大勝 domain randomization(62.4%)與顯式系統辨識(56.5%);真實世界揹到 <mark class="m-result" data-t="RESULT/EVIDENCE">12 kg(= 100% 自重)</mark>、油面 90% 成功。</li>
+          <li data-lang="en"><b>Results</b> — <mark class="m-result" data-t="RESULT/EVIDENCE">73.5% simulation success, nearly matching the Expert that sees true \(z_t\) (76.2%)</mark>, far above domain randomization (62.4%) and explicit system ID (56.5%); in the real world it carries <mark class="m-result" data-t="RESULT/EVIDENCE">12 kg (100% of body weight)</mark> and crosses an oily patch at 90% success.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">四足行走四十年來的主流是<mark class="m-method" data-t="METHOD/IDEA">模型式控制</mark>(MIT Cheetah 3 的 MPC、ANYmal 的最佳化控制器),但需要精確動力學模型、深厚專家知識與人工調步態。深度 RL 想取代這些人力,在模擬中已見成效,<mark class="m-problem" data-t="PROBLEM/GAP">難的是搬到真實世界</mark>。</p>
+        <p data-lang="en">For forty years legged locomotion was dominated by <mark class="m-method" data-t="METHOD/IDEA">model-based control</mark> (MPC on MIT Cheetah 3, optimized controllers on ANYmal), which demands accurate dynamics models, deep expertise and hand-tuned gaits. Deep RL aims to replace that labor and works in simulation — <mark class="m-problem" data-t="PROBLEM/GAP">the hard part is the real world</mark>.</p>
+        <p data-lang="zh">跨越 sim-to-real 的三條既有路線:(1) <mark class="m-problem" data-t="PROBLEM/GAP">domain randomization</mark>——用參數雜訊換穩健,代價是策略過度保守;(2) <mark class="m-problem" data-t="PROBLEM/GAP">把模擬校準得更準</mark>(Tan et al. 擬合馬達模型、Hwangbo et al. 用神經網路 actuator model)——每台新機器都要重收資料;(3) <mark class="m-problem" data-t="PROBLEM/GAP">線上系統辨識/測試時適應</mark>(顯式估參數、潛向量最佳化、meta-learning)——部署後仍需多條真實 rollouts。RMA 屬於第三條路,但把「適應」壓進了<b>一次前饋推論</b>。</p>
+        <p data-lang="en">Three existing routes across sim-to-real: (1) <mark class="m-problem" data-t="PROBLEM/GAP">domain randomization</mark> — robustness bought with parameter noise, at the cost of over-conservative policies; (2) <mark class="m-problem" data-t="PROBLEM/GAP">calibrating the simulator</mark> (Tan et al. fit motor models; Hwangbo et al. learn a neural actuator model) — new data collection for every new robot; (3) <mark class="m-problem" data-t="PROBLEM/GAP">online system ID / test-time adaptation</mark> (explicit parameter estimation, latent optimization, meta-learning) — still needs multiple real rollouts after deployment. RMA is on route 3, but compresses "adaptation" into <b>a single feed-forward inference</b>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">最可比的前作是 Lee et al. 2020(Science Robotics):同樣是「特權老師→學生」在崎嶇地形上的盲走,但依賴<b>手工步態產生器(TG)與真實馬達資料校準</b>。RMA 的宣言是:這些領域知識都不需要——<mark class="m-method" data-t="METHOD/IDEA">生物能量學獎勵 + 崎嶇地形 + 潛向量回歸</mark>就夠。它與 Peng et al. 2020(模仿動物、真實世界微調)形成了「免示範、免微調」的正面對照。</p>
+          <p data-lang="en" style="margin-top:6px">The closest prior work is Lee et al. 2020 (Science Robotics): also privileged teacher→student blind walking on rough terrain, but relying on a <b>hand-coded trajectory generator and real motor-data calibration</b>. RMA declares none of that domain knowledge necessary — <mark class="m-method" data-t="METHOD/IDEA">bioenergetics rewards + fractal terrain + latent regression</mark> suffice. Against Peng et al. 2020 (animal imitation + real-world fine-tuning) it stands as the "no demos, no fine-tuning" counterpoint.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇的價值不只是「A1 會走沙地」,而是底下幾個觀念,後來成了整個領域的標準配方:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">The value is not "A1 walks on sand" but these ideas, which later became the standard recipe of the field:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">估潛向量,不估物理參數。</b>不去重建摩擦係數、質量這些<mark class="m-assume" data-t="ASSUMPTION/CLAIM">難以辨識、且彼此共變的物理量</mark>,只回歸一個 8 維的 \(z_t\)——它只需編碼「行為該怎麼改」,<b>對不對不重要,有用就好</b>(端到端訓練保證這點)。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Estimate the latent, not the physics.</b> Skip reconstructing friction or mass — <mark class="m-assume" data-t="ASSUMPTION/CLAIM">hard-to-identify, covarying quantities</mark> — and regress an 8-dim \(z_t\) that only encodes "how behavior should change." <b>It need not be correct, only useful</b> (end-to-end training guarantees that).</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">系統辨識可以「攤銷」成前饋網路。</b>指令動作與實際動作的差,洩漏了環境資訊(類比 Kalman filter 從觀測史估狀態)。φ 學的就是「最佳化問題 → 解」的映射,所以<mark class="m-result" data-t="RESULT/EVIDENCE">適應只要 &lt;1 秒,而 Peng et al. 需要 4–8 分鐘真實資料</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">System ID can be amortized into a feed-forward net.</b> The gap between commanded and actual motion leaks environment information (analogous to a Kalman filter estimating state from observation history). φ learns the map "optimization problem → solution," so <mark class="m-result" data-t="RESULT/EVIDENCE">adaptation takes &lt;1s, versus 4–8 minutes of real data for Peng et al.</mark></li>
+          <li data-lang="zh"><b style="color:var(--c-method)">兩個時間尺度、非同步執行。</b>環境(extrinsics)變得慢、機器人狀態變得快——φ 跑 10 Hz、π 跑 100 Hz、無需對時。這個解耦讓策略能塞進 <b>A1 的板載算力</b>,是「便宜機器人也能學走路」的工程關鍵。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Two timescales, asynchronous execution.</b> Extrinsics change slowly, robot state changes fast — φ runs at 10 Hz, π at 100 Hz, no clock alignment. The decoupling fits within the <b>on-board compute of the A1</b>: the engineering key to "cheap robots can learn to walk."</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">自然約束取代人工先驗。</b>不用參考軌跡、不用步態產生器、不加人工模擬雜訊:<mark class="m-method" data-t="METHOD/IDEA">最小化做功與地面衝擊的生物能量學獎勵</mark> + 崎嶇地形,就長出可轉移的自然步態。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Natural constraints replace hand priors.</b> No reference trajectories, no trajectory generator, no artificial sim noise: <mark class="m-method" data-t="METHOD/IDEA">bioenergetics rewards minimizing work and ground impact</mark> + uneven terrain grow a transferable, natural gait.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">配方的歷史地位。</b><span class="add">[導讀補充]</span> 「特權老師 + 歷史回歸學生」自此成為四足 sim-to-real 的預設骨架:Walk These Ways、DreamWaQ、視覺 parkour 系列都是它的直系後代;本庫的 FACTR(力回饋遙操作)亦出自同一個 Pathak 實驗室。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Historical position of the recipe.</b> <span class="add">[guide note]</span> "Privileged teacher + history-regressing student" became the default skeleton of quadruped sim-to-real: Walk These Ways, DreamWaQ and the vision-parkour line are its direct descendants; FACTR (force-feedback teleoperation) in this library comes from the same Pathak lab.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">RMA: Rapid Motor Adaptation for Legged Robots</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Ashish Kumar, Zipeng Fu, Deepak Pathak, Jitendra Malik</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>UC Berkeley · CMU · Facebook</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2021 · RSS(arXiv:2107.04034)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>Legged Robotics · Sim-to-Real RL</span>
+          <b><span data-lang="zh">網站</span><span data-lang="en">Site</span></b><span>ashish-kmr.github.io/rma-legged-robots</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「適應環境」從<b>需要真實世界資料的最佳化問題</b>改寫成<b>一次前饋推論</b>:純模擬訓練、直接部署、秒級適應。它證明了低成本、無視覺的機器人也能在野外可靠行走,並定下了此後四足學習的標準訓練配方。</span>
+        <span data-lang="en">Rewrites "adapting to the environment" from <b>an optimization needing real-world data</b> into <b>one feed-forward inference</b>: train in sim, deploy directly, adapt within a second. It proved a cheap, blind robot can walk reliably in the wild — and set the standard training recipe for legged learning since.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Extrinsics latent</span><span class="chip">Privileged learning</span>
+          <span class="chip">Teacher–Student</span><span class="chip">PPO</span>
+          <span class="chip">1-D CNN</span><span class="chip">Unitree A1</span>
+          <span class="chip">RaiSim</span><span class="chip">Zero-shot sim-to-real</span>
+        </div>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">名詞先澄清</span><span data-lang="en">Term to clarify first</span></div>
+        <span data-lang="zh">這裡的「adaptation」<b>不是</b>線上學習:部署時<mark class="m-assume" data-t="ASSUMPTION/CLAIM">沒有任何梯度更新</mark>,只是 φ 對潛向量的即時「推論」。所有學習都發生在模擬裡。</span>
+        <span data-lang="en">"Adaptation" here is <b>not</b> online learning: at deployment there are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">no gradient updates</mark> — just real-time inference of the latent by φ. All learning happens in simulation.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <p data-lang="zh">真實部署需要的是<b>即時(幾分之一秒)線上適應</b>:換地面、揹重物、馬達老化,都要邊走邊調。sim-to-real gap 有三個來源:<mark class="m-problem" data-t="PROBLEM/GAP">(a) 實體機器人與模擬模型不符;(b) 真實地形遠比模擬多樣;(c) 接觸力與可變形表面的物理,模擬器根本算不準</mark>。</p>
+        <p data-lang="en">Real deployment demands <b>online adaptation within fractions of a second</b>: new ground, added payload, aging motors — all corrected while walking. The sim-to-real gap has three sources: <mark class="m-problem" data-t="PROBLEM/GAP">(a) the physical robot differs from its sim model; (b) real terrains vary far beyond sim; (c) simulators cannot accurately capture contact forces and deformable surfaces</mark>.</p>
+        <p data-lang="zh">更殘酷的約束:若策略還不會走就丟到岩地收「適應資料」,機器人會頻繁摔倒受損——<mark class="m-problem" data-t="PROBLEM/GAP">連收 3–5 分鐘的真實行走資料都不可行</mark>。所以<b>連「適應能力」本身也必須在模擬中學會</b>。</p>
+        <p data-lang="en">The crueler constraint: dropping a not-yet-walking policy onto rocks to collect "adaptation data" means frequent damaging falls — <mark class="m-problem" data-t="PROBLEM/GAP">even 3–5 minutes of real walking data is impractical</mark>. So <b>the ability to adapt must itself be learned in simulation</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,RMA 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how RMA fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">既有方法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">RMA 如何補上</span><span data-lang="en">How RMA fills it</span></th></tr>
+          <tr>
+            <td><b>Domain Randomization</b><br><small>Tobin 2017 · Peng 2018</small></td>
+            <td><span data-lang="zh">對環境參數「不知情」,<mark class="m-problem" data-t="PROBLEM/GAP">以最優性換穩健性</mark>,策略過度保守。</span><span data-lang="en">Agnostic to env params, <mark class="m-problem" data-t="PROBLEM/GAP">trades optimality for robustness</mark>; over-conservative.</span></td>
+            <td><span data-lang="zh">策略<mark class="m-method" data-t="METHOD/IDEA">以推得的 \(z_t\) 為條件</mark>,依環境調整行為而非一套走天下。</span><span data-lang="en">Policy is <mark class="m-method" data-t="METHOD/IDEA">conditioned on the inferred \(z_t\)</mark> — behavior tracks the environment instead of one-size-fits-all.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">顯式系統辨識</span><span data-lang="en">Explicit system ID</span></b><br><small>Yu 2017</small></td>
+            <td><span data-lang="zh">直接估 \(\hat e_t\)(摩擦、質量…):<mark class="m-problem" data-t="PROBLEM/GAP">難、常辨識不出、且沒必要</mark>。</span><span data-lang="en">Predicting \(\hat e_t\) (friction, mass…) directly is <mark class="m-problem" data-t="PROBLEM/GAP">hard, often unidentifiable, and unnecessary</mark>.</span></td>
+            <td><span data-lang="zh">只回歸<mark class="m-method" data-t="METHOD/IDEA">低維 extrinsics \(z_t\)</mark>——共變參數投影到同一點也無妨,行為對就好。</span><span data-lang="en">Regress only the <mark class="m-method" data-t="METHOD/IDEA">low-dim extrinsics \(z_t\)</mark> — covarying params may collapse together; only the action matters.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">測試時潛向量最佳化</span><span data-lang="en">Test-time latent optimization</span></b><br><small>Peng 2020 (AWR) · Yu 2019/2020</small></td>
+            <td><span data-lang="zh">要在<mark class="m-problem" data-t="PROBLEM/GAP">新環境收真實 rollouts(4–8 分鐘)</mark>再最佳化,期間可能摔壞。</span><span data-lang="en">Needs <mark class="m-problem" data-t="PROBLEM/GAP">real rollouts in each new environment (4–8 min)</mark> before optimizing — risking falls meanwhile.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">前饋推論 \(\hat z_t\)</mark>:0.5 秒歷史進、潛向量出,<mark class="m-result" data-t="RESULT/EVIDENCE">&lt;1 秒完成適應、零真實樣本</mark>。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Feed-forward inference of \(\hat z_t\)</mark>: 0.5s history in, latent out — <mark class="m-result" data-t="RESULT/EVIDENCE">&lt;1s adaptation, zero real samples</mark>.</span></td>
+          </tr>
+          <tr>
+            <td><b>Meta-learning</b><br><small>MAML · Song 2020 · Clavera 2019</small></td>
+            <td><span data-lang="zh">學快速適應的初始化,但<mark class="m-problem" data-t="PROBLEM/GAP">仍需多條真實 rollouts</mark>。</span><span data-lang="en">Learns an initialization for fast adaptation but <mark class="m-problem" data-t="PROBLEM/GAP">still needs multiple real rollouts</mark>.</span></td>
+            <td><span data-lang="zh">適應=推論而非更新;<mark class="m-method" data-t="METHOD/IDEA">部署後不再學習</mark>。</span><span data-lang="en">Adaptation = inference, not updates; <mark class="m-method" data-t="METHOD/IDEA">no learning after deployment</mark>.</span></td>
+          </tr>
+          <tr>
+            <td><b>Lee et al. 2020</b><br><small>Science Robotics</small></td>
+            <td><span data-lang="zh">同為特權學習+盲走強者,但<mark class="m-problem" data-t="PROBLEM/GAP">依賴手工步態產生器與真實馬達資料的 actuator model</mark>。</span><span data-lang="en">Also privileged learning + strong blind walking, but <mark class="m-problem" data-t="PROBLEM/GAP">relies on a hand-coded trajectory generator and a real-data actuator model</mark>.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">零領域知識</mark>:無參考軌跡、無 TG、無馬達校準,獎勵來自生物能量學。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Zero domain knowledge</mark>: no reference trajectories, no TG, no motor calibration; rewards from bioenergetics.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意問題被作者「重新定義」了:不是「如何縮小 sim-to-real gap」,而是「<b>如何在模擬裡把『跨越 gap 的能力』本身學起來</b>」。一旦這樣設框,domain randomization(沒有適應)與真實世界微調(適應太慢太危險)就都成了天然的靶子。</p>
+          <p data-lang="en" style="margin-top:6px">Note how the authors reframe the problem: not "how to shrink the sim-to-real gap" but "<b>how to learn, inside simulation, the very ability to cross it</b>." Once framed this way, domain randomization (no adaptation) and real-world fine-tuning (too slow, too risky) both become natural targets.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 RMA 歸類成「更好的 domain randomization」。DR 的策略<b>看不到</b>環境參數,只能學一組對所有環境都勉強可行的動作;RMA 的策略<b>時時刻刻知道</b>(推測的)環境長什麼樣,行為是條件式的。表 II 裡 Robust 62.4% vs RMA 73.5% 就是這個差距的量化。</span>
+        <span data-lang="en">Do not file RMA as "better domain randomization." A DR policy <b>cannot see</b> the environment parameters and learns one barely-feasible behavior for all; the RMA policy <b>always knows</b> (an estimate of) the environment and behaves conditionally. Robust 62.4% vs RMA 73.5% in Table II quantifies exactly this gap.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">適應時間從「分鐘級 + 需要真實試錯」壓到「<b>&lt;1 秒、零試錯</b>」,才可能讓便宜的四足在<b>非結構化野外</b>安全服役——這是把腿式機器人從實驗室推向現場的必要條件。</span>
+        <span data-lang="en">Cutting adaptation from "minutes plus real-world trial-and-error" to "<b>&lt;1s, zero trials</b>" is what makes cheap quadrupeds viable in <b>unstructured field conditions</b> — a necessary condition for legged robots to leave the lab.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">與 Lee et al. 的公平性</span><span data-lang="en">fairness vs Lee et al.</span></span><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">突變反應速度</span><span data-lang="en">reaction to abrupt change</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">整體流程:兩階段訓練 + 非同步部署</span><span data-lang="en">Pipeline: two-phase training + asynchronous deployment</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">PHASE 1 · RL</span><b><span data-lang="zh">特權 base policy</span><span data-lang="en">Privileged base policy</span></b><small><span data-lang="zh">模擬中可直接讀 \(e_t\)(質量/COM、摩擦、地形高、馬達強度),由 \(\mu\) 編碼成 \(z_t\in\mathbb{R}^8\);\(\pi\) 以 PPO 學 \(a_t=\pi(x_t,a_{t-1},z_t)\)。\(\mu,\pi\) 端到端聯訓。</span><span data-lang="en">In sim, read \(e_t\) directly (mass/COM, friction, terrain height, motor strength); \(\mu\) encodes it to \(z_t\in\mathbb{R}^8\); \(\pi\) learns \(a_t=\pi(x_t,a_{t-1},z_t)\) via PPO. \(\mu,\pi\) trained jointly end-to-end.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">PHASE 2 · SUPERVISED</span><b><span data-lang="zh">adaptation module 回歸 \(\hat z_t\)</span><span data-lang="en">Adaptation module regresses \(\hat z_t\)</span></b><small><span data-lang="zh">φ 吃最近 50 步(0.5s)狀態-動作歷史,監督式最小化 \(\|\hat z_t-z_t\|^2\);用 <b>on-policy 資料</b>迭代(π 掛著 φ 的不完美 \(\hat z_t\) 跑)。</span><span data-lang="en">φ takes the last 50 steps (0.5s) of state-action history; supervised MSE \(\|\hat z_t-z_t\|^2\); iterated with <b>on-policy data</b> (π rolls out using the imperfect \(\hat z_t\) from φ).</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">DEPLOY · ZERO-SHOT</span><b><span data-lang="zh">10 Hz / 100 Hz 非同步</span><span data-lang="en">10 Hz / 100 Hz async</span></b><small><span data-lang="zh">φ 每 0.1s 更新一次 \(\hat z_t\);π 以 100 Hz 拿「最新的」\(\hat z_t\) 出關節目標角,經 PD(\(K_p{=}55,K_d{=}0.8\))轉扭矩。無校準、無微調、無同步時鐘。</span><span data-lang="en">φ refreshes \(\hat z_t\) every 0.1s; π at 100 Hz consumes the freshest \(\hat z_t\) and outputs target joint angles, converted to torques by PD (\(K_p{=}55,K_d{=}0.8\)). No calibration, no fine-tuning, no shared clock.</span></small></div>
+        </div>
+        <figure class="fig"><img src="figs/Kumar2021/fig2_architecture.png" alt="Figure 2 RMA architecture">
+          <figcaption data-lang="zh"><b>Fig.2</b> RMA 全架構。上:Phase 1 以特權 \(e_t\to z_t\) 訓練 base policy(紅框=可訓練);Phase 2 凍結 π,讓 φ 從歷史回歸 \(\hat z_t\)(綠色 Regress 箭頭)。下:部署時 φ(10 Hz)與 π(100 Hz)非同步協作。<b>注意 Phase 2 回歸的是潛向量 z,不是動作</b>——π 兩階段共用。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> Full RMA architecture. Top: Phase 1 trains the base policy on privileged \(e_t\to z_t\) (red = trainable); Phase 2 freezes π and lets φ regress \(\hat z_t\) from history (green Regress arrow). Bottom: at deployment φ (10 Hz) and π (100 Hz) cooperate asynchronously. <b>Note Phase 2 regresses the latent z, not actions</b> — π is shared across phases.</figcaption></figure>
+        <div class="eq">$$z_t=\mu(e_t),\qquad a_t=\pi(x_t,\,a_{t-1},\,z_t),\qquad J(\pi)=\mathbb{E}_{\tau\sim p(\tau|\pi)}\Big[\textstyle\sum_{t=0}^{T-1}\gamma^t r_t\Big]$$</div>
+        <div class="eq">$$\hat z_t=\phi\big(x_{t-k:t-1},\,a_{t-k:t-1}\big),\quad k=50\ (0.5\text{s}),\qquad \min_\phi\ \big\|\hat z_t-z_t\big\|^2$$</div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵想法 1:extrinsics——「該怎麼改行為」的壓縮訊號</span><span data-lang="en">Key idea 1: extrinsics — a compressed "how to change behavior" signal</span></h3>
+        <p data-lang="zh">17 維環境向量 \(e_t\)(質量與其位置 3 維、12 個馬達強度、摩擦 1 維、腳下地形高 1 維)被壓成 8 維 \(z_t\)。白話類比:走上結冰路面時,你不需要知道冰的摩擦係數,你只需要「<b>步子放小、重心壓低</b>」——\(z_t\) 存的就是後者。這一設計同時繞開了<mark class="m-assume" data-t="ASSUMPTION/CLAIM">可辨識性問題</mark>:兩組對行為影響相同的物理參數,投影到同一個 \(z\) 完全無害。</p>
+        <p data-lang="en">The 17-dim environment vector \(e_t\) (mass and its position: 3, motor strength: 12, friction: 1, terrain height underfoot: 1) is compressed to an 8-dim \(z_t\). Plain analogy: stepping onto ice you never need the friction coefficient — you need "<b>shorter steps, lower center of mass</b>" — and \(z_t\) stores the latter. The design also sidesteps <mark class="m-assume" data-t="ASSUMPTION/CLAIM">identifiability</mark>: two parameter settings with identical behavioral effect may safely collapse to the same \(z\).</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">為何能從歷史推回 \(z\)?因為<mark class="m-method" data-t="METHOD/IDEA">「命令的動作」與「實際發生的動作」之間的落差,正是環境在資料裡留下的指紋</mark>——踩到低摩擦面,腳會滑;揹了重物,同樣扭矩下沉得更深。φ 是這個反問題的攤銷解(amortized solver)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Why can history reveal \(z\)? Because <mark class="m-method" data-t="METHOD/IDEA">the mismatch between commanded and actual motion is the fingerprint the environment leaves in the data</mark> — feet slip on low friction; the body sinks deeper under payload at the same torque. φ is the amortized solver of this inverse problem.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵想法 2:on-policy 資料收集(DAgger 式)</span><span data-lang="en">Key idea 2: on-policy data collection (DAgger-style)</span></h3>
+        <p data-lang="zh">若只用「π 掛真值 \(z_t\)」的完美軌跡訓練 φ,φ 只見過順風局;部署時一旦偏離,就進入沒學過的狀態分佈。解法(同 Ross et al. 2011):<mark class="m-method" data-t="METHOD/IDEA">讓 π 掛著 φ 自己(初始隨機)預測的 \(\hat z_t\) 去跑,再用真值 \(z_t\) 當標籤</mark>,迭代至收斂。隨機初始化與不完美預測製造了足夠的「探索軌跡」,讓 φ 對部署時的偏移穩健。</p>
+        <p data-lang="en">Training φ only on perfect trajectories (π driven by true \(z_t\)) shows it only easy states; any deployment deviation lands in an unseen distribution. The fix (as in Ross et al. 2011): <mark class="m-method" data-t="METHOD/IDEA">roll out π using the \(\hat z_t\) predicted by the current (initially random) φ, labeled with the true \(z_t\)</mark>, iterating to convergence. Random initialization and imperfect predictions supply the exploratory trajectories that make φ robust to deployment drift.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">獎勵與課程:不用示範,也不用人工雜訊</span><span data-lang="en">Rewards &amp; curriculum: no demos, no artificial noise</span></h3>
+        <p data-lang="zh">獎勵鼓勵以最高 0.35 m/s 前進,並懲罰急動與浪費:<b>Forward</b> \(\min(v_x,0.35)\)、側移與自轉、<mark class="m-method" data-t="METHOD/IDEA">做功 \(-|\tau^\top(q_t-q_{t-1})|\) 與地面衝擊 \(-\|f_t-f_{t-1}\|^2\)(生物能量學核心項)</mark>、扭矩平滑、動作幅度、關節速度、姿態(roll/pitch)、垂直加速度、足底打滑。缺一不可的細節:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">直接全額懲罰會讓機器人學會「站著不動」</mark>,所以懲罰係數從 0.03 起以 \(k_{t+1}=k_t^{0.997}\) 的課程漸增;質量、摩擦、馬達強度的擾動範圍也隨訓練線性加大;地形難度則固定、隨機取樣。</p>
+        <p data-lang="en">Rewards encourage forward motion capped at 0.35 m/s and penalize jerk and waste: <b>Forward</b> \(\min(v_x,0.35)\); lateral/rotation; <mark class="m-method" data-t="METHOD/IDEA">work \(-|\tau^\top(q_t-q_{t-1})|\) and ground impact \(-\|f_t-f_{t-1}\|^2\) (the bioenergetics core)</mark>; torque smoothness; action magnitude; joint speed; orientation (roll/pitch); vertical acceleration; foot slip. A make-or-break detail: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">full penalties from the start teach the robot to stand still</mark>, so penalty coefficients grow from 0.03 on the curriculum \(k_{t+1}=k_t^{0.997}\); mass/friction/motor-strength perturbation ranges grow linearly; terrain difficulty stays fixed and randomly sampled.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">訓練成本親民:Phase 1 用 PPO 跑 15,000 迭代(batch 80k)≈ 單 GPU 桌機 24 小時、1.2B 模擬步;Phase 2 監督學習 1,000 迭代 ≈ 3 小時、80M 步。RaiSim 模擬器 + fractal 地形(octaves 2、z-scale 0.27)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Training is modest: Phase 1 PPO for 15,000 iterations (batch 80k) ≈ 24h on a single-GPU desktop, 1.2B sim steps; Phase 2 supervised for 1,000 iterations ≈ 3h, 80M steps. RaiSim simulator + fractal terrain (octaves 2, z-scale 0.27).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(x_t\in\mathbb{R}^{30}\)</td><td><span data-lang="zh">機器人狀態:12 關節角 + 12 關節角速度 + roll、pitch + 4 個足底接觸開關。<b>沒有相機、沒有 lidar——純本體感覺。</b></span><span data-lang="en">Robot state: 12 joint angles + 12 joint velocities + roll, pitch + 4 binary foot contacts. <b>No camera, no lidar — proprioception only.</b></span></td></tr>
+          <tr><td>\(a_t\in\mathbb{R}^{12}\)</td><td><span data-lang="zh">動作 = 12 個期望關節角,由 PD 控制器 \(\tau=K_p(\hat q-q)+K_d(\hat{\dot q}-\dot q)\) 轉成扭矩(\(\hat{\dot q}=0\))。</span><span data-lang="en">Action = 12 desired joint angles, converted to torque by the PD law \(\tau=K_p(\hat q-q)+K_d(\hat{\dot q}-\dot q)\) with \(\hat{\dot q}=0\).</span></td></tr>
+          <tr><td>\(e_t\in\mathbb{R}^{17}\)</td><td><span data-lang="zh">特權環境向量:質量+COM(3)、馬達強度(12)、摩擦(1)、足下地形高(1)。只在模擬看得到。</span><span data-lang="en">Privileged env vector: mass+COM (3), motor strengths (12), friction (1), terrain height underfoot (1). Visible only in sim.</span></td></tr>
+          <tr><td>\(z_t\in\mathbb{R}^{8}\)</td><td><span data-lang="zh">extrinsics 潛向量 \(z_t=\mu(e_t)\):環境的「行為修正碼」。</span><span data-lang="en">Extrinsics latent \(z_t=\mu(e_t)\): the behavior-correction code of the environment.</span></td></tr>
+          <tr><td>\(\mu,\ \pi\)</td><td><span data-lang="zh">環境因子編碼器(3 層 MLP,256-128)與 base policy(3 層 MLP,hidden 128),Phase 1 以 PPO 聯訓。</span><span data-lang="en">Env-factor encoder (3-layer MLP, 256-128) and base policy (3-layer MLP, hidden 128), jointly trained by PPO in Phase 1.</span></td></tr>
+          <tr><td>\(\phi\)</td><td><span data-lang="zh">adaptation module:先用 2 層 MLP 把每步 (x,a) 嵌入 32 維,再以 3 層 <b>1-D CNN</b> 沿時間卷積抓時序相關,攤平線性投影出 \(\hat z_t\)。</span><span data-lang="en">Adaptation module: a 2-layer MLP embeds each (x,a) step into 32 dims, then a 3-layer <b>1-D CNN</b> convolves across time for temporal correlations; flattened output linearly projects to \(\hat z_t\).</span></td></tr>
+          <tr><td>\(k=50\)</td><td><span data-lang="zh">歷史窗長:50 步 × 10 ms = <b>0.5 秒</b>的「近期手感」。</span><span data-lang="en">History window: 50 steps × 10 ms = <b>0.5s</b> of recent "feel."</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">在模擬裡先當「開天眼」的老師學會依環境調整步伐,再訓練一個小網路<b>從腳底的手感倒推天眼看到的東西</b>——部署時天眼閉上,手感照樣管用。</span>
+        <span data-lang="en">In sim, first learn to walk as a teacher with x-ray vision into the environment; then train a small net to <b>reconstruct what the x-ray saw purely from the feel underfoot</b> — at deployment the x-ray is gone, the feel still works.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">與蒸餾的差別</span><span data-lang="en">Vs distillation</span></span>
+        <span data-lang="zh">常見的 teacher–student 是「學生模仿老師的<b>動作</b>」。RMA 的 Phase 2 <mark class="m-method" data-t="METHOD/IDEA">只回歸 8 維潛向量,π 原封不動共用</mark>——監督訊號更低維、更平穩,也解釋了為何 φ 幾乎追平 Expert(73.5 vs 76.2)。</span>
+        <span data-lang="en">Typical teacher–student has the student imitate the teacher <b>actions</b>. RMA Phase 2 <mark class="m-method" data-t="METHOD/IDEA">regresses only the 8-dim latent and reuses π unchanged</mark> — a lower-dim, smoother supervision signal, which explains why φ nearly matches the Expert (73.5 vs 76.2).</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">容易忽略的設計</span><span data-lang="en">Easily missed design</span></div>
+        <span data-lang="zh">直接訓練「吃歷史的端到端策略」不行嗎?作者試過:<mark class="m-limit" data-t="LIMITATION/FUTURE">步態不自然、模擬表現差、板載算力只跑得動 10 Hz</mark>,且失去非同步設計。<b>解耦 + 非同步</b>不是美學選擇,是部署的硬需求。地形高度也刻意「粗化」(取四腳最大值、小數一位),讓策略不依賴快而準的地形感測。</span>
+        <span data-lang="en">Why not train one end-to-end policy on history? The authors tried: <mark class="m-limit" data-t="LIMITATION/FUTURE">unnatural gaits, poor sim performance, only 10 Hz on the on-board compute</mark>, and no asynchrony. <b>Decoupling + async</b> is not aesthetics — it is a deployment requirement. Terrain height is also deliberately coarsened (max over four feet, one decimal) so the policy never depends on fast, accurate terrain sensing.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">訓練/測試範圍(表 I 節錄)</span><span data-lang="en">Train/test ranges (Table I excerpt)</span></span>
+        <table style="font-size:12px;margin:6px 0 0">
+          <tr><th></th><th>Train</th><th>Test</th></tr>
+          <tr><td><span data-lang="zh">摩擦</span><span data-lang="en">Friction</span></td><td>[0.05, 4.5]</td><td>[0.04, 6.0]</td></tr>
+          <tr><td><span data-lang="zh">負重 (kg)</span><span data-lang="en">Payload (kg)</span></td><td>[0, 6]</td><td>[0, 7]</td></tr>
+          <tr><td><span data-lang="zh">馬達強度</span><span data-lang="en">Motor strength</span></td><td>[0.90, 1.10]</td><td>[0.88, 1.22]</td></tr>
+          <tr><td>Kp / Kd</td><td>[50,60] / [0.4,0.8]</td><td>[45,65] / [0.3,0.9]</td></tr>
+        </table>
+        <span style="font-size:12px;color:var(--muted)"><span data-lang="zh">測試範圍略寬於訓練,且測試中每步以 0.01 機率重抽參數(訓練 0.004)。</span><span data-lang="en">Test ranges slightly exceed training; parameters resample per step with prob 0.01 at test (0.004 at train).</span></span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">模擬主表(Table II,測試分佈,3 seeds × 1000 episodes)</span><span data-lang="en">Main simulation table (Table II, test distribution, 3 seeds × 1000 episodes)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th>Success %</th><th>TTF</th><th>Reward</th><th><span data-lang="zh">距離 (m)</span><span data-lang="en">Dist. (m)</span></th><th><span data-lang="zh">真實樣本</span><span data-lang="en">Real samples</span></th><th>Torque ↓</th><th>Smooth. ↓</th></tr>
+          <tr><td>Robust (DR)</td><td>62.4</td><td>0.80</td><td>4.62</td><td>1.13</td><td>0</td><td>527.6</td><td>122.5</td></tr>
+          <tr><td>SysID (Yu 2017)</td><td>56.5</td><td>0.74</td><td>4.82</td><td>1.17</td><td>0</td><td>565.9</td><td>149.8</td></tr>
+          <tr><td>AWR (Peng 2020)</td><td class="bad">41.7</td><td>0.65</td><td>4.17</td><td>0.95</td><td class="bad">40k</td><td>599.7</td><td>162.6</td></tr>
+          <tr><td>RMA w/o Adapt</td><td>52.1</td><td>0.75</td><td>4.72</td><td>1.15</td><td>0</td><td>524.2</td><td>106.3</td></tr>
+          <tr><td class="win">RMA</td><td class="win">73.5</td><td class="win">0.85</td><td class="win">5.22</td><td class="win">1.34</td><td class="win">0</td><td class="win">500.0</td><td class="win">92.9</td></tr>
+          <tr><td><b>Expert</b> <small><span data-lang="zh">(拿真值 \(z_t\),上界)</span><span data-lang="en">(true \(z_t\), upper bound)</span></small></td><td class="ok">76.2</td><td>0.86</td><td>5.23</td><td>1.35</td><td>0</td><td>485.1</td><td>85.6</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">三個讀點:(1) <mark class="m-result" data-t="RESULT/EVIDENCE">RMA 與 Expert 只差 2.7 個百分點</mark>——φ 幾乎完整回收了特權資訊的價值;(2) 環境在 episode 內持續重抽,<mark class="m-result" data-t="RESULT/EVIDENCE">需要離線最佳化的 AWR 完全跟不上(41.7%)</mark>;(3) RMA 同時用<b>更低的扭矩與更平滑的動作</b>贏——不是靠蠻力。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Three readings: (1) <mark class="m-result" data-t="RESULT/EVIDENCE">RMA trails the Expert by only 2.7 points</mark> — φ recovers nearly all the value of privileged info; (2) with parameters resampled within episodes, <mark class="m-result" data-t="RESULT/EVIDENCE">offline-optimizing AWR cannot keep up (41.7%)</mark>; (3) RMA wins while using <b>lower torque and smoother actions</b> — not brute force.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">真實世界(室內,成功率 %,5 trials)</span><span data-lang="en">Real world (indoor, success %, 5 trials)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">任務</span><span data-lang="en">Task</span></th><th class="mono">RMA</th><th class="mono">w/o Adapt</th><th class="mono">A1 (MPC)</th></tr>
+          <tr><td><span data-lang="zh">不平整泡棉</span><span data-lang="en">Uneven foam</span></td><td class="win">80</td><td class="bad">0</td><td>20</td></tr>
+          <tr><td><span data-lang="zh">記憶床墊</span><span data-lang="en">Memory-foam mattress</span></td><td class="win">100</td><td class="bad">0</td><td>100</td></tr>
+          <tr><td><span data-lang="zh">上坡 6°</span><span data-lang="en">Incline 6°</span></td><td class="win">100</td><td>20</td><td>100</td></tr>
+          <tr><td>StepDown-15cm</td><td class="win">100</td><td class="bad">0</td><td>60</td></tr>
+          <tr><td>StepUp-6cm / 8cm</td><td class="win">100 / 60</td><td>40 / 0</td><td>80 / 20</td></tr>
+          <tr><td><span data-lang="zh">油面(腳裹塑膠)</span><span data-lang="en">Oily patch (plastic-wrapped feet)</span></td><td class="win">90</td><td>—</td><td>—</td></tr>
+          <tr><td><span data-lang="zh">極限負重</span><span data-lang="en">Max payload</span></td><td class="win"><span data-lang="zh">12 kg(=自重)仍高成功、不塌腰</span><span data-lang="en">12 kg (= body weight), high success, no sag</span></td><td><span data-lang="zh">&gt;8 kg 不動但少摔</span><span data-lang="en">&gt;8 kg: stalls, rarely falls</span></td><td><span data-lang="zh">8 kg 起塌腰、後倒</span><span data-lang="en">sags from 8 kg, then falls</span></td></tr>
+        </table>
+        <figure class="fig"><img src="figs/Kumar2021/fig3_indoor.png" alt="Figure 3 indoor experiments and payload analysis">
+          <figcaption data-lang="zh"><b>Fig.3</b> 室內對照與負重分析。看綠線(w/o Adapt):幾乎不摔(TTF 高)但也<b>走不動</b>(Success、Distance 掉到 0)——沒有適應的 base policy 只會「保守地站著」;黑線(A1 廠控)8 kg 後快速崩潰;紅線(RMA)到 12 kg 都撐住。<span class="add">[導讀補充]</span> 圖說文字與表格數字在 Uneven Foam / StepDown 兩格互換(80↔100),詳見 CRITIQUE。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Indoor comparisons and payload analysis. Watch the green line (w/o Adapt): it rarely falls (high TTF) yet <b>stops moving</b> (Success and Distance drop to 0) — the unadapted base policy just stands conservatively. The black line (A1 stock controller) collapses past 8 kg; the red line (RMA) holds to 12 kg. <span class="add">[guide note]</span> The caption text and the table swap two numbers (80↔100 for Uneven Foam / StepDown); see CRITIQUE.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">野外(Fig.1)與適應過程的「顯微鏡」(Fig.4)</span><span data-lang="en">In the wild (Fig.1) and a microscope on adaptation (Fig.4)</span></h3>
+        <p data-lang="zh">戶外:沙、泥、健行步道、高草、土堆<mark class="m-result" data-t="RESULT/EVIDENCE">全trial 零失敗</mark>;步道樓梯下行 70%、水泥堆與卵石堆 80%(該堆還橫在側傾的坡上)——而<mark class="m-assume" data-t="ASSUMPTION/CLAIM">訓練中從未出現下陷地面、纏腳植被或樓梯</mark>。</p>
+        <p data-lang="en">Outdoors: sand, mud, hiking trails, tall grass, dirt piles — <mark class="m-result" data-t="RESULT/EVIDENCE">zero failures across all trials</mark>; 70% descending trail stairs, 80% across cement/pebble piles (sitting on a sideways slope) — while <mark class="m-assume" data-t="ASSUMPTION/CLAIM">training never contained sinking ground, entangling vegetation or stairs</mark>.</p>
+        <figure class="fig"><img src="figs/Kumar2021/fig4_adaptation.png" alt="Figure 4 adaptation on oily surface">
+          <figcaption data-lang="zh"><b>Fig.4</b> 油面實驗的內部訊號。約 2s 踩進油面(紅色區):步態(上)亂掉、膝扭矩(中)劇烈波動;同時<b>extrinsics 分量 \(z_1,z_5\)(下)立刻轉向</b>——滑動被 φ「察覺」了。約 1.5s 後步態週期恢復、扭矩略升,而 <b>\(\hat z\) 不回到原值</b>:它持續記住「這裡很滑」。這張圖是「z 確實在編碼環境」最直接的證據。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Internal signals during the oil experiment. Around 2s the robot enters the oily patch (red band): the gait (top) breaks up, knee torque (middle) oscillates; simultaneously <b>extrinsics components \(z_1,z_5\) (bottom) pivot at once</b> — φ has "noticed" the slip. About 1.5s later the gait period recovers and torque settles slightly higher, while <b>\(\hat z\) never returns to its old value</b>: it keeps encoding "this floor is slippery." The most direct evidence that z truly encodes the environment.</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">補充案例:半途丟 5 kg 沙包上背(補充材料 Fig.S3),\(z_2,z_7\) 跳變、扭矩上修、步態週期復原——同一套機制對「負重突變」同樣成立。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Companion case: a 5 kg sandbag dropped mid-run (suppl. Fig.S3) — \(z_2,z_7\) jump, torque re-levels higher, gait period recovers. The same mechanism handles abrupt payload change.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融解讀</span><span data-lang="en">Reading the ablations</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">拿掉什麼</span><span data-lang="en">What is removed</span></th><th><span data-lang="zh">代價</span><span data-lang="en">Cost</span></th><th><span data-lang="zh">證明了什麼</span><span data-lang="en">What it proves</span></th></tr>
+          <tr><td><span data-lang="zh">adaptation module(→ RMA w/o Adapt)</span><span data-lang="en">Adaptation module (→ RMA w/o Adapt)</span></td><td><span data-lang="zh">Success 73.5→52.1;真實世界泡棉 80→0、床墊 100→0</span><span data-lang="en">Success 73.5→52.1; real-world foam 80→0, mattress 100→0</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">φ 是承重牆</mark>:沒有它,base policy 只會保守站立。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">φ is load-bearing</mark>: without it the base policy just stands conservatively.</span></td></tr>
+          <tr><td><span data-lang="zh">潛向量 → 顯式參數(SysID)</span><span data-lang="en">Latent → explicit params (SysID)</span></td><td>73.5 → 56.5</td><td><span data-lang="zh">估 \(\hat e_t\) 難且沒必要;<mark class="m-result" data-t="RESULT/EVIDENCE">低維 z 才是對的回歸目標</mark>。</span><span data-lang="en">Estimating \(\hat e_t\) is hard and unnecessary; <mark class="m-result" data-t="RESULT/EVIDENCE">the low-dim z is the right regression target</mark>.</span></td></tr>
+          <tr><td><span data-lang="zh">條件式 → 環境無關(Robust/DR)</span><span data-lang="en">Conditioned → agnostic (Robust/DR)</span></td><td>73.5 → 62.4</td><td><span data-lang="zh">「知道環境再行動」勝過「一套動作走天下」。</span><span data-lang="en">"Know the environment, then act" beats one-behavior-fits-all.</span></td></tr>
+          <tr><td><span data-lang="zh">前饋推論 → 離線最佳化(AWR)</span><span data-lang="en">Feed-forward → offline optimization (AWR)</span></td><td><span data-lang="zh">73.5 → 41.7(還多花 40k 真實樣本)</span><span data-lang="en">73.5 → 41.7 (plus 40k real samples)</span></td><td><span data-lang="zh">環境一直變時,<mark class="m-result" data-t="RESULT/EVIDENCE">慢適應比不適應更糟</mark>。</span><span data-lang="en">When environments keep shifting, <mark class="m-result" data-t="RESULT/EVIDENCE">slow adaptation is worse than none</mark>.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><b>實驗證明了:</b>純模擬訓練的秒級本體感覺適應,能零微調搬上便宜真機並泛化到訓練沒見過的地形。<b>沒有證明:</b>高速運動(封頂 0.35 m/s)、需要視覺的地形(作者自承大落差與多腳纏繞會失敗)、與 Lee et al. 在同一平台上的直接對決。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><b>What the experiments prove:</b> sim-only, second-scale proprioceptive adaptation transfers zero-shot to a cheap real robot and generalizes to unseen terrain. <b>What they do not prove:</b> high-speed motion (capped at 0.35 m/s), vision-demanding terrain (the authors admit large drops and multi-leg obstructions cause failures), or a head-to-head with Lee et al. on the same platform.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">模擬裡差 Expert 不到 3 分、真實世界揹起 100% 自重、油面 90%、野外多地形零失敗——<b>而對手不是走不動(DR/SysID),就是來不及(AWR)</b>。</span>
+        <span data-lang="en">Within 3 points of the Expert in sim, carrying 100% body weight for real, 90% on oil, zero failures across wild terrains — <b>while rivals either cannot walk well (DR/SysID) or cannot adapt in time (AWR)</b>.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">讀數字時當心</span><span data-lang="en">Mind the numbers</span></div>
+        <span data-lang="zh">室內每格只有 <mark class="m-limit" data-t="LIMITATION/FUTURE">5 次 trial(慘敗的方法只跑 2 次即記失敗)</mark>——為保護硬體可以理解,但 80% vs 60% 這種差距在 n=5 下並不顯著。戶外「零失敗」同樣未給出 trial 數。方向性可信,小差距別過度解讀。</span>
+        <span data-lang="en">Each indoor cell holds only <mark class="m-limit" data-t="LIMITATION/FUTURE">5 trials (2 for drastically failing methods, then recorded as failure)</mark> — understandable for hardware safety, but gaps like 80% vs 60% are not significant at n=5. Outdoor "zero failures" likewise reports no trial counts. Trust the direction, not the small margins.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">z 學到了什麼</span><span data-lang="en">what z encodes</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">樣本數</span><span data-lang="en">sample size</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「state-of-the-art」缺少真正的對手到場。</b>真實世界只比了 A1 廠控與自家消融;最強的學習式前作 <mark class="m-limit" data-t="LIMITATION/FUTURE">Lee et al. 2020 從未同台(不同機器人、不同先驗)</mark>,Peng et al. 也只以 AWR 的形式在模擬中出現。跨平台的 SOTA 宣稱本質上無法驗證。</li>
+          <li data-lang="en"><b>"State-of-the-art" without the real rivals present.</b> Real-world comparisons cover only the stock A1 controller and a self-ablation; the strongest learned prior, <mark class="m-limit" data-t="LIMITATION/FUTURE">Lee et al. 2020, never shares a stage (different robot, different priors)</mark>, and Peng et al. appears only as AWR in simulation. A cross-platform SOTA claim is inherently unverifiable.</li>
+          <li data-lang="zh"><b>模擬的「測試分佈」其實不算很 out-of-distribution。</b>表 I 的測試範圍只比訓練<mark class="m-assume" data-t="ASSUMPTION/CLAIM">略寬(摩擦 4.5→6.0、負重 6→7 kg)</mark>;真正的分佈外證據都是質性的真實實驗。73.5% 這個主數字衡量的更像「內插+微外推」能力。</li>
+          <li data-lang="en"><b>The sim "test distribution" is barely out-of-distribution.</b> Table I test ranges only <mark class="m-assume" data-t="ASSUMPTION/CLAIM">slightly exceed training (friction 4.5→6.0, payload 6→7 kg)</mark>; the genuinely OOD evidence is the qualitative real-world runs. The headline 73.5% mostly measures interpolation plus mild extrapolation.</li>
+          <li data-lang="zh"><b>對 \(z\) 的理解停留在兩個 case study。</b>8 維怎麼選、各維編碼什麼、17→8 丟了什麼,<mark class="m-limit" data-t="LIMITATION/FUTURE">論文只展示油面(\(z_1,z_5\))與負重(\(z_2,z_7\))兩例的分量變化</mark>;連作者自己都說支撐它的理由是「speculations」。歷史窗 k=50、z 維度 8、10 Hz 更新率皆無消融。</li>
+          <li data-lang="en"><b>Understanding of \(z\) rests on two case studies.</b> Why 8 dims, what each encodes, what 17→8 discards — <mark class="m-limit" data-t="LIMITATION/FUTURE">the paper shows only component shifts for oil (\(z_1,z_5\)) and payload (\(z_2,z_7\))</mark>; the authors themselves call their justifications "speculations." No ablations on the k=50 window, the 8-dim latent, or the 10 Hz update rate.</li>
+          <li data-lang="zh"><b>適應速度的宣稱要看細節。</b>標題說 rapid、正文說「幾分之一秒」,但 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Fig.4 顯示從踩進油面到步態恢復約需 1–1.5 秒</mark>(腳注則說 &lt;1s)。在 0.35 m/s 下這夠快;若換成奔跑速度,同樣的延遲可能就是一次摔倒。</li>
+          <li data-lang="en"><b>The speed-of-adaptation claim needs fine print.</b> The title says rapid, the text "fractions of a second," yet <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Fig.4 shows roughly 1–1.5s from entering the oil to gait recovery</mark> (a footnote says &lt;1s). Ample at 0.35 m/s; at running speed the same latency could mean a fall.</li>
+          <li data-lang="zh"><b>盲走的天花板。</b>作者坦承:下樓梯的突然墜落、亂石中多腳同時被絆,<mark class="m-limit" data-t="LIMITATION/FUTURE">仍會導致失敗;要真正可靠必須加上視覺</mark>。本體感覺只能「事後」感知地形——它永遠比看得到的系統晚半步。</li>
+          <li data-lang="en"><b>The ceiling of blind walking.</b> The authors concede: sudden drops on stairs or several legs obstructed at once in rubble <mark class="m-limit" data-t="LIMITATION/FUTURE">still cause failures; true reliability needs vision</mark>. Proprioception senses terrain only after contact — always half a step behind a seeing system.</li>
+          <li data-lang="zh"><b>小瑕疵。</b><span class="add">[導讀補充]</span> Fig.3 圖說寫「StepDown-15 成功 80%、不平整泡棉 100%」,但圖中表格是 StepDown 100%、泡棉 80%——兩數對調,正文引用時請以表格為準。</li>
+          <li data-lang="en"><b>A small blemish.</b> <span class="add">[guide note]</span> The Fig.3 caption states "StepDown-15 at 80%, uneven foam at 100%," while the embedded table shows StepDown 100% and foam 80% — the two numbers are swapped; trust the table when citing.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>z 的內容</b>:對 \(\hat z\) 做線性探測,能否解碼出摩擦與負重?若能,z 是否只是「摩擦+質量」的軟編碼?若不能,end-to-end 到底學了什麼?</li>
+          <li data-lang="en"><b>What lives in z</b>: linear-probe \(\hat z\) — can friction and payload be decoded? If yes, is z just a soft code for "friction + mass"? If no, what did end-to-end training actually learn?</li>
+          <li data-lang="zh"><b>突變 vs 窗長</b>:0.5s 窗口對「慢變化」是濾波優勢,對「瞬間踩空」則是延遲。把 k 減半或加倍,適應延遲與估計穩定度如何交換?為何論文不給這條曲線?</li>
+          <li data-lang="en"><b>Abrupt change vs window length</b>: the 0.5s window filters slow drift but delays response to a sudden void. Halve or double k — how do latency and estimate stability trade off? Why is this curve absent?</li>
+          <li data-lang="zh"><b>公平對決</b>:把 Lee et al. 的 TG+actuator-model 配方移植到 A1、或把 RMA 移到 ANYmal,同一 terrain suite 下誰贏?「零領域知識」值多少個百分點?</li>
+          <li data-lang="en"><b>A fair duel</b>: port the TG + actuator-model recipe of Lee et al. onto the A1, or RMA onto ANYmal — same terrain suite, who wins? How many points is "zero domain knowledge" actually worth?</li>
+          <li data-lang="zh"><b>統計效力</b>:室內 n=5、戶外未報 n;若每格跑 30 trials,80 vs 60 的差距還在嗎?哪些結論會退化成「不分勝負」?</li>
+          <li data-lang="en"><b>Statistical power</b>: n=5 indoors, unreported n outdoors. At 30 trials per cell, does 80 vs 60 survive? Which conclusions decay into ties?</li>
+          <li data-lang="zh"><b>失敗模式</b>:油面 10% 的失敗長什麼樣?\(\hat z\) 是「估錯」還是「估對了但 base policy 無解」?這決定改進方向是 φ 還是 π。</li>
+          <li data-lang="en"><b>Failure anatomy</b>: what do the 10% oil failures look like? Was \(\hat z\) wrong, or right-but-unsolvable for the base policy? The answer decides whether to fix φ or π.</li>
+          <li data-lang="zh"><b>低速前提</b>:0.35 m/s 的速度上限是獎勵設的。若目標速度 ×3,生物能量學獎勵還能長出穩定步態嗎?非同步 10 Hz 的 \(\hat z\) 還來得及嗎?</li>
+          <li data-lang="en"><b>The low-speed premise</b>: the 0.35 m/s cap is set by the reward. At 3× target speed, do bioenergetics rewards still grow a stable gait? Is a 10 Hz \(\hat z\) still fast enough?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 RMA 讀成「機器人在部署時持續學習」。錯:<b>部署時沒有任何權重更新</b>。φ 只是把「歷史 → 環境潛向量」這個函數<mark class="m-method" data-t="METHOD/IDEA">在模擬裡先學好</mark>,現場做的只是推論。所以它快(前饋一次)、也所以它有边界——<mark class="m-limit" data-t="LIMITATION/FUTURE">環境若超出模擬隨機化的覆蓋範圍,φ 只能外推,沒有補救機制</mark>。</span>
+        <span data-lang="en">Reading RMA as "the robot keeps learning at deployment." No: <b>no weights update at deployment</b>. φ merely <mark class="m-method" data-t="METHOD/IDEA">pre-learns in simulation</mark> the function "history → environment latent"; the field work is pure inference. Hence its speed (one forward pass) — and its boundary: <mark class="m-limit" data-t="LIMITATION/FUTURE">beyond the coverage of sim randomization, φ can only extrapolate, with no recovery mechanism</mark>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">限制寫得誠實(盲走會敗於墜落與多腳纏繞、指明視覺是下一步);訓練成本刻意親民(單 GPU 桌機 24+3 小時),配方乾淨到<b>一週能復現</b>——這是它能成為社群標準骨架的重要原因。油面+塑膠袋、半路丟沙包這類「顯微鏡實驗」也展示了難得的機制透明度。</span>
+        <span data-lang="en">The limitations are honest (blind walking fails on drops and multi-leg obstruction; vision named as the next step); training cost is deliberately modest (24+3 hours on a single-GPU desktop), the recipe clean enough to <b>reproduce in a week</b> — a big reason it became the community skeleton. The microscope experiments (oil + plastic-wrapped feet, mid-run sandbag) show rare mechanistic transparency.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「特權訓練 → 歷史回歸」是可搬走的通用模板</b>:任何「模擬裡看得到、現場看不到」的變量(物體質量、接觸狀態、對手意圖…),都可以先讓策略以它為條件學會最優行為,再訓練一個小網路從可觀測歷史回歸它的低維編碼。</li>
+          <li data-lang="en"><b>"Privileged training → history regression" is a portable template</b>: for any variable visible in sim but not in the field (object mass, contact state, opponent intent…), first condition the policy on it, then train a small net to regress its low-dim code from observable history.</li>
+          <li data-lang="zh"><b>回歸目標選潛向量,不選物理真值</b>:低維、行為相關、允許共變參數塌縮——這是 SysID 56.5% vs RMA 73.5% 的十七個百分點所在。</li>
+          <li data-lang="en"><b>Regress the latent, not the physical ground truth</b>: low-dimensional, behavior-relevant, tolerant of covarying-parameter collapse — worth the seventeen points between SysID (56.5%) and RMA (73.5%).</li>
+          <li data-lang="zh"><b>部署約束要進入架構設計</b>:10/100 Hz 非同步解耦不是實驗細節,而是「慢變量-快變量」分工的架構表達;沒有它,整套方法上不了低成本硬體。</li>
+          <li data-lang="en"><b>Deployment constraints belong in the architecture</b>: the 10/100 Hz async decoupling is not an implementation detail but the architectural expression of slow-variable / fast-variable division — without it the method never fits cheap hardware.</li>
+          <li data-lang="zh"><b>學生要在自己的錯誤分佈上訓練</b>(on-policy/DAgger 式):任何「模組 A 餵模組 B」的系統,B 的訓練資料都應由 A 的<i>不完美</i>輸出生成。</li>
+          <li data-lang="en"><b>Train the student on its own error distribution</b> (on-policy / DAgger-style): in any "module A feeds module B" system, the training data of B should be generated under the <i>imperfect</i> outputs of A.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What is worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「不需真實世界微調即可即時適應」</span><span data-lang="en">"Real-time adaptation without real-world fine-tuning"</span></td><td><span data-lang="zh">RMA 是標準出處:&lt;1 秒 vs Peng et al. 的 4–8 分鐘。</span><span data-lang="en">RMA is the canonical source: &lt;1s vs 4–8 minutes in Peng et al.</span></td></tr>
+          <tr><td><span data-lang="zh">「估潛向量優於顯式系統辨識」</span><span data-lang="en">"Latent estimation beats explicit system ID"</span></td><td><span data-lang="zh">引表 II:SysID 56.5 vs RMA 73.5,及可辨識性論證。</span><span data-lang="en">Cite Table II (SysID 56.5 vs RMA 73.5) and the identifiability argument.</span></td></tr>
+          <tr><td><span data-lang="zh">「免示範、免步態產生器的四足學習」</span><span data-lang="en">"Quadruped learning without demos or trajectory generators"</span></td><td><span data-lang="zh">引生物能量學獎勵 + fractal 地形的自然約束訓練。</span><span data-lang="en">Cite the natural-constraint training: bioenergetics rewards + fractal terrain.</span></td></tr>
+          <tr><td><span data-lang="zh">「teacher-student 配方的源頭之一」</span><span data-lang="en">"An origin of the teacher-student recipe"</span></td><td><span data-lang="zh">與 Lee et al. 2020 並引:Lee 供特權蒸餾脈絡,RMA 供潛向量回歸與零領域知識版本。</span><span data-lang="en">Pair with Lee et al. 2020: Lee for the privileged-distillation lineage, RMA for the latent-regression, zero-domain-knowledge variant.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">RMA 把「系統辨識」攤銷成一個從 0.5 秒本體感覺歷史回歸環境潛向量的前饋網路,讓純模擬訓練的四足策略在真實世界的每一步即時適應——無需微調、無需視覺、無需人工步態先驗;它以最小的配方確立了此後四足 sim-to-real 的標準骨架。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">RMA amortizes system identification into a feed-forward net that regresses an environment latent from 0.5s of proprioceptive history, letting a sim-trained quadruped policy adapt at every real-world step — no fine-tuning, no vision, no hand-crafted gait priors; with a minimal recipe it fixed the standard skeleton of quadruped sim-to-real ever since.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Lee et al. 2020 (Sci. Robotics)</span>
+          <span class="chip">Peng et al. 2020 (RSS)</span>
+          <span class="chip">Hwangbo et al. 2019</span>
+          <span class="chip">Walk These Ways</span>
+          <span class="chip">DreamWaQ</span>
+        </div>
+        <span style="display:block;margin-top:8px;font-size:12.5px"><span data-lang="zh"><span class="add">[導讀補充]</span> 在本庫的位置:上承 Peng et al. 2020 的模仿+微調路線(它是 RMA 的 AWR 對照),下啟 Walk These Ways / DreamWaQ 等以「歷史→潛向量」為骨架的後續;與 FACTR、FoAR 同屬 Pathak 系譜。</span><span data-lang="en"><span class="add">[guide note]</span> Position in this library: succeeds the imitation + fine-tuning line of Peng et al. 2020 (its AWR baseline here), precedes Walk These Ways / DreamWaQ built on the same history→latent skeleton; shares the Pathak lineage with FACTR and FoAR.</span></span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文(arXiv:2107.04034v1)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences; all other facts and figures come from the original paper (arXiv:2107.04034v1).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Kumar et al. 2021 (RMA) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'RMA reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>
