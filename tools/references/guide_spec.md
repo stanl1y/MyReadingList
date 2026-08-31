@@ -115,8 +115,13 @@ The existing library guides (`Touati2021_FB_representation.html`,
 
 ## Visual design
 
-- **Header**: fixed dark-navy bar (`#16243f`), gold serif title (e.g.
-  `CS PAPER READING GUIDE`), right-aligned color legend.
+- **Header**: fixed dark-navy bar (`#16243f`). Top-left = a `.hleft` group holding
+  a **home button** then the gold serif title (e.g. `CS PAPER READING GUIDE`);
+  right-aligned color legend + language toggle. The home button is a gold pill
+  linking back to the library:
+  `<a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a>`
+  (bilingual spans so it follows the 中/EN toggle; hover inverts to gold bg / navy text —
+  copy the `.hleft`/`.homelink` CSS from the canonical template).
 - **Tab nav**: slightly lighter navy, monospace numbered tabs, gold underline on active.
 - **Body**: light-cream background (`#f6f1e6`), white "paper" cards with rounded
   corners + soft shadow. Serif for headings, monospace for labels/section numbers,

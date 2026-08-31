@@ -27,6 +27,12 @@
   .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
     gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
   .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
   .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
   .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
   .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
@@ -132,7 +138,7 @@
 <div class="wrap lang-zh">
 <header>
   <div class="hbar">
-    <div class="htitle serif">CS PAPER READING GUIDE</div>
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
     <div class="hright">
       <div class="legend mono">
         <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
