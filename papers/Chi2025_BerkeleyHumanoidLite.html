@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Berkeley Humanoid Lite — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Demonstrating Berkeley Humanoid Lite: An Open-source, Accessible, and Customizable 3D-printed Humanoid Robot","authors":"Yufeng Chi, Qiayuan Liao, Junfeng Long, Xiaoyu Huang, Sophia Shao, Borivoje Nikolic, Zhongyu Li, Koushil Sreenath","year":"2025","venue":"RSS","tags":["Legged Robotics","Humanoid","Robot Hardware","Actuator Design","Cycloidal Gearbox","Open Source","3D Printing","Motor Dyno / Testing","Sim-to-Real"],"tldr":"一台 16 kg、0.8 m、BOM 約 4,312 美元(中國 3,236 美元)的開源中型人形機器人:22 個關節全用桌上型 FDM 列印的 PLA 擺線(cycloidal)減速器配無人機 BLDC 馬達,齒輪箱機械效率約 90%、傳動剛性 319 Nm/rad、60 小時耐久測試後背隙仍可接受,並以 PPO 策略零樣本 sim-to-real 行走、VR 遙操作雙臂。","tldr_en":"An open-source 16 kg, 0.8 m mid-scale humanoid with a $4,312 US BOM ($3,236 in China) whose 22 joints use desktop-FDM-printed PLA cycloidal gearboxes on drone BLDC motors: about 90% gearbox efficiency, 319 Nm/rad stiffness and acceptable backlash after a 60-hour durability test, plus zero-shot sim-to-real RL walking and VR teleoperated bimanual manipulation."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  a.chip{text-decoration:none}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+  .num td:not(:first-child){font-variant-numeric:tabular-nums}
+  .tot td{font-weight:700; border-top:2px solid var(--line)}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:110px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+  .primer{border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">Berkeley Humanoid Lite 是一台 <b>16 kg、0.8 m 高、22 個主動關節</b>的開源中型人形機器人。它的核心是<mark class="m-method" data-t="METHOD/IDEA">用桌上型 FDM 印表機以 PLA 列印的擺線(cycloidal)減速器</mark>,配上現成的無人機 BLDC 馬達與便宜驅動板,做成兩種模組化關節致動器;所有零件都能在 Amazon / 淘寶 / Digikey 買到,<mark class="m-result" data-t="RESULT/EVIDENCE">整機 BOM 美國 4,312 美元、中國 3,236 美元</mark>。作者用自製測功機(dynamometer)量效率、剛性、背隙與 60 小時耐久,並展示<mark class="m-result" data-t="RESULT/EVIDENCE">零樣本 sim-to-real 的 RL 行走與 VR 雙臂遙操作</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Berkeley Humanoid Lite is an open-source, mid-scale humanoid: <b>16 kg, 0.8 m tall, 22 actuated joints</b>. Its core is a <mark class="m-method" data-t="METHOD/IDEA">cycloidal gearbox printed in PLA on a desktop FDM printer</mark>, paired with off-the-shelf drone BLDC motors and a cheap driver board to form two sizes of modular joint actuator. Every part can be bought on Amazon / Taobao / Digikey, giving a <mark class="m-result" data-t="RESULT/EVIDENCE">full-robot BOM of $4,312 (US) or $3,236 (China)</mark>. The authors characterize efficiency, stiffness, backlash and a 60-hour durability run on a custom dynamometer, and demonstrate <mark class="m-result" data-t="RESULT/EVIDENCE">zero-shot sim-to-real RL walking and VR bimanual teleoperation</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Chi2025/fig2_overview.png" alt="Figure 2 overview">
+        <figcaption data-lang="zh"><b>Fig.2</b> 主要元件與肢段尺寸。注意:軀幹是<b>鋁擠型框架</b>(放 Intel N95 迷你電腦、手機等級 IMU、6S 電池),四肢則全是白色的 <b>3D 列印外殼 + 自帶減速器的關節模組</b>,大腿/小腿約 0.15–0.16 m,上臂/前臂各 0.16 m。每個關節是「一顆致動器直接驅動」,沒有連桿或皮帶——這正是後面「容易改尺寸、改型態」的前提。</figcaption>
+        <figcaption data-lang="en"><b>Fig.2</b> Main components and limb dimensions. Notice: the torso is an <b>aluminum-extrusion frame</b> (holding an Intel N95 mini PC, a phone-grade IMU and a 6S battery), while the limbs are all white <b>3D-printed shells plus self-contained geared joint modules</b>; thigh/shank are about 0.15–0.16 m and upper arm/forearm 0.16 m each. Every joint is "one actuator, direct drive of the joint," with no linkages or belts—the precondition for the later "easy to resize and reconfigure" claims.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 人形機器人硬體<mark class="m-problem" data-t="PROBLEM/GAP">不是貴又閉源(Digit、GR1、Unitree),就是要 CNC / 雷射切割的實驗室原型</mark>;便宜的開源方案(Poppy、OP3)用伺服馬達,<mark class="m-problem" data-t="PROBLEM/GAP">不可反驅、反射慣量大</mark>,難以放大到中型尺寸。</li>
+          <li data-lang="en"><b>Problem</b> — Humanoid hardware is <mark class="m-problem" data-t="PROBLEM/GAP">either expensive and closed (Digit, GR1, Unitree) or a lab prototype needing CNC / laser cutting</mark>; cheap open-source options (Poppy, OP3) use hobby servos that are <mark class="m-problem" data-t="PROBLEM/GAP">not backdrivable and have high reflected inertia</mark>, so they do not scale to mid-size robots.</li>
+          <li data-lang="zh"><b>方法</b> — <mark class="m-method" data-t="METHOD/IDEA">PLA 列印的擺線減速器</mark>(負載分散在多個齒、對印表機解析度較寬容)+ 無人機 BLDC + B-G431B-ESC1 驅動板 + AS5600 編碼器,做成 6512 / 5010 兩種模組;CAN 匯流排串接,PPO 訓練的行走策略在機上 25 Hz 執行。</li>
+          <li data-lang="en"><b>Method</b> — A <mark class="m-method" data-t="METHOD/IDEA">PLA-printed cycloidal reducer</mark> (load shared over many lobes, tolerant of printer resolution) + a drone BLDC + a B-G431B-ESC1 driver + an AS5600 encoder, packaged as two modules (6512 / 5010), daisy-chained on CAN; a PPO-trained walking policy runs onboard at 25 Hz.</li>
+          <li data-lang="zh"><b>結果</b> — 齒輪箱<mark class="m-result" data-t="RESULT/EVIDENCE">機械效率約 90%、剛性 319.49 Nm/rad、新品背隙最大 0.0229 rad</mark>;60 小時耐久後背隙上升但仍可用;6 顆、2 台印表機間一致(力矩誤差 ±0.5 Nm);整機 &lt; 5,000 美元並能零樣本 sim-to-real 行走、遙操作寫字和轉魔術方塊。</li>
+          <li data-lang="en"><b>Results</b> — Gearbox <mark class="m-result" data-t="RESULT/EVIDENCE">mechanical efficiency ~90%, stiffness 319.49 Nm/rad, fresh-unit backlash at most 0.0229 rad</mark>; after 60 hours backlash grows but stays usable; six units from two printers agree (torque error within ±0.5 Nm); the whole robot costs under $5,000 and achieves zero-shot sim-to-real walking and teleoperated writing and Rubik's-cube solving.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">足式機器人近十年的硬體主流是 <mark class="m-method" data-t="METHOD/IDEA">proprioceptive / 準直驅(QDD)致動器</mark>:大扭矩密度的外轉子 BLDC + 低減速比(多為行星齒輪或皮帶),讓關節可反驅、能靠電流估力矩,MIT Cheetah 系列(Katz 的低成本模組化致動器)、Stanford Doggo(3:1 皮帶)都屬此路線。好處是動態性能高,代價是<mark class="m-problem" data-t="PROBLEM/GAP">金屬加工件、客製馬達或驅動板</mark>,一般實驗室難以複製。</p>
+        <p data-lang="en">For a decade, legged-robot hardware has been dominated by <mark class="m-method" data-t="METHOD/IDEA">proprioceptive / quasi-direct-drive (QDD) actuators</mark>: high-torque-density outrunner BLDCs with low reduction (usually planetary gears or belts), making joints backdrivable and torque estimable from current—the MIT Cheetah line (Katz's low-cost modular actuator) and Stanford Doggo (3:1 belt) are examples. The payoff is dynamic performance; the cost is <mark class="m-problem" data-t="PROBLEM/GAP">machined metal parts and custom motors or drivers</mark> that most labs cannot replicate.</p>
+        <p data-lang="zh">另一條路是 3D 列印:Urs et al. (2022) 做了列印行星減速器(但要樹脂印表機),Roozing &amp; Roozing (2022, 2024) 研究了<mark class="m-method" data-t="METHOD/IDEA">可用 FDM 列印的擺線減速器</mark>(含非 pinwheel 設計)。這些多停留在「單一致動器」層級。本文把擺線列印路線<b>推到一整台人形機器人</b>,並配齊 BOM、韌體、訓練與部署框架。</p>
+        <p data-lang="en">The other path is 3D printing: Urs et al. (2022) built a printed planetary actuator (but needing a resin printer), and Roozing &amp; Roozing (2022, 2024) studied <mark class="m-method" data-t="METHOD/IDEA">FDM-printable cycloidal reducers</mark> (including a non-pinwheel design). These mostly stayed at the single-actuator level. This paper <b>scales the printed-cycloidal route to a full humanoid</b>, with BOM, firmware, and training/deployment frameworks.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這是一篇<b>平台 / 系統論文</b>,不是「新演算法」論文:它的貢獻主張是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「夠用的性能 × 極低門檻 × 完全開源」</mark>。讀的重點因此不是「有沒有比別人強」,而是「它省掉了什麼、為此付出多少性能、證據能不能撐住『可靠』這個字」。<span class="add">[導讀補充] 標題以「Demonstrating」開頭,屬 RSS 的系統展示型論文格式。</span></p>
+          <p data-lang="en" style="margin-top:6px">This is a <b>platform / systems paper</b>, not a new-algorithm paper: its claim is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"good-enough performance × very low barrier × fully open-source."</mark> So read it not for "does it beat others" but for "what did it remove, how much performance did that cost, and does the evidence support the word reliable." <span class="add">[guide note] The "Demonstrating" title prefix marks RSS's system-demonstration paper format.</span></p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不是某個數字,而是底下這幾個硬體設計觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not a single number but these hardware-design ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">減速器的「形式」要配合製程。</b> 塑膠強度低、FDM 解析度有限,作者選擇<mark class="m-assume" data-t="ASSUMPTION/CLAIM">多齒同時嚙合、齒形圓滑的擺線減速器</mark>,而不是金屬世界的預設選項(行星齒輪)。選對拓撲,便宜材料也能用。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Match the gearbox topology to the process.</b> Plastic is weak and FDM resolution is limited, so the authors pick a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">cycloidal reducer with many lobes in mesh and smooth profiles</mark> instead of the metal-world default (planetary). With the right topology, cheap material becomes viable.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">把錢花在馬達,把齒輪箱變成「幾乎免費」。</b> 6512 致動器中列印件只要 4 美元,馬達卻佔 129 美元。<span class="add">[導讀補充] 整機 22 顆馬達合計 2,298 美元,約佔美國 BOM 的 53%。</span></li>
+          <li data-lang="en"><b style="color:var(--c-method)">Spend on motors; make the gearbox nearly free.</b> In the 6512 actuator the printed parts cost $4 while the motor costs $129. <span class="add">[guide note] The 22 motors total $2,298, about 53% of the US BOM.</span></li>
+          <li data-lang="zh"><b style="color:var(--c-result)">「可靠」要用測功機數據說話。</b> 效率圖、剛性遲滯曲線、60 小時耐久、跨印表機一致性、Moteus 交叉驗證——這套<mark class="m-result" data-t="RESULT/EVIDENCE">致動器特性測試流程</mark>本身就值得複製。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">"Reliable" must be backed by dyno data.</b> Efficiency maps, a stiffness hysteresis curve, a 60-hour durability run, cross-printer consistency, Moteus cross-validation—this <mark class="m-result" data-t="RESULT/EVIDENCE">actuator characterization protocol</mark> is itself worth copying.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">模組化 = 一個關節一顆自帶減速器的致動器 + 一條 CAN。</b> 只要電源與 CAN(每條匯流排最多 64 個裝置),就能重排成四足、雙足、半人馬、移動底盤或成人尺寸人形。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Modularity = one self-contained geared actuator per joint + one CAN bus.</b> Needing only power and CAN (up to 64 devices per bus), it can be rearranged into a quadruped, biped, centaur, mobile base, or adult-size humanoid.</li>
+          <li data-lang="zh"><b style="color:var(--c-limit)">性能天花板是真實的。</b> 剛性只有 PA-CF 版本的約 1/4.6,背隙隨磨耗增加、熱效應未研究;平台定位是「研究驗證 / 教學」,<mark class="m-limit" data-t="LIMITATION/FUTURE">不是高動態運動的替代品</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-limit)">The performance ceiling is real.</b> Stiffness is about 1/4.6 of a PA-CF version, backlash grows with wear, and thermal effects are unstudied; the platform is for "research validation / teaching," <mark class="m-limit" data-t="LIMITATION/FUTURE">not a replacement for high-dynamic locomotion hardware</mark>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Demonstrating Berkeley Humanoid Lite: An Open-source, Accessible, and Customizable 3D-printed Humanoid Robot</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Yufeng Chi, Qiayuan Liao, Junfeng Long, Xiaoyu Huang, Sophia Shao, Borivoje Nikolic, Zhongyu Li, Koushil Sreenath</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>UC Berkeley (Hybrid Robotics · SLICE lab)</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2025 · RSS (arXiv:2504.17249)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Humanoid Hardware</span>
+          <b><span data-lang="zh">資源</span><span data-lang="en">Code</span></b><span>lite.berkeley-humanoid.org · github.com/HybridRobotics/Berkeley-Humanoid-Lite</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag">SPEC SHEET</span>
+        <table style="font-size:12.5px;margin:0">
+          <tr><td><span data-lang="zh">重量 / 身高</span><span data-lang="en">Mass / height</span></td><td>16 kg · 0.8 m</td></tr>
+          <tr><td><span data-lang="zh">致動器</span><span data-lang="en">Actuators</span></td><td>10× 6512 + 12× 5010 <span data-lang="zh">(雙臂各 5 DoF;由 22 − 10 推算雙腿各 6 DoF <span class="add">[導讀補充]</span>)</span><span data-lang="en">(5-DoF arms; 6-DoF legs inferred from 22 − 10 <span class="add">[guide note]</span>)</span></td></tr>
+          <tr><td><span data-lang="zh">末端</span><span data-lang="en">End effectors</span></td><td><span data-lang="zh">2 個夾爪</span><span data-lang="en">2 grippers</span></td></tr>
+          <tr><td><span data-lang="zh">電腦</span><span data-lang="en">Computer</span></td><td>Intel N95 mini PC</td></tr>
+          <tr><td><span data-lang="zh">通訊</span><span data-lang="en">Comms</span></td><td>4× CAN 2.0 @ 1 Mbps, 250 Hz</td></tr>
+          <tr><td><span data-lang="zh">策略頻率</span><span data-lang="en">Policy rate</span></td><td>25 Hz (MLP)</td></tr>
+          <tr><td><span data-lang="zh">電池</span><span data-lang="en">Battery</span></td><td>6S 4000 mAh LiPo · <span data-lang="zh">約 30 分鐘</span><span data-lang="en">~30 min</span></td></tr>
+          <tr><td>BOM</td><td>$4,312 (US) · $3,236 (CN)</td></tr>
+        </table>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它把「有一台可反驅、能跑 RL sim-to-real 的人形」從「要有機械加工廠 + 數萬美元」降到「<b>一台桌上型印表機 + 不到 5,000 美元 + 約三天組裝</b>」。對沒有加工資源的實驗室與課堂,這是能不能做真機實驗的分水嶺。</span>
+        <span data-lang="en">It lowers "owning a backdrivable humanoid that can do RL sim-to-real" from "a machine shop + tens of thousands of dollars" to "<b>one desktop printer + under $5,000 + about three days of assembly</b>." For labs and classrooms without fabrication resources, that is the line between doing real-robot experiments or not.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Cycloidal drive</span><span class="chip">FDM / PLA</span>
+          <span class="chip">Drone BLDC</span><span class="chip">B-G431B-ESC1</span>
+          <span class="chip">Dynamometer</span><span class="chip">Backlash</span>
+          <span class="chip">PPO · Isaac Gym</span><span class="chip">SteamVR teleop</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點:三類人形平台</span><span data-lang="en">Status quo vs pain points: three kinds of humanoid platforms</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">類別</span><span data-lang="en">Category</span></th><th><span data-lang="zh">代表</span><span data-lang="en">Examples</span></th><th><span data-lang="zh">痛點</span><span data-lang="en">Pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">商用閉源</span><span data-lang="en">Commercial, closed</span></b></td><td>Digit, Fourier GR1, THEMIS, OpenLoong, NAO H25; Unitree H1 / G1</td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">價格高</mark>;較便宜的 Unitree 也<mark class="m-problem" data-t="PROBLEM/GAP">閉源、難改、難修</mark>。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">High price</mark>; even the cheaper Unitree robots are <mark class="m-problem" data-t="PROBLEM/GAP">closed, hard to modify and hard to repair</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">實驗室自製</span><span data-lang="en">Lab-built research</span></b></td><td>Berkeley Humanoid, MIT Humanoid, Wukong, HRP-5P, LOLA</td><td><span data-lang="zh">性能好、適合 RL,但<mark class="m-problem" data-t="PROBLEM/GAP">產量少、依賴 CNC / 雷射切割與昂貴元件</mark>,只在少數機構可得。</span><span data-lang="en">High performance and RL-friendly, but <mark class="m-problem" data-t="PROBLEM/GAP">built in tiny numbers with CNC / laser cutting and expensive parts</mark>, so only a few institutions have them.</span></td></tr>
+          <tr><td><b><span data-lang="zh">開源社群</span><span data-lang="en">Open-source community</span></b></td><td>iCub; Poppy, OP3, NimbRo-OP2</td><td><span data-lang="zh">iCub 仍需 CNC;Poppy 等用 3D 列印 + 伺服馬達,但伺服<mark class="m-problem" data-t="PROBLEM/GAP">不可反驅、反射慣量高、速度慢</mark>,難放大到中型。</span><span data-lang="en">iCub still needs CNC; Poppy and similar use 3D printing + servos, but servos are <mark class="m-problem" data-t="PROBLEM/GAP">not backdrivable, have high reflected inertia and are slow</mark>, so they do not scale up.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">作者把困難歸納成三個:<b>(1) 致動</b>——高性能致動器昂貴又私有;<b>(2) 製造</b>——CNC、雷射切割需要專門設施;<b>(3) 耐久</b>——3D 列印件<mark class="m-problem" data-t="PROBLEM/GAP">剛性低、會磨耗</mark>,能否撐住長期運作是開放問題。</p>
+        <p data-lang="en" style="margin-top:14px">The authors name three difficulties: <b>(1) actuation</b>—high-performance actuators are expensive and proprietary; <b>(2) fabrication</b>—CNC and laser cutting need specialized facilities; <b>(3) durability</b>—3D-printed parts have <mark class="m-problem" data-t="PROBLEM/GAP">low stiffness and wear over time</mark>, and whether they survive sustained operation is an open question.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 開源致動器各缺什麼</span><span data-lang="en">Gap table — what each open-source actuator lacks</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">前作</span><span data-lang="en">Prior work</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">本文怎麼補</span><span data-lang="en">How this paper fills it</span></th></tr>
+          <tr><td><b>Katz (2018)</b><br><small><span data-lang="zh">MIT 低成本模組化致動器</span><span data-lang="en">MIT low-cost modular actuator</span></small></td><td><span data-lang="zh">現成行星齒輪組但要<mark class="m-problem" data-t="PROBLEM/GAP">改馬達、改齒輪、鋁製外殼</mark>,另需客製驅動板。</span><span data-lang="en">Off-the-shelf planetary set but requires <mark class="m-problem" data-t="PROBLEM/GAP">modified motor and gears plus an aluminum housing</mark>, and a custom driver.</span></td><td rowspan="2"><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">現成無人機馬達 + 現成驅動板 + 全列印減速器</mark>,不改任何購入件;減速比高於皮帶 QDD,且每個關節是獨立模組。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Stock drone motor + stock driver board + fully printed reducer</mark>, no modification to bought parts; higher reduction than belt QDDs, and each joint is a self-contained module.</span></td></tr>
+          <tr><td><b>Kau et al. (2019)</b><br><small>Stanford Doggo</small></td><td><span data-lang="zh">皮帶 + ODrive,但<mark class="m-problem" data-t="PROBLEM/GAP">減速比低、缺乏模組化</mark>。</span><span data-lang="en">Belt + ODrive, but <mark class="m-problem" data-t="PROBLEM/GAP">low gear ratio and not modular</mark>.</span></td></tr>
+          <tr><td><b>Grimminger / Wüthrich</b><br><small>ODRI, TriFinger</small></td><td><span data-lang="zh">皮帶 + 客製驅動,適合<mark class="m-problem" data-t="PROBLEM/GAP">小型</mark>足式機器人。</span><span data-lang="en">Belts + custom drivers, suited to <mark class="m-problem" data-t="PROBLEM/GAP">small-scale</mark> legged robots.</span></td><td><span data-lang="zh">兩種尺寸的模組,支撐 16 kg 中型人形。</span><span data-lang="en">Two module sizes supporting a 16 kg mid-scale humanoid.</span></td></tr>
+          <tr><td><b>Urs et al. (2022)</b></td><td><span data-lang="zh">3D 列印行星齒輪 + Moteus,但<mark class="m-problem" data-t="PROBLEM/GAP">需要樹脂印表機</mark>。</span><span data-lang="en">3D-printed planetary + Moteus, but <mark class="m-problem" data-t="PROBLEM/GAP">needs a resin printer</mark>.</span></td><td><span data-lang="zh">只用<mark class="m-method" data-t="METHOD/IDEA">一般 FDM + PLA</mark>,所有件都塞進 200 mm 立方的列印體積。</span><span data-lang="en">Only <mark class="m-method" data-t="METHOD/IDEA">ordinary FDM + PLA</mark>; every part fits a 200 mm cube build volume.</span></td></tr>
+          <tr><td><b>Azocar et al. (2018)</b></td><td><span data-lang="zh">開源義肢致動器,行星齒輪但<mark class="m-problem" data-t="PROBLEM/GAP">要 CNC</mark>。</span><span data-lang="en">Open-source prosthesis actuator, planetary but <mark class="m-problem" data-t="PROBLEM/GAP">needs CNC</mark>.</span></td><td><span data-lang="zh">免 CNC。</span><span data-lang="en">No CNC.</span></td></tr>
+          <tr><td><b>Roozing &amp; Roozing (2022, 2024)</b></td><td><span data-lang="zh">證明 FDM 擺線減速器可行(含 PA-CF、非 pinwheel 設計),但<mark class="m-problem" data-t="PROBLEM/GAP">停在致動器層級</mark>。</span><span data-lang="en">Showed FDM cycloidal reducers are feasible (PA-CF, non-pinwheel design), but <mark class="m-problem" data-t="PROBLEM/GAP">stopped at the actuator level</mark>.</span></td><td><span data-lang="zh">把擺線列印推到<mark class="m-method" data-t="METHOD/IDEA">整台人形 + 系統級驗證</mark>(行走、遙操作)。</span><span data-lang="en">Scales printed cycloids to a <mark class="m-method" data-t="METHOD/IDEA">whole humanoid with system-level validation</mark> (walking, teleoperation).</span></td></tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這張 Gap 表的每一格都是<b>「製造 / 取得門檻」</b>,不是「性能不足」。本文刻意<mark class="m-assume" data-t="ASSUMPTION/CLAIM">用性能換門檻</mark>:它不主張比 Berkeley Humanoid、MIT Humanoid 更強,而是主張「性能夠做研究驗證,且任何人都能做出來」。評估它時要用同一把尺。</p>
+          <p data-lang="en" style="margin-top:6px">Note that every cell in this gap table is about <b>fabrication / sourcing barriers</b>, not insufficient performance. The paper deliberately <mark class="m-assume" data-t="ASSUMPTION/CLAIM">trades performance for accessibility</mark>: it does not claim to beat Berkeley Humanoid or MIT Humanoid, only to be "good enough for research validation and buildable by anyone." Judge it by that yardstick.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">「開源」不等於「容易取得」。iCub 是開源的,但要 CNC。本文把 accessibility 拆成<b>元件可得性、製造方式、成本(含交期與組裝時間)</b>三項——但這三項都是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">作者自評</mark>,論文沒有第三方複製或使用者研究。</span>
+        <span data-lang="en">"Open-source" does not mean "accessible." iCub is open-source but needs CNC. The paper splits accessibility into <b>component availability, fabrication method, and cost (including lead time and assembly time)</b>—but all three are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">self-assessed</mark>; there is no third-party replication or user study.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY SERVOS FAIL</span>
+        <span data-lang="zh">業餘伺服(如 Dynamixel 類)內部是小馬達 + 高減速比正齒輪,<b>反射慣量</b>大、反驅困難、輸出端力矩不透明;對 RL 而言,這讓模擬與實機之間的致動器落差更大。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">Hobby servos (Dynamixel-style) are small motors behind high-ratio spur gearing: large <b>reflected inertia</b>, hard to backdrive, opaque output torque. For RL, that widens the actuator sim-to-real gap. <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">耐久負載</span><span data-lang="en">durability load</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">accessibility 怎麼量</span><span data-lang="en">measuring accessibility</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card primer">
+        <span class="tag">[導讀補充] PRIMER</span>
+        <h3 class="serif"><span data-lang="zh">擺線 vs 行星:為什麼 3D 列印偏好擺線?</span><span data-lang="en">Cycloidal vs planetary: why does 3D printing favor cycloids?</span></h3>
+        <p data-lang="zh"><b>本卡為導讀者補充的背景知識</b>(論文本身只用一句話交代理由)。任何減速器把馬達的 \(\tau_m,\omega_m\) 換成輸出端的 \(\tau_{\text{out}},\omega_{\text{out}}\),並把馬達轉子慣量放大成反射慣量:</p>
+        <p data-lang="en"><b>This card is background added by the guide author</b> (the paper justifies the choice in one sentence). Any reducer converts motor \(\tau_m,\omega_m\) to output \(\tau_{\text{out}},\omega_{\text{out}}\) and magnifies rotor inertia into reflected inertia:</p>
+        <div class="eq">$$\tau_{\text{out}}=\eta_g\,|i|\,\tau_m,\qquad \omega_{\text{out}}=\frac{\omega_m}{|i|},\qquad J_{\text{refl}}=i^2 J_m$$</div>
+        <p data-lang="zh"><b>行星齒輪</b>(太陽輪輸入、內齒圈固定、行星架輸出)的單級減速比由齒數決定:</p>
+        <p data-lang="en">A <b>planetary stage</b> (sun input, ring fixed, carrier output) has a single-stage ratio set by tooth counts:</p>
+        <div class="eq">$$i_{\text{planet}}=1+\frac{Z_r}{Z_s},\qquad Z_r=Z_s+2Z_p$$</div>
+        <p data-lang="zh"><b>擺線減速器</b>:偏心軸(偏心量 \(E\))帶動擺線盤在 \(Z_p\) 根固定針齒內「公轉兼滾動」,盤上 \(Z_d=Z_p-1\) 個凸瓣,盤的自轉經輸出銷傳出:</p>
+        <p data-lang="en">A <b>cycloidal drive</b>: an eccentric shaft (eccentricity \(E\)) makes a cycloidal disk orbit and roll inside \(Z_p\) fixed ring pins; the disk has \(Z_d=Z_p-1\) lobes, and its slow self-rotation is taken out through output pins:</p>
+        <div class="eq">$$i_{\text{cyc}}=\frac{\omega_{\text{in}}}{\omega_{\text{out}}}=-\frac{Z_d}{Z_p-Z_d}=-Z_d\quad(\text{when }Z_p-Z_d=1)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">負號代表輸出反向。例:10 瓣盤配 11 根針 → 單級 10:1(僅為示意;<mark class="m-limit" data-t="LIMITATION/FUTURE">論文沒有寫出 6512 / 5010 的實際減速比</mark>,專案首頁與 GitHub README 也未列出)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The minus sign means the output turns backward. Example: a 10-lobe disk in 11 pins gives 10:1 in one stage (illustrative only; <mark class="m-limit" data-t="LIMITATION/FUTURE">the paper does not state the actual ratio of the 6512 / 5010</mark>, nor do the project page or GitHub README).</p>
+        <table>
+          <tr><th><span data-lang="zh">面向</span><span data-lang="en">Aspect</span></th><th><span data-lang="zh">擺線</span><span data-lang="en">Cycloidal</span></th><th><span data-lang="zh">行星</span><span data-lang="en">Planetary</span></th></tr>
+          <tr><td><b><span data-lang="zh">單級減速比</span><span data-lang="en">Ratio per stage</span></b></td><td><span data-lang="zh">高(≈ 瓣數,常見 10–100),一級就夠</span><span data-lang="en">High (≈ lobe count, typically 10–100); one stage suffices</span></td><td><span data-lang="zh">中低(常見 3–10),高比需多級</span><span data-lang="en">Low–moderate (typically 3–10); high ratios need multiple stages</span></td></tr>
+          <tr><td><b><span data-lang="zh">負載分擔</span><span data-lang="en">Load sharing</span></b></td><td><span data-lang="zh">理論上多個凸瓣同時接觸 → 每瓣受力小,<b>適合低強度塑膠</b></span><span data-lang="en">Many lobes in contact at once → low force per lobe, <b>kind to weak plastic</b></span></td><td><span data-lang="zh">每個行星只有 1–2 齒接觸,齒根彎曲應力集中</span><span data-lang="en">Only 1–2 teeth per planet in contact; tooth-root bending stress concentrates</span></td></tr>
+          <tr><td><b><span data-lang="zh">可列印性</span><span data-lang="en">Printability (FDM)</span></b></td><td><span data-lang="zh">大曲率、圓滑齒形,對 0.4 mm 噴嘴的誤差較寬容</span><span data-lang="en">Large, smooth profiles tolerate a 0.4 mm nozzle's error</span></td><td><span data-lang="zh">小模數漸開線細齒難印準,誤差直接變成背隙與噪音</span><span data-lang="en">Fine small-module involute teeth are hard to print accurately; error becomes backlash and noise</span></td></tr>
+          <tr><td><b><span data-lang="zh">背隙</span><span data-lang="en">Backlash</span></b></td><td><span data-lang="zh">原理上可很低,由間隙公差決定,磨耗後上升</span><span data-lang="en">Can be low in principle; set by clearances, grows with wear</span></td><td><span data-lang="zh">由齒側間隙決定,塑膠齒磨耗後上升</span><span data-lang="en">Set by tooth clearance; grows as plastic teeth wear</span></td></tr>
+          <tr><td><b><span data-lang="zh">代價</span><span data-lang="en">Downsides</span></b></td><td><span data-lang="zh">偏心軸承受大徑向力、需雙盤 180° 對置平衡振動、輸出銷摩擦;高比降低可反驅性</span><span data-lang="en">Large radial load on the eccentric bearing, needs two disks 180° apart to balance, output-pin friction; high ratio reduces backdrivability</span></td><td><span data-lang="zh">低比時最透明、最可反驅(QDD 的首選)</span><span data-lang="en">Most transparent and backdrivable at low ratio (the QDD default)</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;margin-top:8px">論文自己的理由(Sec. III-C2)只有一句:擺線<mark class="m-assume" data-t="ASSUMPTION/CLAIM">把負載分散到多個齒上,而且比行星齒輪更能適應桌上型印表機有限的解析度</mark>(引 Roozing [30])——注意本文<b>沒有</b>做擺線 vs 行星的對照實驗。</p>
+        <p data-lang="en" style="font-size:14px;margin-top:8px">The paper's own rationale (Sec. III-C2) is a single sentence: cycloids <mark class="m-assume" data-t="ASSUMPTION/CLAIM">spread load across several teeth and cope with desktop-printer resolution better than planetary gears</mark> (citing Roozing [30]). Note the paper runs <b>no</b> cycloidal-vs-planetary comparison itself.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">致動器設計流程:從一顆軸承開始</span><span data-lang="en">Actuator design flow: it starts from a bearing</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STEP 1</span><b><span data-lang="zh">選軸承定尺寸</span><span data-lang="en">Bearing sets size</span></b><small><span data-lang="zh">以常見 6811ZZ 球軸承決定 6512 的外徑</span><span data-lang="en">The common 6811ZZ ball bearing defines the 6512 envelope</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 2</span><b><span data-lang="zh">無人機 BLDC</span><span data-lang="en">Drone BLDC</span></b><small><span data-lang="zh">MAD M6C12 150KV(6512)/ 5010 馬達;易取得、性能/價格均衡</span><span data-lang="en">MAD M6C12 150KV (6512) / a 5010 motor; available, good performance per price</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 3</span><b><span data-lang="zh">列印擺線減速器</span><span data-lang="en">Printed cycloid</span></b><small><span data-lang="zh">外殼、擺線盤、輸入/輸出軸皆 PLA;輸入軸嵌黃銅六角柱</span><span data-lang="en">Housing, disks, input/output shafts all PLA; brass hex standoff in input shaft</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 4</span><b><span data-lang="zh">驅動與感測</span><span data-lang="en">Drive &amp; sense</span></b><small><span data-lang="zh">B-G431B-ESC1 驅動板(自寫韌體)+ AS5600 磁編碼器</span><span data-lang="en">B-G431B-ESC1 driver (custom firmware) + AS5600 magnetic encoder</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 5</span><b>CAN bus</b><small><span data-lang="zh">每肢一條 1 Mbps CAN,經 USB-CAN 接 N95,250 Hz</span><span data-lang="en">One 1 Mbps CAN per limb, USB-CAN to the N95, 250 Hz</span></small></div>
+        </div>
+        <figure class="fig"><img src="figs/Chi2025/fig4_actuator.png" alt="Figure 4 actuator">
+          <figcaption data-lang="zh"><b>Fig.4</b> 6512 致動器爆炸圖與剖面。從左到右:BLDC 馬達 → 外殼 → 黃銅六角柱(嵌在輸入軸內,加強馬達到偏心軸的扭矩傳遞)→ 偏心軸 → <b>兩片擺線盤</b> → 輸出軸。剖面圖可看到減速器<b>疊在馬達正前方</b>、輸出軸由大軸承支撐;長螺絲貫穿外殼,防止沿列印層間開裂。除了馬達、軸承、螺絲、電子件,其餘都是列印件。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Exploded and cross-section views of the 6512. Left to right: BLDC motor → housing → brass hex standoff (embedded in the input shaft to improve torque transfer to the eccentric) → eccentric shaft → <b>two cycloidal disks</b> → output shaft. The section shows the reducer <b>stacked directly in front of the motor</b> with the output on a large bearing; through-screws run across the housing to prevent splitting along print layers. Except motor, bearings, fasteners and electronics, everything is printed.</figcaption></figure>
+        <p data-lang="zh">為了抵消塑膠的弱點,作者用了三招:<mark class="m-method" data-t="METHOD/IDEA">貫穿螺絲 + 嵌入式黃銅六角柱</mark>(防層間破壞、提高承載)、<mark class="m-method" data-t="METHOD/IDEA">把子件合併成單一列印件</mark>(減重、避免螺絲周圍應力集中)、以及<mark class="m-method" data-t="METHOD/IDEA">每個零件都限制在 200×200×200 mm 列印體積內</mark>,保證一般桌上型機都能印。</p>
+        <p data-lang="en">To offset plastic's weaknesses the authors use three tactics: <mark class="m-method" data-t="METHOD/IDEA">through-screws + embedded brass hex standoffs</mark> (prevent layer-boundary failure, raise load capacity), <mark class="m-method" data-t="METHOD/IDEA">merging sub-components into single prints</mark> (less weight, no stress concentration around fasteners), and <mark class="m-method" data-t="METHOD/IDEA">keeping every part within a 200×200×200 mm build volume</mark> so any desktop printer can make it.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">成本設計:致動器 BOM(Tab. I、II)</span><span data-lang="en">Designing for cost: actuator BOMs (Tab. I, II)</span></h3>
+        <table class="num">
+          <tr><th><span data-lang="zh">項目</span><span data-lang="en">Item</span></th><th>6512 US</th><th>6512 CN</th><th>5010 US</th><th>5010 CN</th></tr>
+          <tr><td><span data-lang="zh">BLDC 無人機馬達</span><span data-lang="en">BLDC drone motor</span></td><td class="bad">$129</td><td class="bad">$124</td><td class="bad">$84</td><td class="bad">$62</td></tr>
+          <tr><td><span data-lang="zh">B-G431B-ESC1 驅動板</span><span data-lang="en">B-G431B-ESC1 driver</span></td><td>$19</td><td>$23</td><td>$19</td><td>$23</td></tr>
+          <tr><td><span data-lang="zh">AS5600 位置編碼器</span><span data-lang="en">AS5600 encoder</span></td><td>$3</td><td>$1</td><td>$3</td><td>$1</td></tr>
+          <tr><td><span data-lang="zh">軸承</span><span data-lang="en">Bearings</span></td><td>$23</td><td>$4</td><td>$18</td><td>$3</td></tr>
+          <tr><td><span data-lang="zh">螺絲扣件</span><span data-lang="en">Fasteners</span></td><td>$5</td><td>$1</td><td>$4</td><td>$1</td></tr>
+          <tr><td><span data-lang="zh">3D 列印件</span><span data-lang="en">3D-printed parts</span></td><td class="ok">$4</td><td class="ok">$1</td><td class="ok">$3</td><td class="ok">$1</td></tr>
+          <tr><td><span data-lang="zh">雜項(線材、接頭)</span><span data-lang="en">Misc (cables, connectors)</span></td><td>$5</td><td>$3</td><td>$5</td><td>$3</td></tr>
+          <tr class="tot"><td><span data-lang="zh">合計</span><span data-lang="en">Total</span></td><td>$188</td><td>$157</td><td>$136</td><td>$94</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">一眼可見:<mark class="m-result" data-t="RESULT/EVIDENCE">馬達佔 6512 成本的 69%,列印的減速器只佔約 2%</mark>。驅動板選 B-G431B-ESC1 而非 Moteus / ODrive / VESC,理由是<b>價格與 Mouser / Digikey 穩定供貨</b>。交期:現成件一週內到貨、列印一週、整機組裝約三天;壞掉的致動器可整顆抽換。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">At a glance: <mark class="m-result" data-t="RESULT/EVIDENCE">the motor is 69% of the 6512 cost; the printed reducer is about 2%</mark>. The B-G431B-ESC1 was picked over Moteus / ODrive / VESC for <b>price and steady supply at Mouser / Digikey</b>. Lead time: stock parts ship within a week, printing takes a week, the robot assembles in about three days; a broken actuator is swapped as a unit.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">為客製化而設計 + 評比指標</span><span data-lang="en">Designing for customization + the benchmark metric</span></h3>
+        <p data-lang="zh"><b>客製化</b>:每個關節是自帶減速器的致動器、無連桿,因此<mark class="m-method" data-t="METHOD/IDEA">改連桿長度只要換列印件或碳纖管</mark>(Fig. 5 成人尺寸 7-DoF 腿 + 靈巧手);髖關節三軸的順序與方向也能互換,方便在真機上比較不同髖部設計。致動器只需電源與 CAN,每條匯流排最多 64 個裝置,可重組成四足、雙足、半人馬、移動底盤(Fig. 6)。</p>
+        <p data-lang="en"><b>Customization</b>: each joint is a self-contained geared actuator with no linkages, so <mark class="m-method" data-t="METHOD/IDEA">changing link length means swapping a printed part or a carbon-fiber tube</mark> (Fig. 5: adult-size 7-DoF leg + dexterous hand); the order and orientation of the three hip axes can be swapped to compare hip designs on real hardware. Actuators need only power and CAN (up to 64 devices per bus), so they regroup into a quadruped, biped, centaur or mobile base (Fig. 6).</p>
+        <p data-lang="zh"><b>性能因子</b>:沿用 ToddlerBot (Shi et al.) 的指標並<b>按關節數正規化</b>——所有主動關節峰值扭矩的平均,再除以身高與體重:</p>
+        <p data-lang="en"><b>Performance factor</b>: adopted from ToddlerBot (Shi et al.) with one change, <b>normalizing by the number of joints</b>—the mean peak torque over all actuated joints, divided by height and weight:</p>
+        <div class="eq">$$\hat p=\frac{1}{N\,h\,mg}\sum_{i=1}^{N}\big|\tau_i^{\max}\big|,\qquad \varphi=\frac{\hat p}{\text{cost}}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(\hat p\) 無因次(Nm ÷ (m·N));\(\varphi\) 是「每塊錢的性能」。<span class="add">[導讀補充] 從 Fig. 3 讀出本機 \(\hat p\approx0.135\),以 \(h=0.8\) m、\(m=16\) kg 反推,平均峰值扭矩約 \(0.135\times0.8\times16\times9.81\approx17\) Nm。</span></p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(\hat p\) is dimensionless (Nm ÷ (m·N)); \(\varphi\) is "performance per dollar." <span class="add">[guide note] Reading \(\hat p\approx0.135\) off Fig. 3 and using \(h=0.8\) m, \(m=16\) kg, the mean peak joint torque is about \(0.135\times0.8\times16\times9.81\approx17\) Nm.</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">測試方法:自製測功機與五項致動器測試</span><span data-lang="en">Test methodology: a custom dyno and five actuator tests</span></h3>
+        <figure class="fig"><img src="figs/Chi2025/fig7_dyno.png" alt="Figure 7 dynamometer">
+          <figcaption data-lang="zh"><b>Fig.7</b> 效率測試台。左:<b>受測致動器</b>跑力矩控制,兩個 load cell 以力臂直接量反作用力矩;右:<b>阻尼致動器</b>跑速度控制,把轉速鎖在定值並吸收機械能;左下:<b>電功率量測板</b>記錄電壓電流。整台用鋁擠型 + 列印件搭成——測試設備本身也是「便宜可複製」的。</figcaption>
+          <figcaption data-lang="en"><b>Fig.7</b> The efficiency rig. Left: the <b>actuator under test</b> runs torque control while two load cells measure reaction torque on a lever; right: a <b>damping actuator</b> in velocity control holds a constant speed and absorbs the energy; bottom-left: an <b>electrical power board</b> logs voltage and current. The rig is built from aluminum extrusion and prints—the test equipment is itself cheap and reproducible.</figcaption></figure>
+        <p data-lang="zh">所有測試都<mark class="m-assume" data-t="ASSUMPTION/CLAIM">在與機器人上相同的條件下進行</mark>:24 V 供電、相同位置 PD 增益、相同位置/力矩/電流頻寬;結果另以現成 <b>Moteus</b> 控制器交叉驗證。兩種效率定義:</p>
+        <p data-lang="en">All tests run <mark class="m-assume" data-t="ASSUMPTION/CLAIM">under the same conditions as on the robot</mark>: 24 V supply, identical position PD gains, matching position/torque/current bandwidth; results are cross-checked against an off-the-shelf <b>Moteus</b> controller. Two efficiency definitions:</p>
+        <div class="eq">$$\eta_{\text{mech}}=\frac{\tau_{\text{meas}}\,\omega_{\text{meas}}}{\left|\tau_{\text{cmd}}\,\omega_{\text{cmd}}\right|},\qquad \eta_{\text{total}}=\frac{\tau_{\text{meas}}\,\omega_{\text{meas}}}{V\,I}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(\eta_{\text{mech}}\) 代表<b>擺線減速器</b>的效率;\(\eta_{\text{total}}\) 包含馬達銅損、驅動板電損與機械損失。每個力矩/轉速點維持 1 秒後才量,以去除暫態;測三種轉速 1、2、5 rad/s(對應機器人上的典型工作範圍)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(\eta_{\text{mech}}\) represents the <b>cycloidal reducer</b>; \(\eta_{\text{total}}\) includes motor copper loss, driver electrical loss and mechanical loss. Each torque/speed point is held 1 s before measuring to remove transients; three speeds are tested, 1, 2 and 5 rad/s (the robot's typical operating range).</p>
+        <table>
+          <tr><th><span data-lang="zh">測試</span><span data-lang="en">Test</span></th><th><span data-lang="zh">程序</span><span data-lang="en">Protocol</span></th></tr>
+          <tr><td><b><span data-lang="zh">傳動剛性</span><span data-lang="en">Transmission stiffness</span></b></td><td><span data-lang="zh">輸出軸剛性固定於外殼,指令力矩 0→20 Nm→0、正反兩向緩升,記錄馬達端位移;取 4–10 Nm 線性擬合,斜率倒數即剛性:\(k=\big(\partial\theta/\partial\tau\big)^{-1}\)。</span><span data-lang="en">Output locked to the housing; commanded torque ramped 0→20 Nm→0 in both directions while logging motor-side displacement; a linear fit over 4–10 Nm gives stiffness as the inverse slope: \(k=\big(\partial\theta/\partial\tau\big)^{-1}\).</span></td></tr>
+          <tr><td><b><span data-lang="zh">耐久</span><span data-lang="en">Durability</span></b></td><td><span data-lang="zh">60 小時反覆舉起單擺(0.5 kg、0.5 m),範圍 −45° 到 +90°、0.5 Hz;前 12 小時每小時、之後每 12 小時暫停量效率與背隙。</span><span data-lang="en">60 hours lifting a pendulum (0.5 kg, 0.5 m) from −45° to +90° at 0.5 Hz; paused hourly for the first 12 h, then every 12 h, to measure efficiency and backlash.</span></td></tr>
+          <tr><td><b><span data-lang="zh">跨單元一致性</span><span data-lang="en">Unit consistency</span></b></td><td><span data-lang="zh">2 台不同印表機(P1、P2)印出的 6 顆 6512,在 1 rad/s 下量效率與力矩追蹤誤差 \(e_\tau=\tau_{\text{meas}}-\tau_{\text{cmd}}\)。</span><span data-lang="en">Six 6512s printed on two printers (P1, P2): efficiency and torque-tracking error \(e_\tau=\tau_{\text{meas}}-\tau_{\text{cmd}}\) at 1 rad/s.</span></td></tr>
+          <tr><td><b><span data-lang="zh">位置精度</span><span data-lang="en">Position accuracy</span></b></td><td><span data-lang="zh">背隙是穩態位置誤差的主因 → 量 6 顆新印 6512 的背隙;系統級:5 顆組成 5-DoF 手臂,4 個目標各重複 100 次,以 SteamVR 追蹤末端。</span><span data-lang="en">Backlash dominates steady-state position error → measure backlash on six fresh 6512s; system level: five actuators form a 5-DoF arm, reaching 4 targets 100 times each, end effector tracked by SteamVR.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">控制:RL 行走與 VR 遙操作</span><span data-lang="en">Control: RL locomotion and VR teleoperation</span></h3>
+        <p data-lang="zh"><b>行走</b>:把任務寫成 POMDP,在 <b>Isaac Gym</b> 用標準 <b>PPO</b> 訓練 MLP 策略,<mark class="m-method" data-t="METHOD/IDEA">只用本體感覺</mark>、不額外做狀態估計:</p>
+        <p data-lang="en"><b>Locomotion</b>: framed as a POMDP and trained with standard <b>PPO</b> in <b>Isaac Gym</b>; the MLP policy <mark class="m-method" data-t="METHOD/IDEA">uses proprioception only</mark>, with no extra state estimation:</p>
+        <div class="eq">$$o_t=\big[\,\boldsymbol\omega^{b}_t,\ \mathbf g^{b}_t,\ \mathbf q_t,\ \dot{\mathbf q}_t,\ \mathbf v^{\text{cmd}}_t,\ \mathbf a_{t-1}\,\big],\qquad \mathbf a_t=\pi_\theta(o_t)=\mathbf q^{\text{des}}_t$$</div>
+        <p data-lang="zh">觀測依序是基座角速度、投影重力向量、關節位置與速度、使用者指令線速度、上一步動作;輸出是關節目標位置,交給致動器上的位置 PD 追蹤 <span class="add">[導讀補充] 常見形式 \(\tau_j=K_p(q^{\text{des}}_j-q_j)-K_d\,\dot q_j\);論文未寫出增益值</span>。策略在機上以 <b>25 Hz</b> 執行,通訊 250 Hz。PPO 的目標為 <span class="add">[導讀補充] 標準形式</span>:</p>
+        <p data-lang="en">Observations: base angular velocity, projected gravity, joint positions and velocities, the user's commanded linear velocity, and the previous action; the output is joint target positions tracked by the actuators' position PD <span class="add">[guide note] typically \(\tau_j=K_p(q^{\text{des}}_j-q_j)-K_d\,\dot q_j\); gains are not given</span>. The policy runs onboard at <b>25 Hz</b>; communication runs at 250 Hz. PPO optimizes <span class="add">[guide note] standard form</span>:</p>
+        <div class="eq">$$\max_\theta\ \mathbb E_t\Big[\min\big(r_t(\theta)\hat A_t,\ \operatorname{clip}\big(r_t(\theta),1-\epsilon,1+\epsilon\big)\hat A_t\big)\Big],\qquad r_t(\theta)=\frac{\pi_\theta(a_t\mid o_t)}{\pi_{\theta_{\text{old}}}(a_t\mid o_t)}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><mark class="m-limit" data-t="LIMITATION/FUTURE">論文沒有給 reward 設計、domain randomization、致動器模型或訓練時長</mark>——對一個主打「RL 研究平台」的工作,這些是重現 sim-to-real 最需要的資訊(可能在開源程式碼中)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><mark class="m-limit" data-t="LIMITATION/FUTURE">The paper gives no reward design, domain randomization, actuator model, or training time</mark>—exactly what one needs to reproduce sim-to-real on a platform pitched for RL research (they may live in the released code).</p>
+        <p data-lang="zh"><b>遙操作</b>:兩座 SteamVR 基站追蹤手把的全域位姿,兩種模式共用一條以 <b>Pink + Pinocchio</b> 為核心的 IK 管線。<b>Headless 模式</b>:手把在全域座標的位姿變化 → 機器人末端(第三人稱,像操作遊戲角色,可隨時 engage / disengage);<b>VR 模式</b>:手把在使用者局部座標的變化 → 機器人局部座標(第一人稱「身體擁有感」)。<span class="add">[導讀補充] Pink 是任務導向的微分 IK,每步解一個 QP:</span></p>
+        <p data-lang="en"><b>Teleoperation</b>: two SteamVR base stations track the controllers' global poses; two modes share one IK pipeline built on <b>Pink + Pinocchio</b>. <b>Headless mode</b>: controller pose changes in the global frame → robot end effector (third-person, like driving a game character; engage / disengage anytime). <b>VR mode</b>: controller changes in the user's local frame → the robot's local frame (first-person "body ownership"). <span class="add">[guide note] Pink is task-based differential IK solving a QP each step:</span></p>
+        <div class="eq">$$\min_{\Delta\mathbf q}\ \sum_k w_k\big\|J_k(\mathbf q)\,\Delta\mathbf q-\alpha\,e_k(\mathbf q)\big\|^2+\mu\|\Delta\mathbf q\|^2\quad\text{s.t. joint limits}$$</div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(i\)</td><td><span data-lang="zh">減速比(輸入轉速 ÷ 輸出轉速)。擺線單級 \(i=-Z_d\)。</span><span data-lang="en">Reduction ratio (input speed ÷ output speed). Single-stage cycloid: \(i=-Z_d\).</span></td></tr>
+          <tr><td>\(Z_p,\ Z_d\)</td><td><span data-lang="zh">固定針齒數、擺線盤凸瓣數(差 1)。</span><span data-lang="en">Number of fixed ring pins and disk lobes (differ by one).</span></td></tr>
+          <tr><td>\(J_{\text{refl}}=i^2J_m\)</td><td><span data-lang="zh">在輸出端「感覺到」的馬達慣量;越大越難反驅、撞擊越硬。</span><span data-lang="en">Motor inertia as felt at the output; larger means harder to backdrive and harsher impacts.</span></td></tr>
+          <tr><td>\(\eta_{\text{mech}},\ \eta_{\text{total}}\)</td><td><span data-lang="zh">減速器效率(量測機械功 ÷ 指令機械功);整體效率(量測機械功 ÷ 電功)。</span><span data-lang="en">Reducer efficiency (measured ÷ commanded mechanical power); overall efficiency (measured mechanical ÷ electrical power).</span></td></tr>
+          <tr><td>\(k\)</td><td><span data-lang="zh">傳動剛性 Nm/rad:每 rad 扭轉變形需要多少扭矩。</span><span data-lang="en">Transmission stiffness in Nm/rad: torque per radian of wind-up.</span></td></tr>
+          <tr><td>\(\delta_{\text{bl}}\)</td><td><span data-lang="zh">背隙:力矩換向時輸出端「空轉」的角度。</span><span data-lang="en">Backlash: the output's free-play angle when torque reverses.</span></td></tr>
+          <tr><td>\(\hat p,\ \varphi\)</td><td><span data-lang="zh">平均峰值扭矩 ÷(身高 × 體重);再 ÷ 價格。</span><span data-lang="en">Mean peak torque ÷ (height × weight); then ÷ price.</span></td></tr>
+          <tr><td>\(\mathbf g^{b}_t\)</td><td><span data-lang="zh">投影重力:重力方向在機身座標中的表示,代表身體傾斜。</span><span data-lang="en">Projected gravity: the gravity direction in the body frame, encoding body tilt.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">把「人形機器人致動器」拆成<b>可以買到的東西(馬達、驅動板、軸承)</b>+ <b>可以印出來的東西(減速器、外殼)</b>,再挑一種對「印出來的東西」最寬容的齒輪拓撲——擺線。</span>
+        <span data-lang="en">Split "humanoid actuator" into <b>things you can buy (motor, driver, bearings)</b> + <b>things you can print (reducer, housing)</b>, then choose the gear topology most forgiving of printed parts—the cycloid.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何 \(\eta_{\text{total}}\) 那麼低?</span><span data-lang="en">Why is \(\eta_{\text{total}}\) so low?</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 銅損 \(P_{\text{Cu}}\propto I^2\propto\tau^2\) 與轉速無關,機械輸出 \(\tau\omega\) 卻與轉速成正比:</span>
+        <span data-lang="en"><span class="add">[guide note]</span> Copper loss \(P_{\text{Cu}}\propto I^2\propto\tau^2\) is speed-independent while mechanical output \(\tau\omega\) scales with speed:</span>
+        <div class="eq">$$\eta_{\text{total}}\approx\frac{\tau\omega}{\tau\omega+c\,\tau^2+P_{\text{drv}}+P_{\text{gear}}}$$</div>
+        <span data-lang="zh">所以 1 rad/s 時整體效率只有約 0.2,5 rad/s 才到約 0.5——這是低速大扭矩工況的物理,不是減速器差。</span>
+        <span data-lang="en">Hence ~0.2 overall efficiency at 1 rad/s and ~0.5 only at 5 rad/s—the physics of low-speed, high-torque operation, not a bad reducer.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">\(\eta_{\text{mech}}\) 的分母用的是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「指令」力矩</mark>(由馬達電流模型推得),所以它同時吸收了馬達力矩常數的誤差;Fig. 8 低力矩處出現 \(&gt;1\) 的尖峰,就是這個定義的副作用。</span>
+        <span data-lang="en">\(\eta_{\text{mech}}\) divides by the <mark class="m-assume" data-t="ASSUMPTION/CLAIM">commanded torque</mark> (from the motor current model), so it also absorbs torque-constant error; the \(&gt;1\) spikes at low torque in Fig. 8 are a side effect of this definition.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">兩個時間尺度</span><span data-lang="en">Two time scales</span></span>
+        <span data-lang="zh">策略 25 Hz、CAN 250 Hz:每個動作約對應 10 個通訊週期,高頻穩定性交給致動器端的 PD 迴路。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">Policy at 25 Hz, CAN at 250 Hz: each action spans about 10 comm cycles, leaving high-rate stabilization to the actuator-side PD loop. <span class="add">[guide note]</span></span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">致動器特性總表</span><span data-lang="en">Actuator characterization at a glance</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">指標</span><span data-lang="en">Metric</span></th><th><span data-lang="zh">結果</span><span data-lang="en">Result</span></th><th><span data-lang="zh">對照 / 解讀</span><span data-lang="en">Reference / reading</span></th></tr>
+          <tr><td><span data-lang="zh">減速器機械效率</span><span data-lang="en">Reducer mech. efficiency</span></td><td class="win">≈ 90%</td><td><span data-lang="zh">多數工況;<mark class="m-limit" data-t="LIMITATION/FUTURE">高扭矩 × 高轉速下因發熱下降</mark>(5010 在 5 rad/s 超過約 5 Nm 後明顯下滑)。</span><span data-lang="en">Most operating points; <mark class="m-limit" data-t="LIMITATION/FUTURE">drops at high torque × speed due to heat</mark> (the 5010 at 5 rad/s falls off beyond about 5 Nm).</span></td></tr>
+          <tr><td><span data-lang="zh">整體效率(讀圖)</span><span data-lang="en">Total efficiency (read off plot)</span></td><td>≈ 0.2 / 0.35 / 0.5</td><td><span data-lang="zh">分別對應 1 / 2 / 5 rad/s(6512);與 [17, 36] 的趨勢一致。</span><span data-lang="en">At 1 / 2 / 5 rad/s respectively (6512); trend matches [17, 36].</span></td></tr>
+          <tr><td><span data-lang="zh">傳動剛性</span><span data-lang="en">Transmission stiffness</span></td><td>319.49 Nm/rad</td><td><span data-lang="zh">Roozing 的 PA-CF 列印擺線約 <b>1468 Nm/rad</b>;作者歸因於 PLA 強度較低。<span class="add">[導讀補充] 10 Nm 下約 0.031 rad ≈ 1.8° 扭轉</span></span><span data-lang="en">Roozing's PA-CF printed cycloid reached about <b>1468 Nm/rad</b>; attributed to PLA's lower strength. <span class="add">[guide note] about 0.031 rad ≈ 1.8° of wind-up at 10 Nm</span></span></td></tr>
+          <tr><td><span data-lang="zh">新品背隙(6 顆)</span><span data-lang="en">Fresh backlash (6 units)</span></td><td>max 0.0229 rad<br><small>\(\sigma=0.0042\) rad</small></td><td><span data-lang="zh">背隙被視為穩態位置誤差的主因。</span><span data-lang="en">Treated as the dominant source of steady-state position error.</span></td></tr>
+          <tr><td><span data-lang="zh">跨單元一致性</span><span data-lang="en">Unit consistency</span></td><td class="win">\(|e_\tau|\le 0.5\) Nm</td><td><span data-lang="zh">6 顆、2 台印表機,效率曲線重疊。</span><span data-lang="en">Six units, two printers; efficiency curves overlap.</span></td></tr>
+          <tr><td><span data-lang="zh">5-DoF 手臂重複定位</span><span data-lang="en">5-DoF arm repeatability</span></td><td>\(\sigma=3.433\) mm</td><td><span data-lang="zh">4 目標 × 100 次,SteamVR 量測。</span><span data-lang="en">4 targets × 100 reps, measured by SteamVR.</span></td></tr>
+          <tr><td><span data-lang="zh">60 小時耐久</span><span data-lang="en">60-hour durability</span></td><td><span data-lang="zh">完成,未報告失效</span><span data-lang="en">Completed, no failure reported</span></td><td><span data-lang="zh">背隙約 0.009 → 0.029 rad(讀圖);整體效率先降後回升。</span><span data-lang="en">Backlash about 0.009 → 0.029 rad (read off plot); total efficiency dips then recovers.</span></td></tr>
+        </table>
+      </div>
+
+      <figure class="fig"><img src="figs/Chi2025/fig8_efficiency.png" alt="Figure 8 efficiency">
+        <figcaption data-lang="zh"><b>Fig.8</b> 6512(上)與 5010(下)的效率。<b>實線</b>是減速器機械效率,大多落在 0.85–0.95;<b>虛線</b>是整體效率,轉速越高越好(1 rad/s ≈ 0.2,5 rad/s ≈ 0.5)。要注意:①低力矩處實線有 \(&gt;1\) 的尖峰(量測/定義雜訊);②<b>5010 在 5 rad/s 的紅線在 ~5 Nm 後一路掉到 ~0.35</b>,是小顆致動器在高功率點的發熱瓶頸;③縱軸標成「%」但實際是 0–1 的比例。</figcaption>
+        <figcaption data-lang="en"><b>Fig.8</b> Efficiency of the 6512 (top) and 5010 (bottom). <b>Solid</b> lines are reducer mechanical efficiency, mostly 0.85–0.95; <b>dashed</b> lines are total efficiency, which improves with speed (≈0.2 at 1 rad/s, ≈0.5 at 5 rad/s). Watch for: (1) solid-line spikes \(&gt;1\) at low torque (measurement/definition noise); (2) <b>the 5010's red 5 rad/s curve dropping to ~0.35 after ~5 Nm</b>, the small actuator's thermal bottleneck at high power; (3) the y-axis says "%" but is actually a 0–1 fraction.</figcaption></figure>
+
+      <figure class="fig"><img src="figs/Chi2025/fig10_durability.png" alt="Figure 10 durability">
+        <figcaption data-lang="zh"><b>Fig.10</b> 60 小時耐久測試(6512)。上:整體效率從 ~0.28 在前 5 小時掉到 ~0.17,之後在 ~0.19–0.2 停留到 24 小時,36 小時回到 ~0.27(與 Urs et al. 觀察一致,類似磨合)。下:<b>背隙從 ~0.009 rad 一路爬到 ~0.029 rad,約變為 3 倍</b>,且不單調(36 小時有回落)。論文說「稍微增加、仍在可接受範圍」——但沒定義可接受的門檻。</figcaption>
+        <figcaption data-lang="en"><b>Fig.10</b> The 60-hour durability test (6512). Top: total efficiency falls from ~0.28 to ~0.17 in the first 5 h, sits near 0.19–0.2 until 24 h, and returns to ~0.27 by 36 h (consistent with Urs et al.; like a break-in). Bottom: <b>backlash climbs from ~0.009 rad to ~0.029 rad, roughly tripling</b>, non-monotonically (it dips at 36 h). The paper calls this a slight increase "within acceptable limits," without defining the limit.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">成本表:整機 BOM(Tab. III)</span><span data-lang="en">Cost table: full-robot BOM (Tab. III)</span></h3>
+        <table class="num">
+          <tr><th><span data-lang="zh">項目</span><span data-lang="en">Item</span></th><th><span data-lang="zh">美國</span><span data-lang="en">US</span></th><th><span data-lang="zh">中國</span><span data-lang="en">China</span></th></tr>
+          <tr><td>Mini PC</td><td>$129</td><td>$223</td></tr>
+          <tr><td>USB-CAN <span data-lang="zh">轉接器 ×4</span><span data-lang="en">adapters ×4</span></td><td>$68</td><td>$43</td></tr>
+          <tr><td>USB Hub ×2</td><td>$36</td><td>$11</td></tr>
+          <tr><td>BNO085 IMU</td><td>$13</td><td>$12</td></tr>
+          <tr><td>6S LiPo <span data-lang="zh">電池</span><span data-lang="en">battery</span></td><td>$70</td><td>$81</td></tr>
+          <tr><td class="win">6512 <span data-lang="zh">致動器 ×10</span><span data-lang="en">actuators ×10</span></td><td class="win">$1,880</td><td class="win">$1,563</td></tr>
+          <tr><td class="win">5010 <span data-lang="zh">致動器 ×12</span><span data-lang="en">actuators ×12</span></td><td class="win">$1,632</td><td class="win">$1,130</td></tr>
+          <tr><td><span data-lang="zh">夾爪 ×2</span><span data-lang="en">Grippers ×2</span></td><td>$72</td><td>$44</td></tr>
+          <tr><td><span data-lang="zh">鋁擠型</span><span data-lang="en">Aluminum extrusions</span></td><td>$39</td><td>$3</td></tr>
+          <tr><td><span data-lang="zh">3D 列印件</span><span data-lang="en">3D-printed components</span></td><td>$200</td><td>$84</td></tr>
+          <tr><td><span data-lang="zh">雜項結構件</span><span data-lang="en">Misc. structural</span></td><td>$50</td><td>$14</td></tr>
+          <tr><td><span data-lang="zh">雜項電子件</span><span data-lang="en">Misc. electronic</span></td><td>$123</td><td>$28</td></tr>
+          <tr class="tot"><td><span data-lang="zh">合計</span><span data-lang="en">Total</span></td><td class="ok">$4,312</td><td class="ok">$3,236</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><mark class="m-result" data-t="RESULT/EVIDENCE">22 顆致動器佔美國 BOM 的 81%</mark>(\((1880+1632)/4312\))。<span class="add">[導讀補充] 這份 BOM 不含 3D 印表機、工具、失敗列印、組裝人力(約三天)與測試台;與商用機的「售價」比較時要記得口徑不同。</span></p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><mark class="m-result" data-t="RESULT/EVIDENCE">The 22 actuators are 81% of the US BOM</mark> (\((1880+1632)/4312\)). <span class="add">[guide note] The BOM excludes the 3D printer, tools, failed prints, assembly labor (~three days) and test rigs; when compared with commercial robots' selling prices, the accounting bases differ.</span></p>
+        <figure class="fig"><img src="figs/Chi2025/fig3_perf_cost.png" alt="Figure 3 performance vs cost">
+          <figcaption data-lang="zh"><b>Fig.3</b> 性能因子 \(\hat p\) vs 價格(橫軸對數且<b>由右往左變貴</b>;虛線是等 \(\varphi\) 曲線)。橘點「Ours」在最右(最便宜)、\(\hat p\approx0.135\)。值得注意:<span class="add">[導讀補充] 讀圖看,Ours 與 Berkeley Humanoid(\(\hat p\approx0.36\)、約 1 萬美元)大致落在<b>同一條 \(\varphi\approx0.03\)</b> 曲線上</span>——本機的優勢是「最便宜 + 完全開源」,而不是每塊錢的扭矩明顯更高;ToddlerBot、BRUCE、Poppy 則在相近價位但 \(\hat p\) 較低。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Performance factor \(\hat p\) vs cost (log x-axis, <b>getting more expensive to the left</b>; dashed lines are iso-\(\varphi\) curves). The orange "Ours" is at far right (cheapest) with \(\hat p\approx0.135\). Notice: <span class="add">[guide note] reading the plot, Ours and Berkeley Humanoid (\(\hat p\approx0.36\), about $10k) sit on roughly <b>the same \(\varphi\approx0.03\) curve</b></span>—the edge is "cheapest + fully open-source," not markedly more torque per dollar; ToddlerBot, BRUCE and Poppy cost about the same but have lower \(\hat p\).</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">設計選擇的證據解讀(代替消融)</span><span data-lang="en">Reading the evidence for design choices (in lieu of ablations)</span></h3>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">硬體論文沒有傳統消融;以下把「每個設計決定 → 有什麼證據 → 證明了什麼」攤開。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Hardware papers have no classic ablations; here is each design decision → its evidence → what it proves.</p>
+        <table>
+          <tr><th><span data-lang="zh">設計決定</span><span data-lang="en">Decision</span></th><th><span data-lang="zh">證據</span><span data-lang="en">Evidence</span></th><th><span data-lang="zh">能證明 / 不能證明</span><span data-lang="en">Proves / doesn't prove</span></th></tr>
+          <tr><td><b><span data-lang="zh">PLA 而非 PA-CF</span><span data-lang="en">PLA, not PA-CF</span></b></td><td>319 vs 1468 Nm/rad</td><td><span data-lang="zh">便宜好印的代價約 4.6× 剛性;但這是<mark class="m-limit" data-t="LIMITATION/FUTURE">跨研究比較,幾何不同</mark>,非受控對照。</span><span data-lang="en">Cheap, easy printing costs about 4.6× stiffness; but it is a <mark class="m-limit" data-t="LIMITATION/FUTURE">cross-study comparison with different geometry</mark>, not a controlled test.</span></td></tr>
+          <tr><td><b><span data-lang="zh">擺線而非行星</span><span data-lang="en">Cycloid, not planetary</span></b></td><td><span data-lang="zh">引用 [30]</span><span data-lang="en">Cites [30]</span></td><td><span data-lang="zh"><mark class="m-assume" data-t="ASSUMPTION/CLAIM">本文未做對照</mark>,是設計主張而非本文結果。</span><span data-lang="en"><mark class="m-assume" data-t="ASSUMPTION/CLAIM">No comparison in this paper</mark>; a design claim, not a result here.</span></td></tr>
+          <tr><td><b><span data-lang="zh">自製韌體 + 便宜驅動板</span><span data-lang="en">Custom firmware + cheap driver</span></b></td><td><span data-lang="zh">與 Moteus 交叉驗證</span><span data-lang="en">Cross-validated with Moteus</span></td><td><span data-lang="zh">量測不因驅動板而偏;但<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有並列的數字</mark>。</span><span data-lang="en">Measurements are not driver-biased; but <mark class="m-limit" data-t="LIMITATION/FUTURE">no side-by-side numbers are shown</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">FDM 可重現</span><span data-lang="en">FDM reproducibility</span></b></td><td><span data-lang="zh">6 顆 / 2 台印表機</span><span data-lang="en">6 units / 2 printers</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">製造變異小</mark>;但印表機型號、切片參數、操作者未報告,樣本仍小。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Low fabrication variance</mark>; printer models, slicer settings and operator are unreported, and the sample is small.</span></td></tr>
+          <tr><td><b><span data-lang="zh">黃銅六角柱、貫穿螺絲</span><span data-lang="en">Brass standoff, through-screws</span></b></td><td>—</td><td><span data-lang="zh">無消融,效果未量化。</span><span data-lang="en">No ablation; effect unquantified.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">系統展示:行走、遙操作、其他型態</span><span data-lang="en">System demos: walking, teleoperation, other forms</span></h3>
+        <figure class="fig"><img src="figs/Chi2025/fig14_walking.png" alt="Figure 14 walking">
+          <figcaption data-lang="zh"><b>Fig.14</b> 雙足型態以 RL 策略向前行走、追蹤使用者速度指令。仔細看:①這是<b>只有雙腿 + 軀幹框架</b>的配置,沒有手臂;②軀幹上方有線材往上延伸 <span class="add">[導讀補充] 看似供電/安全繩</span>,旁邊有人跟走;③場地是平坦人工草皮。這是可信的零樣本 sim-to-real 證據,但只是定性快照。</figcaption>
+          <figcaption data-lang="en"><b>Fig.14</b> The biped configuration walking forward under the RL policy, tracking a user velocity command. Look closely: (1) this is a <b>legs + torso-frame</b> configuration with no arms; (2) cables run upward from the torso <span class="add">[guide note] apparently power and/or a safety line</span>, with a person walking alongside; (3) the ground is flat artificial turf. Credible zero-shot sim-to-real evidence, but only qualitative snapshots.</figcaption></figure>
+        <table>
+          <tr><th><span data-lang="zh">展示</span><span data-lang="en">Demo</span></th><th><span data-lang="zh">展示了什麼</span><span data-lang="en">What is shown</span></th><th><span data-lang="zh">有無量化</span><span data-lang="en">Quantified?</span></th></tr>
+          <tr><td><b><span data-lang="zh">RL 行走</span><span data-lang="en">RL walking</span></b></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">Isaac Gym → 實機零樣本</mark>,不需額外狀態估計;只用到<mark class="m-result" data-t="RESULT/EVIDENCE">致動器力矩上限的 30%</mark>。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Isaac Gym → hardware zero-shot</mark>, no extra state estimation; used only <mark class="m-result" data-t="RESULT/EVIDENCE">30% of the actuator torque limit</mark>.</span></td><td class="bad"><span data-lang="zh">無速度誤差、最高速、行走時長或跌倒率</span><span data-lang="en">No velocity error, top speed, duration or fall rate</span></td></tr>
+          <tr><td><b><span data-lang="zh">雙臂遙操作</span><span data-lang="en">Bimanual teleop</span></b></td><td><span data-lang="zh">寫字、拆裝箱、夾放積木、轉魔術方塊(Fig. 15)。</span><span data-lang="en">Writing, unpacking/packing a box, pick-and-place blocks, solving a Rubik's cube (Fig. 15).</span></td><td class="bad"><span data-lang="zh">無成功率或耗時</span><span data-lang="en">No success rate or time</span></td></tr>
+          <tr><td><b><span data-lang="zh">其他型態</span><span data-lang="en">Other morphologies</span></b></td><td><span data-lang="zh">四足、半人馬、移動底盤(Fig. 6)、成人尺寸(Fig. 5)。</span><span data-lang="en">Quadruped, centaur, mobile base (Fig. 6), adult-size (Fig. 5).</span></td><td class="bad"><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">圖為 CAD 渲染</mark>,未見實機測試</span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">Figures are CAD renders</mark>; no hardware tests shown</span></td></tr>
+          <tr><td><b><span data-lang="zh">教學 / 動畫角色</span><span data-lang="en">Teaching / animatronics</span></b></td><td><span data-lang="zh">6512 已用於 UC Berkeley MECENG 102B 示範擺線原理;加裝動漫頭部(Fig. 16)。</span><span data-lang="en">The 6512 is used in UC Berkeley MECENG 102B to teach cycloidal drives; an anime-style head is fitted (Fig. 16).</span></td><td><span data-lang="zh">應用展望</span><span data-lang="en">Application outlook</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><b>這些實驗證明了什麼、沒證明什麼:</b>證明了<mark class="m-result" data-t="RESULT/EVIDENCE">列印擺線致動器在中等負載下效率高、可量產一致,且足以支撐 RL 行走與桌面操作</mark>;沒證明<mark class="m-limit" data-t="LIMITATION/FUTURE">高負載/衝擊/跌倒下的壽命、長時間發熱下的強度、動態運動(跑、跳、抗推)的能力</mark>,也沒有第三方建造成功的證據。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><b>What the experiments do and don't prove:</b> they show <mark class="m-result" data-t="RESULT/EVIDENCE">printed cycloidal actuators are efficient at moderate load, consistent across builds, and sufficient for RL walking and tabletop manipulation</mark>; they don't show <mark class="m-limit" data-t="LIMITATION/FUTURE">lifetime under high load, impacts or falls, strength under sustained heating, or dynamic skills (running, jumping, push recovery)</mark>, and there is no evidence of a third-party build.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">列印的 PLA 擺線減速器<b>機械效率 ~90%、6 顆之間一致、跑 60 小時沒壞</b>,整機 4,312 美元還能零樣本 sim-to-real 行走——「夠用」這個主張被支撐住了;「耐用」只在輕負載下被支撐。</span>
+        <span data-lang="en">The printed PLA cycloid reaches <b>~90% mechanical efficiency, is consistent across six units, and survived 60 hours</b>; a $4,312 robot walks zero-shot from simulation—"good enough" is supported; "durable" is supported only under light load.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">兩個 90% 的誤讀</span><span data-lang="en">Misreading the 90%</span></div>
+        <span data-lang="zh">90% 是<b>減速器</b>效率;整個致動器從電到機械只有約 20–50%。做能耗或續航估算時,要用 \(\eta_{\text{total}}\),不是 \(\eta_{\text{mech}}\)。</span>
+        <span data-lang="en">90% is the <b>reducer's</b> efficiency; the whole actuator, electrical-to-mechanical, is only about 20–50%. For energy or runtime estimates, use \(\eta_{\text{total}}\), not \(\eta_{\text{mech}}\).</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">背隙換算成毫米</span><span data-lang="en">Backlash in millimeters</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 以 0.16 m 的肢段估算:新品最大 0.0229 rad → 末端約 3.7 mm;60 小時後 ~0.029 rad → 約 4.6 mm(單一關節)。對寫字、轉魔術方塊已足夠,但對精細組裝或精確落腳需要靠閉迴路補償。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> Over a 0.16 m link: fresh max 0.0229 rad → about 3.7 mm at the tip; ~0.029 rad after 60 h → about 4.6 mm (single joint). Fine for writing and Rubik's cubes, but precise assembly or footstep placement would need closed-loop compensation.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">耐久負載</span><span data-lang="en">durability load</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">性能天花板</span><span data-lang="en">perf. ceiling</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">展示的分量</span><span data-lang="en">demo weight</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>耐久測試的負載太輕。</b> 0.5 kg、0.5 m 單擺的最大重力矩只有 \(mgl=0.5\times9.81\times0.5\approx2.45\) Nm <span class="add">[導讀補充]</span>,約為效率/剛性測試範圍(20 Nm)的 12%;即使加上加速度項也大約只有數 Nm。60 小時 × 0.5 Hz ≈ <b>10.8 萬次循環</b>,只測<mark class="m-limit" data-t="LIMITATION/FUTURE">單一顆、無衝擊、無跌倒、無破壞極限</mark>。對「列印件會不會壞」這個核心疑慮,這是起點而非定論。</li>
+          <li data-lang="en"><b>The durability load is light.</b> A 0.5 kg pendulum at 0.5 m peaks at \(mgl=0.5\times9.81\times0.5\approx2.45\) Nm of gravity torque <span class="add">[guide note]</span>, about 12% of the 20 Nm efficiency/stiffness test range; even adding inertial torque it stays at a few Nm. 60 h × 0.5 Hz ≈ <b>108k cycles</b>, on <mark class="m-limit" data-t="LIMITATION/FUTURE">one unit, with no impacts, no falls, and no test to failure</mark>. For the central worry, "will printed parts break," this is a starting point, not a verdict.</li>
+          <li data-lang="zh"><b>「稍微增加」的背隙其實約變成 3 倍。</b> Fig. 10 背隙約 0.009 → 0.029 rad,且最終值已超過新品 6 顆中的最大值(0.0229 rad)。論文<mark class="m-assume" data-t="ASSUMPTION/CLAIM">沒有定義「可接受」的門檻</mark>,也沒說明背隙的量測程序(施加多少換向力矩)。</li>
+          <li data-lang="en"><b>The "slight" backlash increase is roughly 3×.</b> Fig. 10 goes from ~0.009 to ~0.029 rad, ending above the worst of the six fresh units (0.0229 rad). The paper <mark class="m-assume" data-t="ASSUMPTION/CLAIM">never defines the "acceptable" threshold</mark>, nor the backlash measurement procedure (what reversal torque was applied).</li>
+          <li data-lang="zh"><b>熱效應是 PLA 的阿基里斯腱,而論文自己承認沒研究。</b> <span class="add">[導讀補充] PLA 的玻璃轉化溫度約 55–65 °C</span>,馬達外殼與減速器緊鄰,Fig. 8 在高扭矩高速下的效率下滑本身就是發熱的訊號。熱—強度的交互作用對長時間行走最關鍵,卻被放在 Limitations 一句帶過。</li>
+          <li data-lang="en"><b>Heat is PLA's Achilles heel, and the paper admits it was not studied.</b> <span class="add">[guide note] PLA's glass transition is around 55–65 °C</span>, the reducer sits right against the motor, and the efficiency drop at high torque and speed in Fig. 8 is itself a heat signal. The heat–strength interaction matters most for long walking sessions, yet it gets one sentence in Limitations.</li>
+          <li data-lang="zh"><b>「Accessible」怎麼量?</b> 量的是 BOM 價格、供應商、交期與組裝天數,全由作者自評;<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有第三方複製、沒有新手組裝時間、沒有失敗率</mark>。BOM 不含印表機、工具、人力與測試設備;Fig. 3 拿本機的 BOM 與商用機的售價(含研發、利潤、保固)比,口徑不一致。</li>
+          <li data-lang="en"><b>How is "accessible" measured?</b> By BOM price, vendors, lead time and assembly days—all self-assessed; <mark class="m-limit" data-t="LIMITATION/FUTURE">no third-party replication, no novice build time, no failure rate</mark>. The BOM leaves out the printer, tools, labor and test rigs, and Fig. 3 compares this robot's BOM with commercial robots' selling prices (which include R&amp;D, margin, warranty)—not the same basis.</li>
+          <li data-lang="zh"><b>\(\hat p\) 這把尺偏好什麼?</b> 只看<b>峰值扭矩</b>,忽略速度、功率、力矩頻寬、扭矩密度(Nm/kg)、剛性與壽命——恰好是列印擺線最弱的幾項。而按圖,本機與 Berkeley Humanoid 的 \(\varphi\) 相近,所以「性價比」的優勢主要來自「便宜」本身。</li>
+          <li data-lang="en"><b>What does the \(\hat p\) yardstick favor?</b> Only <b>peak torque</b>; it ignores speed, power, torque bandwidth, torque density (Nm/kg), stiffness and lifetime—exactly where printed cycloids are weakest. And per the plot, this robot's \(\varphi\) is close to Berkeley Humanoid's, so the "cost-effectiveness" edge mostly comes from being cheap.</li>
+          <li data-lang="zh"><b>性能天花板 vs 金屬致動器。</b> \(\hat p\approx0.135\) vs Berkeley Humanoid 約 0.36;剛性 319 Nm/rad;效率測試最高只到 5 rad/s(約 48 rpm)。<mark class="m-limit" data-t="LIMITATION/FUTURE">論文沒報告減速比、致動器重量、扭矩密度、最高轉速或力矩頻寬</mark>——這些正是判斷能否做動態運動、能否反驅的關鍵,也是 RL 建模致動器所需。</li>
+          <li data-lang="en"><b>Performance ceiling vs metal actuators.</b> \(\hat p\approx0.135\) vs about 0.36 for Berkeley Humanoid; stiffness 319 Nm/rad; efficiency tested only up to 5 rad/s (~48 rpm). <mark class="m-limit" data-t="LIMITATION/FUTURE">The paper reports no reduction ratio, actuator mass, torque density, top speed or torque bandwidth</mark>—precisely what decides dynamic capability and backdrivability, and what RL actuator modeling needs.</li>
+          <li data-lang="zh"><b>展示能證明的有限。</b> 行走是<b>無手臂的雙足配置</b>、平地、有線材、有人跟,只有快照;「只用 30% 力矩上限 → 可撐更大的機器人」<mark class="m-assume" data-t="ASSUMPTION/CLAIM">是外推</mark>,沒附力矩曲線,且成人尺寸版本只有 CAD。全身控制(邊走邊操作)<b>沒有展示</b>,儘管貢獻 (2) 寫的是「locomotion and whole-body control tasks」。</li>
+          <li data-lang="en"><b>The demos prove less than they suggest.</b> Walking uses the <b>armless biped configuration</b>, on flat ground, with cables and a spotter, shown as snapshots; "used only 30% of the torque limit → could support a larger robot" <mark class="m-assume" data-t="ASSUMPTION/CLAIM">is an extrapolation</mark> with no torque traces, and the adult-size version exists only in CAD. Whole-body control (walking while manipulating) is <b>not shown</b>, even though contribution (2) says "locomotion and whole-body control tasks."</li>
+          <li data-lang="zh"><b>利益揭露</b>:作者之一與 RAI Institute 有財務關係並在致謝中揭露。對開源平台論文影響不大,但值得知道。</li>
+          <li data-lang="en"><b>Disclosure</b>: one author has a financial interest in the Robotics and AI Institute, disclosed in the acknowledgments. Minor for an open-source platform paper, but worth knowing.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>Q1 耐久負載</b>:在機器人實際步態的力矩譜(含觸地衝擊)下跑 60 小時,背隙與效率會怎樣?擺線盤或輸出銷最先在哪裡失效?</li>
+          <li data-lang="en"><b>Q1 Durability load</b>: run 60 hours under the robot's real gait torque profile (with touchdown impacts)—what happens to backlash and efficiency? Where do the disk or output pins fail first?</li>
+          <li data-lang="zh"><b>Q2 熱</b>:連續行走 30 分鐘(一顆電池)後,減速器溫度多少?剛性與背隙隨溫度如何漂移?</li>
+          <li data-lang="en"><b>Q2 Heat</b>: after 30 minutes of continuous walking (one battery), how hot is the reducer, and how do stiffness and backlash drift with temperature?</li>
+          <li data-lang="zh"><b>Q3 Accessibility</b>:若請一組沒參與設計的學生照文件組一台,需要多少時間、印壞多少件、總花費多少?這個數字比 BOM 更能代表「accessible」。</li>
+          <li data-lang="en"><b>Q3 Accessibility</b>: if a student team uninvolved in the design built one from the docs, how long would it take, how many prints would fail, and what would it cost in total? That number says more about "accessible" than the BOM.</li>
+          <li data-lang="zh"><b>Q4 天花板</b>:同一設計換 PA-CF 或 PETG,剛性能回到多少、成本與可列印性付出多少?跑、跳、抗推需要的扭矩與速度,這個致動器差多遠?</li>
+          <li data-lang="en"><b>Q4 Ceiling</b>: printed in PA-CF or PETG, how much stiffness comes back, at what cost in price and printability? How far is this actuator from the torque and speed needed for running, jumping and push recovery?</li>
+          <li data-lang="zh"><b>Q5 sim-to-real 的功臣</b>:零樣本成功是因為致動器夠「理想」,還是因為訓練時做了大量背隙/摩擦隨機化?換一套不含致動器隨機化的訓練,還能直接上機嗎?</li>
+          <li data-lang="en"><b>Q5 What made sim-to-real work</b>: is zero-shot success due to the actuators being "ideal enough," or to heavy backlash/friction randomization in training? Without actuator randomization, would the policy still transfer?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把「通過 60 小時耐久測試」讀成「<b>列印致動器已和金屬一樣可靠</b>」。實際上測的是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">約 2.5 Nm 等級的平順單擺負載、單一樣本</mark>,背隙還變成 3 倍。正確讀法:在中低負載、無衝擊下,PLA 擺線可撐住研究用的工作時數;超出這個範圍仍待驗證。</span>
+        <span data-lang="en">Reading "passed a 60-hour durability test" as "<b>printed actuators are now as reliable as metal</b>." What was tested is a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">smooth pendulum load around 2.5 Nm, on one unit</mark>, and backlash still tripled. The right reading: under low-to-moderate, impact-free load, PLA cycloids survive research-scale hours; beyond that is unverified.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">美中兩地的逐項 BOM、跨印表機一致性測試、與 Moteus 交叉驗證、把測試台與 \(\eta_{\text{mech}}/\eta_{\text{total}}\) 分開報告、並完整開源硬體/韌體/訓練框架——這種<b>透明度</b>在硬體論文中少見,也讓上面的質疑都能被社群自己驗證。</span>
+        <span data-lang="en">Itemized BOMs for two markets, a cross-printer consistency test, Moteus cross-validation, separate \(\eta_{\text{mech}}/\eta_{\text{total}}\) reporting, and fully open hardware/firmware/training code—this <b>transparency</b> is rare in hardware papers, and it lets the community check every critique above for itself.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">小瑕疵</span><span data-lang="en">Small slips</span></span>
+        <span data-lang="zh">Fig. 9 圖說把剛性單位寫成「319 N m」(應為 Nm/rad);Fig. 8/10/11 縱軸標「%」但數值是 0–1;Sec. V 開頭把平台寫成「Berkeley-Humanoid」。不影響結論,但讀圖時要小心。</span>
+        <span data-lang="en">Fig. 9's caption gives stiffness as "319 N m" (should be Nm/rad); Figs. 8/10/11 label the y-axis "%" though values are 0–1; Sec. V opens with "Berkeley-Humanoid." None changes the conclusions, but read the plots carefully.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>想要一台能跑 RL 的人形真機但沒預算/加工廠</b>:這是目前門檻最低、文件最完整的選項之一;把它當「演算法驗證平台」,別期待高動態性能。訓練時建議把<b>背隙、剛性與溫度漂移</b>放進致動器模型或隨機化。</li>
+          <li data-lang="en"><b>Need a real humanoid for RL but lack budget or a machine shop</b>: this is one of the lowest-barrier, best-documented options; treat it as an "algorithm validation platform," not a high-dynamic machine. Model or randomize <b>backlash, stiffness and thermal drift</b> in training.</li>
+          <li data-lang="zh"><b>做致動器設計</b>:「讓拓撲配合製程」是可遷移的原則;擺線 + FDM 的組合適合一級中高減速比的塑膠致動器。若需要更高剛性,PA-CF(Roozing)是已知的升級路線。</li>
+          <li data-lang="en"><b>Designing actuators</b>: "match topology to process" transfers; cycloid + FDM suits single-stage, moderate-to-high-ratio plastic actuators. For more stiffness, PA-CF (Roozing) is the known upgrade path.</li>
+          <li data-lang="zh"><b>做致動器測試(Motor Dyno)</b>:直接借用這套流程——受測端力矩模式 + 阻尼端速度模式 + load cell + 電功率板;分開報 \(\eta_{\text{mech}}\) 與 \(\eta_{\text{total}}\);剛性用正反雙向緩升取線性段;耐久測試中途定期回測效率與背隙;跨印表機/跨樣本一致性。<b>但請用實際步態力矩譜當耐久負載。</b></li>
+          <li data-lang="en"><b>Testing actuators (motor dyno)</b>: borrow this protocol—torque-mode device under test + velocity-mode damper + load cells + power board; report \(\eta_{\text{mech}}\) and \(\eta_{\text{total}}\) separately; ramp stiffness both ways and fit the linear segment; re-measure efficiency and backlash periodically during durability runs; check cross-printer / cross-sample consistency. <b>But use a real gait torque profile as the durability load.</b></li>
+          <li data-lang="zh"><b>做平台論文</b>:本文示範了「性能/成本」的量化框架(\(\hat p,\varphi\))與兩地 BOM 的寫法;同時也提醒你,自訂指標要說明它忽略了什麼。</li>
+          <li data-lang="en"><b>Writing a platform paper</b>: it models a performance-per-cost framing (\(\hat p,\varphi\)) and two-market BOMs; it also reminds you to state what a custom metric leaves out.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">和相關工作的關係</span><span data-lang="en">Relation to related work</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">相關工作</span><span data-lang="en">Related work</span></th><th><span data-lang="zh">關係</span><span data-lang="en">Relation</span></th></tr>
+          <tr><td><b>Berkeley Humanoid</b><br><small>Liao et al. 2024</small></td><td><span data-lang="zh">同實驗室(Hybrid Robotics,共同作者 Liao、Huang、Li、Sreenath)的前作,高性能、面向學習型控制;<span class="add">[導讀補充] 以金屬加工件與行星式致動器為主</span>。Fig. 3 中 \(\hat p\approx0.36\) 遠高於 Lite 的 0.135。Lite 是它的「平民版」:用約 2.7 倍低的 \(\hat p\) 換到不到一半的成本、可在家列印。</span><span data-lang="en">The same lab's predecessor (Hybrid Robotics; co-authors Liao, Huang, Li, Sreenath), high-performance and aimed at learning-based control; <span class="add">[guide note] built mainly from machined metal with planetary-type actuators</span>. In Fig. 3 its \(\hat p\approx0.36\) is far above Lite's 0.135. Lite is its "people's edition": about 2.7× lower \(\hat p\) in exchange for less than half the cost and home printability.</span></td></tr>
+          <tr><td><b>Stanford Doggo</b><br><small>Kau et al. 2019</small></td><td><span data-lang="zh">同為「低成本、完全開源、現成馬達 + ODrive」的精神前輩。Doggo 走<b>低減速比皮帶 QDD + 五連桿</b>,追求跳躍爆發力;Lite 走<b>中高減速比擺線 + 每關節獨立模組</b>,追求可重組與高自由度。本文明確批評 Doggo「減速比低、缺乏模組化」。</span><span data-lang="en">A spiritual predecessor: low cost, fully open, stock motors + ODrive. Doggo uses <b>low-ratio belt QDD + five-bar legs</b> for jumping power; Lite uses <b>higher-ratio cycloids with a self-contained module per joint</b> for reconfigurability and many DoF. This paper explicitly calls Doggo "low gear ratio and lacks modularity."</span></td></tr>
+          <tr><td><b>Roozing &amp; Roozing</b><br><small>IROS 2022 · ICRA 2024</small></td><td><span data-lang="zh">列印擺線的直接技術來源:可 FDM 列印的低減速比擺線、pinwheel vs 非 pinwheel 實驗比較;其 PA-CF 版本剛性 1468 Nm/rad 是本文剛性的對照基準。</span><span data-lang="en">The direct technical source for printed cycloids: FDM-printable low-reduction cycloids and a pinwheel vs non-pinwheel comparison; their PA-CF stiffness of 1468 Nm/rad is this paper's stiffness reference.</span></td></tr>
+          <tr><td><b>Urs et al. 2022</b></td><td><span data-lang="zh">列印「行星」致動器 + Moteus(需樹脂印表機);效率隨磨合先降後升的現象與本文一致。</span><span data-lang="en">A printed <i>planetary</i> actuator + Moteus (needs a resin printer); its efficiency dip-then-recovery during break-in matches this paper.</span></td></tr>
+          <tr><td><b>ToddlerBot</b><br><small>Shi et al. 2025</small></td><td><span data-lang="zh">性能因子指標的來源;同為低成本開源人形,但用伺服馬達。</span><span data-lang="en">Source of the performance-factor metric; also a low-cost open-source humanoid, but servo-based.</span></td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「可反驅的人形機器人能在 5,000 美元內用桌上型印表機做出來」</span><span data-lang="en">"A backdrivable humanoid can be built for under $5,000 with a desktop printer"</span></td><td><span data-lang="zh">Tab. III 的 BOM 與開源資源。</span><span data-lang="en">The Tab. III BOM and open resources.</span></td></tr>
+          <tr><td><span data-lang="zh">「FDM 列印 PLA 擺線減速器的效率/剛性/背隙數據」</span><span data-lang="en">"Efficiency/stiffness/backlash data for FDM PLA cycloidal reducers"</span></td><td><span data-lang="zh">~90% 機械效率、319.49 Nm/rad、0.0229 rad、60 h 耐久。</span><span data-lang="en">~90% mechanical efficiency, 319.49 Nm/rad, 0.0229 rad, 60 h durability.</span></td></tr>
+          <tr><td><span data-lang="zh">「低成本致動器足以零樣本 sim-to-real 行走」</span><span data-lang="en">"Low-cost actuators suffice for zero-shot sim-to-real walking"</span></td><td><span data-lang="zh">作為定性證據(注意無量化指標)。</span><span data-lang="en">As qualitative evidence (note: no quantitative metrics).</span></td></tr>
+          <tr><td><span data-lang="zh">「機器人性價比的量化指標」</span><span data-lang="en">"A quantitative performance-per-cost metric for robots"</span></td><td><span data-lang="zh">式 (1)(2) 及 Fig. 3(並註明其只看峰值扭矩)。</span><span data-lang="en">Eqs. (1)(2) and Fig. 3 (noting it only counts peak torque).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">Berkeley Humanoid Lite 證明了「<b>選對齒輪拓撲,PLA 也能做人形機器人的關節</b>」:列印擺線減速器讓 22 個關節的整機壓到 4,312 美元,效率與一致性都經測功機驗證,並能零樣本 sim-to-real 行走。它是降低門檻的研究/教學平台,而非高動態硬體;耐久、發熱與動態極限,仍等社群用它自己的開源設計去驗證。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">Berkeley Humanoid Lite shows that "<b>with the right gear topology, PLA can make humanoid joints</b>": printed cycloidal reducers bring a 22-joint robot down to $4,312, with efficiency and consistency verified on a dyno and zero-shot sim-to-real walking. It is a barrier-lowering research and teaching platform, not high-dynamic hardware; durability, heat and dynamic limits remain for the community to test with its own open-source design.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Berkeley Humanoid (2024)</span>
+          <a class="chip" href="Kau2019_StanfordDoggo.html">Stanford Doggo (2019) →</a>
+          <span class="chip">Roozing &amp; Roozing (2022, 2024)</span>
+          <span class="chip">Urs et al. (2022)</span>
+          <span class="chip">ToddlerBot (2025)</span>
+          <span class="chip">Katz (2018)</span>
+          <span class="chip">ODRI / Solo (2020)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論或讀圖估計,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences or plot readings; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Chi et al. 2025 (Berkeley Humanoid Lite) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Berkeley Humanoid Lite reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

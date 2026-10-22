@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>PEA Co-Design (ANYmal) — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Learning-based Design and Control for Quadrupedal Robots with Parallel-Elastic Actuators","authors":"Filip Bjelonic, Joonho Lee, Philip Arm, Dhionis Sako, Davide Tateo, Jan Peters, Marco Hutter","year":"2023","venue":"IEEE RA-L","tags":["Legged Robotics","Co-Design","Reinforcement Learning","Parallel Elastic Actuator","Energy Efficiency","Bayesian Optimization","Quadruped","Sim-to-Real"],"tldr":"先用 RL 訓練一個「看得到設計參數」的 design-conditioned policy 涵蓋整個膝關節並聯彈簧設計空間,再凍結 policy、以 Bayesian Optimization(HEBO)在模擬中搜尋橢圓凸輪與彈簧平衡角;做出的並聯彈性膝 ANYmal(AoPS)實機上 torque-square 成本降 33%、最大關節力矩降 30%、續航多 11%,追蹤性能不變。","tldr_en":"Trains one design-conditioned RL policy over the whole space of parallel-elastic knee designs, then freezes it and runs Bayesian Optimization (HEBO) in simulation to pick the elliptic-cam spring parameters; the resulting ANYmal with parallel-elastic knees (AoPS) cuts the torque-squared cost by 33%, peak joint torque by 30%, and runs 11% longer per battery, with unchanged tracking."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:88px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">在 ANYmal 的膝關節加一條<b>並聯彈簧</b>(spring-wire + 橢圓凸輪),它能不能在<b>動態行走</b>中真的省力?作者先用 RL 訓練一個<mark class="m-method" data-t="METHOD/IDEA">看得到設計參數的 design-conditioned policy</mark>,覆蓋整個彈簧設計空間;再凍結 policy,用 <mark class="m-method" data-t="METHOD/IDEA">Bayesian Optimization(HEBO)</mark> 在模擬裡挑出最佳凸輪形狀與彈簧平衡角。造出來的實機(AoPS)<mark class="m-result" data-t="RESULT/EVIDENCE">torque-square 成本降 33%、最大關節力矩降 30%、同一顆電池多走 11%</mark>,且追蹤性能不打折。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Add a <b>parallel spring</b> (spring-wire + elliptic cam) to ANYmal's knees—does it actually save effort during <b>dynamic walking</b>? The authors first train, with RL, a <mark class="m-method" data-t="METHOD/IDEA">design-conditioned policy that observes the design parameters</mark> and covers the whole spring design space; then they freeze it and use <mark class="m-method" data-t="METHOD/IDEA">Bayesian Optimization (HEBO)</mark> in simulation to pick the best cam shape and spring equilibrium angle. The built robot (AoPS) <mark class="m-result" data-t="RESULT/EVIDENCE">cuts the torque-squared cost by 33%, peak joint torque by 30%, and walks 11% farther on one battery</mark>, with no loss in tracking.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Bjelonic2023/fig7_hardware.png" alt="Figure 7 spring-wire hardware">
+        <figcaption data-lang="zh"><b>Fig.7</b> 實際裝在 ANYmal 膝上的 PEA。綠字對應右側零件:(b) 髖端錨點、(c) 橢圓凸輪(固定在小腿上)、(d) 鋼索、(e) 拉伸彈簧。注意它<b>只有「拉」的方向</b>——每個膝只用一條 tension spring,鋼索繞過凸輪把彈簧力轉成膝關節力矩。整套機構很「土法煉鋼」,這正是後面 sim-to-real 要靠隨機化來吸收製造誤差的原因。</figcaption>
+        <figcaption data-lang="en"><b>Fig.7</b> The PEA as actually mounted on ANYmal's knee. Green letters map to the parts on the right: (b) hip-side anchor, (c) elliptic cam (fixed to the shank), (d) wire, (e) tension spring. Note it <b>only pulls</b>—one tension spring per knee, the wire wraps over the cam and turns spring force into knee torque. The mechanism is quite low-tech, which is exactly why sim-to-real later relies on randomization to absorb manufacturing error.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 並聯彈性致動器(PEA)理論上能分擔馬達力矩、減少發熱,但<mark class="m-problem" data-t="PROBLEM/GAP">彈簧多半憑直覺/仿生設計</mark>;而且「好不好」取決於控制器怎麼利用它——設計與控制<mark class="m-problem" data-t="PROBLEM/GAP">雞生蛋、蛋生雞</mark>。動態行走中的 PEA 效益也幾乎沒有實驗室外的驗證。</li>
+          <li data-lang="en"><b>Problem</b> — Parallel elastic actuators (PEAs) can in principle share the motor's torque and cut heating, but <mark class="m-problem" data-t="PROBLEM/GAP">springs are mostly designed by intuition / bio-inspiration</mark>; and whether a spring is "good" depends on how the controller exploits it—design and control are a <mark class="m-problem" data-t="PROBLEM/GAP">chicken-and-egg problem</mark>. PEA benefits in dynamic walking had essentially no out-of-lab validation.</li>
+          <li data-lang="zh"><b>方法</b> — 兩階段:<mark class="m-method" data-t="METHOD/IDEA">① PPO 訓一個以設計參數 \(\boldsymbol d\) 為條件的 teacher policy</mark>(每個 episode 隨機抽 \(\boldsymbol d\));<mark class="m-method" data-t="METHOD/IDEA">② 凍結 policy,HEBO 黑箱搜尋 \(\boldsymbol d\)</mark>(每個候選設計跑 1000 個 episode 取平均 reward)。最後把最佳設計造出來,用 teacher-student 蒸餾出可部署的 RNN student。</li>
+          <li data-lang="en"><b>Method</b> — Two stages: <mark class="m-method" data-t="METHOD/IDEA">① PPO trains a teacher policy conditioned on design parameters \(\boldsymbol d\)</mark> (a fresh \(\boldsymbol d\) sampled per episode); <mark class="m-method" data-t="METHOD/IDEA">② freeze it and let HEBO black-box-search \(\boldsymbol d\)</mark> (1000 episodes per candidate, averaged reward). Build the best design, then distill a deployable RNN student via teacher-student.</li>
+          <li data-lang="zh"><b>結果</b> — 模擬中最佳設計 CoTr 降 33%,而「第一原理」重力補償設計只降 8%;實機平地 CoTr ≈12→8 N·m·s,膝平均力矩 26→7 N·m、峰值 73→52 N·m;跑道續航 2640→3000 m(+11%);野外崎嶇地形<mark class="m-result" data-t="RESULT/EVIDENCE">一次都沒摔</mark>。</li>
+          <li data-lang="en"><b>Results</b> — In sim, the optimized design cuts CoTr by 33% vs only 8% for a "first-principles" gravity-compensation design; on hardware, flat-ground CoTr ≈12→8 N·m·s, mean knee torque 26→7 N·m, peak 73→52 N·m; track endurance 2640→3000 m (+11%); outdoor rough terrain with <mark class="m-result" data-t="RESULT/EVIDENCE">zero falls</mark>.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">彈性元件進入腿式機器人有兩條路。<mark class="m-method" data-t="METHOD/IDEA">Series Elastic Actuator(SEA)</mark>(Pratt 1995)把彈簧串在馬達與負載之間:耐衝擊、可量測力矩。ANYmal 的 ANYdrive、ATRIAS、Cassie 都屬此類;HyQ 則在膝到腳之間放串聯彈簧以減少著地抖動。另一條是 <mark class="m-method" data-t="METHOD/IDEA">Parallel Elastic Actuator(PEA)</mark>:彈簧與馬達並聯,直接「幫忙出力」。SpaceBok 在模擬月球重力下跳躍能量減半、BirdBot 的跨關節離合彈簧讓膝屈力矩只需 10%、STEPPR 髖部彈簧讓關節電功率省 31%。</p>
+        <p data-lang="en">Elastic elements entered legged robots along two routes. The <mark class="m-method" data-t="METHOD/IDEA">Series Elastic Actuator (SEA)</mark> (Pratt 1995) puts a spring between motor and load: impact-tolerant, torque-measurable. ANYmal's ANYdrive, ATRIAS, and Cassie belong here; HyQ places a series spring between knee and foot to reduce touchdown chatter. The other route is the <mark class="m-method" data-t="METHOD/IDEA">Parallel Elastic Actuator (PEA)</mark>: the spring sits in parallel with the motor and directly "helps push." SpaceBok halved jump energy under simulated lunar gravity, BirdBot's multi-joint clutched spring needs only 10% of the knee-flexing torque, and STEPPR's hip springs saved 31% joint electrical power.</p>
+        <p data-lang="zh">但這些 PEA <mark class="m-problem" data-t="PROBLEM/GAP">幾乎都靠啟發式設計</mark>,難以發揮彈簧全部潛力。另一邊,計算式設計(gradient-based、gradient-free、meta-heuristic、surrogate/BO)與 co-design(Scalera、De Vincenti、Dinev、Hardware-as-Policy、Schaff)已有不少,但要嘛<mark class="m-problem" data-t="PROBLEM/GAP">固定一條軌跡</mark>,要嘛需要可微的模型/規劃器,在崎嶇地形上不穩。</p>
+        <p data-lang="en">Yet these PEAs are <mark class="m-problem" data-t="PROBLEM/GAP">almost all designed heuristically</mark> and can't exploit the spring's full potential. Meanwhile computational design (gradient-based, gradient-free, meta-heuristic, surrogate/BO) and co-design (Scalera, De Vincenti, Dinev, Hardware-as-Policy, Schaff) exist, but either <mark class="m-problem" data-t="PROBLEM/GAP">fix a single trajectory</mark> or need a differentiable model/planner that becomes unstable on rough terrain.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的賭注是:<b>把「每個設計都要重新規劃/重新訓練控制器」這個最貴的內層迴圈,用一個條件化 RL policy 一次攤提(amortize)掉</b>。只要 policy 對每個設計都「接近最優」,外層就能把它當成廉價的黑箱評估器,丟給 BO 去搜。RSL 已有成熟的 teacher-student 四足 sim-to-real 配方,所以這條路對他們成本特別低。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">The bet: <b>amortize the most expensive inner loop—"re-plan / re-train a controller for every design"—into a single conditioned RL policy</b>. As long as the policy is "near-optimal" for each design, the outer loop can treat it as a cheap black-box evaluator for BO. RSL already owns a mature teacher-student quadruped sim-to-real recipe, so this route is especially cheap for them. <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">並聯 vs 串聯彈性:一頁入門</span><span data-lang="en">Parallel vs series elasticity: a one-page primer</span> <span class="add">[導讀補充 · guide note]</span></h3>
+        <p data-lang="zh"><b>SEA</b>:彈簧串在馬達與關節之間,關節力矩<b>全部</b>都要穿過彈簧、也全部由馬達提供(準靜態下):</p>
+        <p data-lang="en"><b>SEA</b>: the spring sits between motor and joint; <b>all</b> joint torque passes through the spring and (quasi-statically) is all supplied by the motor:</p>
+        <div class="eq">$$\tau_{\text{joint}}=k_{\text{SEA}}\,(\theta_m-q),\qquad \tau_m\approx\tau_{\text{joint}}$$</div>
+        <p data-lang="zh">所以 SEA 帶來的是<b>力矩量測、衝擊保護、短暫儲能</b>,但<b>不會降低馬達平均要出的力矩</b>。<b>PEA</b> 則是彈簧與馬達並聯,關節力矩是兩者之和:</p>
+        <p data-lang="en">So an SEA buys <b>torque sensing, impact protection, short-term energy buffering</b>—but it <b>does not reduce the average torque the motor must produce</b>. In a <b>PEA</b> the spring is in parallel with the motor, and joint torque is the sum of both:</p>
+        <div class="eq">$$\tau_{\text{joint}}=\tau_m+\tau_s(q)\quad\Longrightarrow\quad \tau_m=\tau_{\text{req}}-\tau_s(q)$$</div>
+        <p data-lang="zh">馬達的銅損(Joule heating)與電流平方、也就與力矩平方成正比:</p>
+        <p data-lang="en">The motor's copper loss (Joule heating) scales with current squared, hence with torque squared:</p>
+        <div class="eq">$$P_{\text{Joule}}=\sum_j R_j\,i_j^2=\sum_j \kappa_j\,\tau_{m,j}^2,\qquad \kappa_j=\frac{R_j}{(k_{t,j}N_j)^2}$$</div>
+        <p data-lang="zh">(\(R\) 線圈電阻、\(k_t\) 力矩常數、\(N\) 減速比。)若需求力矩 \(\tau_{\text{req}}(t)=\bar\tau+\delta(t)\)(\(\delta\) 零均值),而彈簧剛好吃掉 \(\bar\tau\),則 \(\int\tau_m^2dt\) 從 \(\int(\bar\tau^2+\delta^2)dt\) 降為 \(\int\delta^2dt\)。<b>但彈簧力矩只是關節角的函數</b> \(\tau_s(q)\),它無法隨時間任意變化——在 swing 相關節離開平衡角時,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">馬達反而得「對抗彈簧」</mark>。設計好的 PEA 要讓「高負載的姿態」剛好落在彈簧最有用的區段。</p>
+        <p data-lang="en">(\(R\): winding resistance, \(k_t\): torque constant, \(N\): gear ratio.) If the demand is \(\tau_{\text{req}}(t)=\bar\tau+\delta(t)\) (zero-mean \(\delta\)) and the spring absorbs exactly \(\bar\tau\), then \(\int\tau_m^2dt\) drops from \(\int(\bar\tau^2+\delta^2)dt\) to \(\int\delta^2dt\). <b>But spring torque is only a function of joint angle</b>, \(\tau_s(q)\), not of time—during swing, when the joint leaves the equilibrium, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the motor must actually fight the spring</mark>. A well-designed PEA places the "high-load postures" exactly where the spring helps most.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">另一個常被忽略的事實:彈簧是保守力,週期步態一圈下來 \(\oint\tau_s\,dq=0\),所以 PEA <b>不會減少關節淨機械功</b> \(\oint\tau_{\text{joint}}\,dq\);它省的是<b>力矩平方相關的銅損</b>(以及若負功無法回收時被浪費的那部分)。這正是本文選 \(\int\tau^2dt\) 而非機械功當指標的物理理由。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">An often-missed fact: a spring is conservative, so over one periodic gait cycle \(\oint\tau_s\,dq=0\)—a PEA <b>does not reduce the joint's net mechanical work</b> \(\oint\tau_{\text{joint}}\,dq\); what it saves is <b>torque-squared copper loss</b> (plus whatever negative work would otherwise be dissipated). That is the physical reason the paper uses \(\int\tau^2dt\) rather than mechanical work as its metric.</p>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是「加彈簧省 33%」這個數字,而是底下幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not "springs save 33%" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">把內層控制迴圈「攤提」成一個條件化 policy。</b> 不再為每個候選設計重訓控制器;一個看得到 \(\boldsymbol d\) 的 teacher policy 就是<mark class="m-method" data-t="METHOD/IDEA">可重複使用的設計評估器</mark>,BO 每問一次只是在模擬裡 rollout。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Amortize the inner control loop into one conditioned policy.</b> No re-training per candidate design; a teacher that observes \(\boldsymbol d\) becomes a <mark class="m-method" data-t="METHOD/IDEA">reusable design evaluator</mark>, and each BO query is just simulated rollouts.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">設計要「控制感知」(control-aware)。</b> 傳統重力補償式的第一原理設計只降 CoTr 8%,co-design 找到的設計降 33%——因為<mark class="m-result" data-t="RESULT/EVIDENCE">控制器會改變步態去配合彈簧</mark>,手算時假設的「平均關節角」本身就會變。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Design must be control-aware.</b> The classic gravity-compensation first-principles design cuts CoTr by only 8%; the co-designed one by 33%—because <mark class="m-result" data-t="RESULT/EVIDENCE">the controller reshapes its gait to exploit the spring</mark>, so the "average joint angle" assumed by hand calculations itself moves.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">任務表現平,能耗陡。</b> 設計空間裡 average reward 只差約 1%,CoTr 卻能差 33%:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">很多設計「走得一樣好」但「花的力氣差很多」</mark>——效率是 co-design 最該下手的維度。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Task performance is flat, energy is steep.</b> Average reward varies by only ~1% across the design space while CoTr varies by 33%: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">many designs "walk equally well" but "spend very different effort"</mark>—efficiency is exactly where co-design pays off.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">用 privileged learning 吸收「硬體不準」。</b> 學生訓練時設計參數 ±10% 擾動、每條腿平衡角各自隨機化,部署時<mark class="m-result" data-t="RESULT/EVIDENCE">完全不需彈簧校正或系統辨識</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Absorb "imprecise hardware" with privileged learning.</b> The student sees design parameters perturbed by ±10% and per-leg randomized equilibria, so deployment <mark class="m-result" data-t="RESULT/EVIDENCE">needs no spring calibration or system identification</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">PEA 在「動態」行走中也有用。</b> 過去 PEA 的好處多在靜態重力補償;本文顯示在動態步態、崎嶇野外地形中,膝平均力矩 26→7 N·m、峰值降 30%,且魯棒性不受影響。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">PEAs help in <i>dynamic</i> walking too.</b> Prior PEA benefits were mostly static gravity compensation; here, in dynamic gaits and rough outdoor terrain, mean knee torque drops 26→7 N·m and peak by 30%, with robustness unaffected.</li>
+          <li data-lang="zh"><b style="color:var(--c-limit)">代理指標 ≠ 電池。</b> CoTr 降 33%,電池續航卻只多 11%——<mark class="m-limit" data-t="LIMITATION/FUTURE">Joule heating 只是總耗電的一部分</mark>(電子、運算、傳動損失沒建模),作者自己也承認這個落差。</li>
+          <li data-lang="en"><b style="color:var(--c-limit)">Proxy ≠ battery.</b> CoTr falls 33% but battery endurance rises only 11%—<mark class="m-limit" data-t="LIMITATION/FUTURE">Joule heating is only part of total power draw</mark> (electronics, compute, transmission losses are unmodeled), as the authors themselves admit.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Learning-based Design and Control for Quadrupedal Robots with Parallel-Elastic Actuators</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>F. Bjelonic, J. Lee, P. Arm, D. Sako, D. Tateo, J. Peters, M. Hutter</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>ETH Zurich RSL · TU Darmstadt IAS</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2023 · IEEE RA-L <span data-lang="zh">(2022/12 接受;arXiv:2301.03509)</span><span data-lang="en">(accepted Dec 2022; arXiv:2301.03509)</span></span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Legged Robots · Co-Design</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span><span data-lang="zh">論文未附程式碼連結(有補充影片)</span><span data-lang="en">No code link given (supplementary video only)</span></span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">作者宣稱這是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">第一個在實驗室外評估 PEA 行走機器人</mark>的工作:樓梯、森林、碎石坡、蘇黎世車站。它示範了「RL 控制器 + BO 設計搜尋 + teacher-student 部署」能把<b>機構設計</b>也納入學習式機器人的流程。</span>
+        <span data-lang="en">The authors claim this is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the first evaluation of PEAs on walking robots outside the lab</mark>: stairs, forests, gravel slopes, Zurich main station. It shows that "RL controller + BO design search + teacher-student deployment" can bring <b>mechanism design</b> into the learning-based robotics pipeline.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">名詞</span><span data-lang="en">Jargon</span></span>
+        <span data-lang="zh"><b>KFE / HFE / HAA</b>:膝屈伸 / 髖屈伸 / 髖外展內收關節。<b>AoPS</b>:論文對「裝上並聯彈簧的 ANYmal」的稱呼(文中未展開縮寫)。<b>CoTr</b>:Cost of Torque,本文自創、仿 CoT 的力矩平方指標。<b>FTG</b>:Foot Trajectory Generator,Lee et al. 2020 的足端軌跡動作原語。</span>
+        <span data-lang="en"><b>KFE / HFE / HAA</b>: knee flexion-extension / hip flexion-extension / hip abduction-adduction joints. <b>AoPS</b>: the paper's name for "ANYmal with parallel springs" (acronym never expanded). <b>CoTr</b>: Cost of Torque, a CoT-like torque-squared metric coined here. <b>FTG</b>: Foot Trajectory Generator, the foot-motion primitive from Lee et al. 2020.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Parallel Elastic Actuator</span><span class="chip">Co-Design</span>
+          <span class="chip">Design-conditioned policy</span><span class="chip">HEBO / BO</span>
+          <span class="chip">Teacher-Student</span><span class="chip">Cost of Torque</span><span class="chip">ANYmal</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">啟發式 / 仿生 PEA</span><span data-lang="en">Heuristic / bio-inspired PEA</span></b><br><small>SpaceBok, BirdBot, STEPPR, ATRIAS</small></td><td><span data-lang="zh">靠直覺或模仿動物(鴕鳥、鴯鶓),<mark class="m-problem" data-t="PROBLEM/GAP">變數太多、沒有系統化方法</mark>,難以發揮彈簧全部潛力。</span><span data-lang="en">Driven by intuition or animal mimicry (ostrich, emu); <mark class="m-problem" data-t="PROBLEM/GAP">too many variables, no systematic method</mark>, can't exploit the spring's full potential.</span></td></tr>
+          <tr><td><b><span data-lang="zh">固定軌跡的設計最佳化</span><span data-lang="en">Fixed-trajectory design optimization</span></b><br><small>Scalera et al.; De Vincenti et al.</small></td><td><span data-lang="zh">Scalera 在預定軌跡上解非線性最佳化(4-DoF 並聯手臂省 67%);De Vincenti 用可微軌跡追蹤控制器做 control-aware 設計——但<mark class="m-problem" data-t="PROBLEM/GAP">軌跡是固定的</mark>,換了設計後原軌跡未必最優。</span><span data-lang="en">Scalera solves a nonlinear program on a predefined trajectory (67% saving on a 4-DoF parallel arm); De Vincenti uses a differentiable tracking controller for control-aware design—but <mark class="m-problem" data-t="PROBLEM/GAP">the trajectory is fixed</mark>, and may no longer be optimal once the design changes.</span></td></tr>
+          <tr><td><b><span data-lang="zh">每次重新規劃的 co-design</span><span data-lang="en">Re-planning co-design</span></b><br><small>Dinev et al. 2022</small></td><td><span data-lang="zh">每次評估設計都重解 motion planning、以有限差分求梯度(Solo 能效 ×3),但<mark class="m-problem" data-t="PROBLEM/GAP">崎嶇地形上有限差分可能讓求解器不穩</mark>。</span><span data-lang="en">Re-solves motion planning per design evaluation and uses finite differences (3× efficiency on Solo), but <mark class="m-problem" data-t="PROBLEM/GAP">finite differences on rough terrain may make the solver unstable</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">RL 同時學設計與控制</span><span data-lang="en">RL jointly learning design &amp; control</span></b><br><small>Chen (Hardware-as-Policy); Schaff et al.</small></td><td><span data-lang="zh">HWasP 把硬體寫成可微計算圖一起訓——<mark class="m-problem" data-t="PROBLEM/GAP">很多硬體寫不成計算圖</mark>;Schaff 讓設計分佈邊訓邊收縮,已用在軟體爬行機器人。</span><span data-lang="en">HWasP writes hardware as a computational graph trained jointly—<mark class="m-problem" data-t="PROBLEM/GAP">many hardware choices can't be expressed that way</mark>; Schaff shrinks a design distribution during training, applied to a soft crawler.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「能否在幾乎不靠人類直覺的情況下,為四足機器人的並聯彈性膝<u>連同</u>其最佳控制器一起找出設計,並在真實、崎嶇的環境中驗證它真的更省?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"With minimal human intuition, can we find the design of a quadruped's parallel-elastic knee <u>together with</u> its optimal controller—and verify on real, rough terrain that it is genuinely more efficient?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,本文怎麼補</span><span data-lang="en">Gap table — who lacks what, and how this paper fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">本文如何補上</span><span data-lang="en">How this paper fills it</span></th></tr>
+          <tr>
+            <td><b><span data-lang="zh">啟發式 PEA</span><span data-lang="en">Heuristic PEA</span></b></td>
+            <td><span data-lang="zh">靠直覺決定剛度與平衡角。</span><span data-lang="en">Stiffness and equilibrium chosen by intuition.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">把彈簧參數化成 \(\boldsymbol d=[\bar q_{\text{KFE}},a,b,\phi_0]\)</mark>,交給 BO 系統搜尋。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Parameterize the spring as \(\boldsymbol d=[\bar q_{\text{KFE}},a,b,\phi_0]\)</mark> and let BO search systematically.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">固定軌跡</span><span data-lang="en">Fixed trajectory</span></b></td>
+            <td><span data-lang="zh">設計變了,控制沒跟著變。</span><span data-lang="en">Design changes, control doesn't.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">design-conditioned policy</mark>:每個設計都有「為它調整過」的閉迴路步態。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Design-conditioned policy</mark>: every design gets a closed-loop gait adapted to it.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">模型式 co-design</span><span data-lang="en">Model-based co-design</span></b></td>
+            <td><span data-lang="zh">需可微模型、接觸離散性造成不穩。</span><span data-lang="en">Needs a differentiable model; contact discontinuities cause instability.</span></td>
+            <td><span data-lang="zh"><mark class="m-assume" data-t="ASSUMPTION/CLAIM">視目標為不可微黑箱</mark>(接觸造成離散變化),用 model-free RL + 黑箱 BO。</span><span data-lang="en"><mark class="m-assume" data-t="ASSUMPTION/CLAIM">Treat the objective as a non-differentiable black box</mark> (contacts cause discrete changes); use model-free RL + black-box BO.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">只在實驗室/模擬</span><span data-lang="en">Lab / sim only</span></b></td>
+            <td><span data-lang="zh">PEA 行走沒有室外比較評估。</span><span data-lang="en">No comparative outdoor evaluation of PEA walking.</span></td>
+            <td><span data-lang="zh">實機 ANYmal vs AoPS:平地、隨機指令、野外地形、跑道續航<mark class="m-result" data-t="RESULT/EVIDENCE">五組實驗</mark>。</span><span data-lang="en">Real ANYmal vs AoPS: flat, random commands, outdoor terrain, track endurance—<mark class="m-result" data-t="RESULT/EVIDENCE">five experiments</mark>.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">真正的難點是<b>評估一個設計需要它的最佳控制器</b>。對腿式機器人,「最佳控制器」本身就是一個要訓練數億步的 RL 問題——若每個候選設計都重訓一次,BO 跑 25 次就要 25 個 policy。本文把這個成本變成「訓一次、查無限次」。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">The real difficulty is that <b>evaluating a design requires its optimal controller</b>. For legged robots, the "optimal controller" is itself an RL problem needing hundreds of millions of steps—retraining per candidate would mean 25 policies for 25 BO iterations. The paper turns that into "train once, query forever." <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 PEA 讀成「<b>免費的能量</b>」。彈簧只能依關節角給力矩;當膝離開平衡角(例如 swing 相),<mark class="m-assume" data-t="ASSUMPTION/CLAIM">馬達得反過來對抗彈簧</mark>。作者在結論也強調:動態行走中 PEA 的效益「並不顯然」,正因為致動器要反覆與彈簧角力——設計錯了反而更耗。</span>
+        <span data-lang="en">Don't read PEA as "<b>free energy</b>." The spring only gives torque as a function of joint angle; when the knee leaves equilibrium (e.g. in swing), <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the motor must fight the spring</mark>. The conclusion itself stresses that PEA benefit in dynamic walking is "nontrivial" precisely because actuators repeatedly work against the spring—a wrong design costs more.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">ANYmal 已經有 SEA(ANYdrive)。本文等於問:<b>在 SEA 之上再加一層 PEA,值不值得?</b>答案若是肯定,工業四足在不換馬達的情況下就能多一成續航、少三成峰值力矩——對巡檢應用是實質效益。</span>
+        <span data-lang="en">ANYmal already has SEAs (ANYdrive). The paper effectively asks: <b>is stacking a PEA on top of the SEA worth it?</b> If yes, industrial quadrupeds gain ~10% endurance and 30% less peak torque without new motors—a real benefit for inspection use.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">真的是 joint?</span><span data-lang="en">really joint?</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">能耗指標</span><span data-lang="en">energy metric</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">整體流程:五步</span><span data-lang="en">The pipeline in five steps</span></h3>
+        <div class="flow">
+          <div class="step"><div class="ph mono">STEP 1</div><b><span data-lang="zh">參數化 PEA</span><span data-lang="en">Parameterize PEA</span></b><small><span data-lang="zh">橢圓凸輪 + 線性彈簧 → \(\tau_s=\psi(q_{\text{KFE}},\boldsymbol d)\),\(\boldsymbol d\in\mathbb R^4\)</span><span data-lang="en">Elliptic cam + linear spring → \(\tau_s=\psi(q_{\text{KFE}},\boldsymbol d)\), \(\boldsymbol d\in\mathbb R^4\)</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 2</div><b><span data-lang="zh">訓 teacher</span><span data-lang="en">Train teacher</span></b><small><span data-lang="zh">PPO;每 episode 抽 \(\boldsymbol d\sim\mathcal D\);特權觀測含 \(\boldsymbol d\)</span><span data-lang="en">PPO; sample \(\boldsymbol d\sim\mathcal D\) per episode; privileged obs include \(\boldsymbol d\)</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 3</div><b><span data-lang="zh">BO 搜設計</span><span data-lang="en">BO over design</span></b><small><span data-lang="zh">凍結 policy;HEBO 提案 \(\boldsymbol d\),1000 episodes 平均 reward 當 \(f\)</span><span data-lang="en">Freeze policy; HEBO proposes \(\boldsymbol d\); mean reward over 1000 episodes is \(f\)</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 4</div><b><span data-lang="zh">蒸餾 student</span><span data-lang="en">Distill student</span></b><small><span data-lang="zh">\(\boldsymbol d\) 固定在 \(\boldsymbol d^*\)(±10%)→ AoPS;\(a=b=0\) → 基線</span><span data-lang="en">Fix \(\boldsymbol d\) at \(\boldsymbol d^*\) (±10%) → AoPS; \(a=b=0\) → baseline</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 5</div><b><span data-lang="zh">造 + 部署</span><span data-lang="en">Build + deploy</span></b><small><span data-lang="zh">鋼索彈簧裝上 ANYmal,RNN student 實機零校正</span><span data-lang="en">Mount spring-wire on ANYmal; RNN student, no calibration</span></small></div>
+        </div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">注意順序:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">policy 先訓完、再做設計搜尋</mark>,兩者之間沒有來回迭代。所謂「co-optimization」是靠條件化 policy 把內層攤提掉,而非兩者同時更新(見 CRITIQUE Q1)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Mind the order: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the policy is fully trained first, then the design is searched</mark>, with no back-and-forth iteration. "Co-optimization" here means amortizing the inner loop via a conditioned policy, not updating both simultaneously (see CRITIQUE Q1).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">① 並聯彈性膝:力矩模型</span><span data-lang="en">① The parallel-elastic knee: torque model</span></h3>
+        <figure class="fig"><img src="figs/Bjelonic2023/fig2_pea_concept.png" alt="Figure 2 PEA concept">
+          <figcaption data-lang="zh"><b>Fig.2</b> (a) 兩段式腿:彈簧固定在大腿(橘),鋼索繞過固定在小腿(綠)上的圓盤/凸輪,於是彈簧力變成膝關節力矩 \(\tau_s\)——這就是「並聯」:它和膝馬達同時作用在同一個關節上。(b) 橢圓凸輪:長短軸 \(a,b\);力臂 \(\hat{\boldsymbol l}_r\) 是凸輪上「與彈簧力相切」的那一點,<b>會隨膝角改變</b>,所以 \(a\neq b\) 時力矩-角度關係是非線性的。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> (a) Two-segment leg: the spring is fixed to the thigh (orange), the wire wraps a disc/cam fixed to the shank (green), turning spring force into knee torque \(\tau_s\)—that is what "parallel" means: it acts on the same joint alongside the knee motor. (b) Elliptic cam with semi-axes \(a,b\); the lever arm \(\hat{\boldsymbol l}_r\) is the cam point tangent to the spring force and <b>moves with knee angle</b>, so for \(a\neq b\) the torque-angle relation is nonlinear.</figcaption></figure>
+        <p data-lang="zh">彈簧力矩由彈簧力與力臂的外積給出,力的大小遵循 Hooke 定律:</p>
+        <p data-lang="en">Spring torque is the cross product of spring force and lever arm; the force magnitude follows Hooke's law:</p>
+        <div class="eq">$$\boldsymbol\tau_s(q)=\boldsymbol F_s\times\hat{\boldsymbol l}_r(\theta),\qquad f_s=\|\boldsymbol F_s\|=k_s\,\Delta l_s$$</div>
+        <p data-lang="zh">鋼索永遠貼著凸輪,所以接觸點由「相切條件」決定,並用一個內積不等式挑出正確的一側:</p>
+        <p data-lang="en">The wire always touches the cam, so the contact point is fixed by a tangency condition, with an inner-product inequality selecting the correct side:</p>
+        <div class="eq">$$\mathbf 0=\boldsymbol F_s\times\frac{\partial\hat{\boldsymbol l}_r}{\partial\theta},\qquad \big\langle\boldsymbol F_s,\hat{\boldsymbol l}_r(\theta)\big\rangle\ge 0$$</div>
+        <p data-lang="zh">橢圓凸輪隨小腿轉動:</p>
+        <p data-lang="en">The elliptic cam rotates with the shank:</p>
+        <div class="eq">$$\boldsymbol l_r(\theta)=\boldsymbol R_\phi\begin{bmatrix}a\cos\theta\\ b\sin\theta\end{bmatrix},\quad \boldsymbol R_\phi=\begin{bmatrix}\cos\phi&-\sin\phi\\ \sin\phi&\cos\phi\end{bmatrix},\quad \phi=\phi_0+q_{\text{KFE}}$$</div>
+        <p data-lang="zh">彈簧伸長量 \(\Delta l_s\) 要數值解一個橢圓積分(纏繞在凸輪上的鋼索長度),作者略過推導。最後得到一個 4 維設計參數化的非線性力矩:</p>
+        <p data-lang="en">The spring elongation \(\Delta l_s\) requires numerically solving an elliptic integral (wire length wrapped on the cam); derivation omitted by the authors. The result is a nonlinear torque with a 4-D design parameterization:</p>
+        <div class="eq">$$\tau_s(\boldsymbol d)=\psi(q_{\text{KFE}},\boldsymbol d),\qquad \boldsymbol d=[\bar q_{\text{KFE}},\,a,\,b,\,\phi_0]^\top\in\mathbb R^4$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><span class="add">[導讀補充]</span> 直覺:當 \(a=b=r\)(圓盤),力臂恆為 \(r\),鋼索伸長 \(\Delta l_s\approx r\,|q-\bar q|\),於是在拉緊側 \(|\tau_s|\approx k_s r^2\,|q-\bar q|\)、鬆弛側為 0——一個<b>單側線性扭簧</b>,等效剛度 \(k_s r^2\)。以實機 \(k_s=4154\) N/m、\(r\approx 6\) cm 估,約 15 N·m/rad 量級;橢圓則讓力臂在約 \(b\) 到 \(a\) 之間變化,形成漸硬或漸軟的特性。Fig.8 的「線性特性」二維實驗就是這個圓盤特例 \(\boldsymbol d=[\bar q,r]\)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><span class="add">[guide note]</span> Intuition: with \(a=b=r\) (a disc), the lever arm is always \(r\), elongation \(\Delta l_s\approx r\,|q-\bar q|\), so on the taut side \(|\tau_s|\approx k_s r^2\,|q-\bar q|\) and zero on the slack side—a <b>one-sided linear torsion spring</b> of effective stiffness \(k_s r^2\). With the hardware \(k_s=4154\) N/m and \(r\approx 6\) cm that is on the order of 15 N·m/rad; an ellipse makes the lever arm vary roughly between \(b\) and \(a\), giving a stiffening or softening profile. The "linear characteristic" 2-D study in Fig.8 is exactly this disc special case \(\boldsymbol d=[\bar q,r]\).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">② 設計目標:Cost of Torque</span><span data-lang="en">② Design objective: Cost of Torque</span></h3>
+        <p data-lang="zh">真實能耗很難模擬(電子、電腦、感測器、傳動…)。作者<mark class="m-assume" data-t="ASSUMPTION/CLAIM">假設系統的功率損失可近似為各致動器的 Joule heating</mark>(與力矩平方成正比),仿照 Cost of Transport 定義:</p>
+        <p data-lang="en">True energy use is hard to simulate (electronics, computers, sensors, transmission…). The authors <mark class="m-assume" data-t="ASSUMPTION/CLAIM">assume system power loss is approximated by the actuators' Joule heating</mark> (proportional to torque squared), and define, by analogy with Cost of Transport:</p>
+        <div class="eq">$$\text{CoT}\ \propto\ \text{CoTr}=\frac{\displaystyle\int\tau^2\,dt}{m\,g\,\Delta s}$$</div>
+        <p data-lang="zh">\(m\) 是總質量(會隨設計改變)、\(\Delta s\) 是行進距離,除以兩者讓不同設計、不同速度可比較。<span class="add">[導讀補充]</span> 對照組:真正的 CoT 分子是總能量 \(E=\int P\,dt\);而機械功率 \(P_{\text{mech}}=\sum_j\tau_j\dot q_j\) 會有正有負。CoTr 只看銅損這一項,<b>刻意不管機械功</b>——這與上頁「彈簧不減淨機械功、只減力矩平方」的物理一致,但也意味著它<b>不是</b>完整的電池模型。</p>
+        <p data-lang="en">\(m\) is total mass (design-dependent), \(\Delta s\) the distance traveled; normalizing by both makes designs and speeds comparable. <span class="add">[guide note]</span> For contrast: true CoT's numerator is total energy \(E=\int P\,dt\), while mechanical power \(P_{\text{mech}}=\sum_j\tau_j\dot q_j\) can be positive or negative. CoTr looks only at copper loss, <b>deliberately ignoring mechanical work</b>—consistent with the physics that a spring reduces torque-squared but not net mechanical work, but it is also <b>not</b> a complete battery model.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">③ 設計最佳化:凍結 policy 上的黑箱 BO</span><span data-lang="en">③ Design optimization: black-box BO on a frozen policy</span></h3>
+        <figure class="fig"><img src="figs/Bjelonic2023/fig4_bo_loop.png" alt="Figure 4 BO loop">
+          <figcaption data-lang="zh"><b>Fig.4</b> 設計搜尋迴圈。右邊 BO 依 acquisition function \(u(\mathcal D)\)(綠)抽一個設計 \(\boldsymbol d\),交給<b>已訓練好的</b> design-conditioned agent 在模擬環境裡 rollout;軌跡算出目標 \(f(\mathcal D)\) 回傳,左邊 surrogate(藍+青色帶)更新。注意 agent 在迴圈中<b>不再學習</b>,只是評估器。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> The design-search loop. On the right, BO samples a design \(\boldsymbol d\) via the acquisition function \(u(\mathcal D)\) (green) and hands it to the <b>already trained</b> design-conditioned agent for simulated rollouts; trajectories yield the objective \(f(\mathcal D)\), which updates the surrogate (blue + cyan band) on the left. Note the agent <b>no longer learns</b> in this loop—it is only an evaluator.</figcaption></figure>
+        <p data-lang="zh">給定預訓練 policy \(\pi\) 與任務 \(t\in\mathcal T\)(地形、指令…),目標 \(f(\boldsymbol d\mid t,\pi):\mathcal T\times\mathcal D\to\mathbb R\)。因為接觸造成離散動態變化,作者<mark class="m-assume" data-t="ASSUMPTION/CLAIM">假設 \(f\) 對 \(\boldsymbol d\) 不可微</mark>,改用黑箱最佳化:</p>
+        <p data-lang="en">Given the pretrained policy \(\pi\) and a task \(t\in\mathcal T\) (terrain, commands…), the objective is \(f(\boldsymbol d\mid t,\pi):\mathcal T\times\mathcal D\to\mathbb R\). Because contacts cause discrete changes in dynamics, the authors <mark class="m-assume" data-t="ASSUMPTION/CLAIM">assume \(f\) is non-differentiable in \(\boldsymbol d\)</mark> and use black-box optimization:</p>
+        <div class="eq">$$\boldsymbol d^*=\arg\min\ \mathbb E_{\boldsymbol d\in\mathcal D,\,t\in\mathcal T}\big[f(\boldsymbol d\mid t,\pi)\big]\qquad\text{s.t.}\quad \mathbf 0\le\boldsymbol c(\boldsymbol d)$$</div>
+        <p data-lang="zh">實驗中 \(f\) 取為<b>平均 reward</b>,以 \(N\) 步 Monte Carlo 估計(每個設計 1000 個 episode,含隨機初始狀態、擾動、指令):</p>
+        <p data-lang="en">In experiments \(f\) is the <b>average reward</b>, a Monte Carlo estimate over \(N\) steps (1000 episodes per design, with random initial states, disturbances, commands):</p>
+        <div class="eq">$$f=\frac1N\sum_{i=0}^{N} r(a_{t_i},s_{t_i})$$</div>
+        <p data-lang="zh">最佳化器是 <mark class="m-method" data-t="METHOD/IDEA">HEBO(Heteroscedastic Evolutionary BO)</mark>——NeurIPS 2020 黑箱最佳化挑戰賽冠軍,這也是作者選 surrogate 法而非 meta-heuristic 的理由。<span class="add">[導讀補充]</span> 兩個記號上的小瑕疵:(i) \(f\) 是 reward(越大越好),式子卻寫 \(\arg\min\),應理解為最小化負 reward;(ii) 期望寫成「對 \(\boldsymbol d\) 取期望」再對 \(\boldsymbol d\) 求 argmin,實際意思是對任務/episode 取期望。</p>
+        <p data-lang="en">The optimizer is <mark class="m-method" data-t="METHOD/IDEA">HEBO (Heteroscedastic Evolutionary BO)</mark>—winner of the NeurIPS 2020 black-box optimization challenge, which is why the authors chose a surrogate method over meta-heuristics. <span class="add">[guide note]</span> Two notational quirks: (i) \(f\) is a reward (higher is better) but the formula says \(\arg\min\)—read it as minimizing negative reward; (ii) the expectation is written "over \(\boldsymbol d\)" while taking the argmin over \(\boldsymbol d\); the intended meaning is an expectation over tasks/episodes.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">把它寫成 bi-level 問題</span><span data-lang="en">Writing it as a bi-level problem</span> <span class="add">[導讀補充 · guide note]</span></span>
+          <div class="eq">$$\underbrace{\boldsymbol d^*=\arg\max_{\boldsymbol d\in\mathcal D}\ J\big(\boldsymbol d,\pi^*_{\boldsymbol d}\big)}_{\text{outer: HEBO}}\qquad \underbrace{\pi^*_{\boldsymbol d}=\arg\max_{\pi}J(\boldsymbol d,\pi)\ \approx\ \pi_\theta(\cdot\mid o,\boldsymbol d)}_{\text{inner: amortized by one conditioned policy}}$$</div>
+          <p data-lang="zh" style="margin-top:6px">理想的 co-design 是「每個 \(\boldsymbol d\) 都配上它自己的最佳 \(\pi^*_{\boldsymbol d}\)」。本文用<b>一個</b>以 \(\boldsymbol d\) 為輸入的 policy 一次近似所有 \(\pi^*_{\boldsymbol d}\)——這是整個方法最關鍵、也最可質疑的假設。</p>
+          <p data-lang="en" style="margin-top:6px">Ideal co-design pairs every \(\boldsymbol d\) with its own optimal \(\pi^*_{\boldsymbol d}\). The paper approximates all \(\pi^*_{\boldsymbol d}\) at once with <b>one</b> policy that takes \(\boldsymbol d\) as input—the method's most crucial, and most contestable, assumption.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">④ Design-conditioned policy(teacher)</span><span data-lang="en">④ The design-conditioned policy (teacher)</span></h3>
+        <p data-lang="zh">作者<mark class="m-assume" data-t="ASSUMPTION/CLAIM">假設以設計參數為條件的神經網路 policy 能對每個設計達到近最優</mark>(參考 Won &amp; Lee 2019 的 shape-conditioned 角色控制),並沿用 Lee et al. 2020 的 privileged learning。RL 目標:</p>
+        <p data-lang="en">The authors <mark class="m-assume" data-t="ASSUMPTION/CLAIM">assume a neural policy conditioned on design parameters can be near-optimal for each design</mark> (following Won &amp; Lee 2019's shape-conditioned character control), and adopt the privileged learning of Lee et al. 2020. The RL objective:</p>
+        <div class="eq">$$\pi_{\theta^*}(a_t\mid o_t)\ \to\ \max\ \mathbb E\Big[\sum_{\tilde t=t}^{\infty}\gamma^{\tilde t-t}\,r(a_{\tilde t},s_{\tilde t})\Big],\qquad \gamma\in[0,1]$$</div>
+        <p data-lang="zh"><span class="add">[導讀補充]</span> 由於 \(\boldsymbol d\) 每個 episode 從 \(\mathcal D\) 隨機抽,實際上最大化的是「設計平均」的回報,這就是攤提的來源:</p>
+        <p data-lang="en"><span class="add">[guide note]</span> Since \(\boldsymbol d\) is sampled from \(\mathcal D\) every episode, what is actually maximized is a design-averaged return—this is where the amortization comes from:</p>
+        <div class="eq">$$\theta^*=\arg\max_\theta\ \mathbb E_{\boldsymbol d\sim\mathcal U(\mathcal D)}\ \mathbb E_{\pi_\theta(\cdot\mid o_t,\,\bar{\boldsymbol l}_t)}\Big[\sum_t\gamma^t r_t\Big],\qquad \bar{\boldsymbol l}_t=\mathrm{Enc}\big(x^{\text{priv}}_t\big),\ \boldsymbol d\subset x^{\text{priv}}_t$$</div>
+        <table>
+          <tr><th><span data-lang="zh">元件</span><span data-lang="en">Component</span></th><th><span data-lang="zh">內容</span><span data-lang="en">Contents</span></th></tr>
+          <tr><td><b>Obs \(o_t\in\mathbb R^{133}\)</b></td><td><span data-lang="zh">目標速度指令、基座姿態、線/角速度、FTG 參數、關節位置與速度的短歷史、最近兩次關節目標。</span><span data-lang="en">Target velocity command, base orientation, linear/angular velocity, FTG parameters, short history of joint positions and velocities, last two joint targets.</span></td></tr>
+          <tr><td><b>Privileged \(\in\mathbb R^{46}\)</b></td><td><span data-lang="zh">接觸摩擦、各腳接觸狀態與力、施加在基座的外力/力矩、<mark class="m-method" data-t="METHOD/IDEA">設計參數 \(\boldsymbol d\)</mark>、連桿質量。每條腿的彈簧平衡角分開觀測(免去設計校正)。</span><span data-lang="en">Contact friction, per-foot contact state and force, external forces/torques on the base, <mark class="m-method" data-t="METHOD/IDEA">design parameters \(\boldsymbol d\)</mark>, link masses. Spring equilibria are observed separately per leg (avoids design calibration).</span></td></tr>
+          <tr><td><b>Action \(a_t\in\mathbb R^{16}\)</b></td><td><span data-lang="zh">4 個 FTG 頻率 + 12 個關節位置增量;FTG 輸出預定抬腳高度的垂直足端軌跡,再經 IK 轉為關節目標。</span><span data-lang="en">4 FTG frequencies + 12 joint-position deltas; the FTG emits vertical foot trajectories with preset clearance, mapped to joint targets via IK.</span></td></tr>
+          <tr><td><b>Reward</b></td><td><span data-lang="zh">追 \(x,y\) 線速度與 yaw 角速度;懲罰基座 \(z\) 速度、roll/pitch 角速度、關節目標加速度(平滑)、<mark class="m-method" data-t="METHOD/IDEA">致動器力矩 L2</mark>、超速關節、腳滑。</span><span data-lang="en">Track \(x,y\) linear and yaw angular velocity; penalize base \(z\) velocity, roll/pitch rates, joint-target acceleration (smoothness), <mark class="m-method" data-t="METHOD/IDEA">actuator torque L2</mark>, over-limit joint velocity, foot slip.</span></td></tr>
+          <tr><td><b><span data-lang="zh">架構 / 演算法</span><span data-lang="en">Arch / algo</span></b></td><td><span data-lang="zh">MLP policy + encoder(特權資訊 → 嵌入 \(\bar{\boldsymbol l}_t\));PPO;剛體動力學模擬。</span><span data-lang="en">MLP policy + encoder (privileged info → embedding \(\bar{\boldsymbol l}_t\)); PPO; rigid-body simulation.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">關鍵:reward 裡的「力矩 L2 懲罰」就是 CoTr 的近親——作者指出 \(\text{CoTr}\subset\text{AverageReward}\)。所以 BO 最大化平均 reward,<b>間接</b>在壓 CoTr,同時保住追蹤品質。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Key: the reward's "torque L2 penalty" is a close cousin of CoTr—the authors note \(\text{CoTr}\subset\text{AverageReward}\). So BO maximizing average reward is <b>indirectly</b> pushing CoTr down while preserving tracking quality.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">⑤ 部署 policy(student)與實機設計</span><span data-lang="en">⑤ Deployment policy (student) and the built design</span></h3>
+        <p data-lang="zh">Student 是 <b>RNN</b>,只看帶雜訊的本體感覺(IMU、關節編碼器)與外感(深度感測器)歷史,以模仿學習 + 特權嵌入 \(\bar{\boldsymbol l}_t\) 的重建損失訓練(同 Lee et al. 2020;外感部分改自 Miki et al. 2022)。<span class="add">[導讀補充]</span> 示意性的損失:</p>
+        <p data-lang="en">The student is an <b>RNN</b> that sees only noisy proprioceptive (IMU, joint encoders) and exteroceptive (depth sensors) histories, trained by imitation plus a reconstruction loss on the privileged embedding \(\bar{\boldsymbol l}_t\) (as in Lee et al. 2020; exteroception adapted from Miki et al. 2022). <span class="add">[guide note]</span> A schematic loss:</p>
+        <div class="eq">$$\mathcal L_{\text{student}}=\big\|a^{\text{s}}_t-a^{\text{t}}_t\big\|^2+\lambda\,\big\|\hat{\bar{\boldsymbol l}}_t-\bar{\boldsymbol l}_t\big\|^2$$</div>
+        <p data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">應對彈簧模型誤差</mark>:蒸餾時設計參數從最佳值<b>擾動 10%</b>(模擬製造精度),每條腿的平衡角也分別隨機化(鋼索長度因製造限制不一)。Teacher 看得到精確值,student 看不到——它必須從歷史推斷。</p>
+        <p data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Handling spring model mismatch</mark>: during distillation, design parameters are <b>perturbed by 10%</b> around the optimum (emulating manufacturing precision), and each leg's equilibrium is randomized separately (wire lengths differ due to manufacturing). The teacher sees exact values; the student doesn't—it must infer them from history.</p>
+        <table>
+          <tr><th><span data-lang="zh">實機最佳設計</span><span data-lang="en">Built optimal design</span></th><th><span data-lang="zh">值</span><span data-lang="en">Value</span></th></tr>
+          <tr><td><span data-lang="zh">彈簧剛度</span><span data-lang="en">Spring stiffness</span> \(k_s\)</td><td>4154 N/m</td></tr>
+          <tr><td><span data-lang="zh">長軸 / 短軸</span><span data-lang="en">Major / minor semi-axis</span> \(a,b\)</td><td>8.1 cm / 6.0 cm</td></tr>
+          <tr><td><span data-lang="zh">初始角</span><span data-lang="en">Initial angle</span> \(\phi_0\)</td><td>0.0 rad</td></tr>
+          <tr><td><span data-lang="zh">平衡角</span><span data-lang="en">Equilibrium</span> \(\bar q_{\text{KFE}}\)</td><td>0.36 rad</td></tr>
+          <tr><td><span data-lang="zh">總質量 AoPS / ANYmal</span><span data-lang="en">Total mass AoPS / ANYmal</span></td><td>52.5 kg / 51.3 kg</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">Policy 只在「拉」的方向使用彈簧,所以每膝一條拉伸彈簧即可實作。基線 <b>ANYmal</b> 是同一個 teacher 在 \(a=b=0\)(力臂為零 = 沒彈簧)下蒸餾出的 student——兩者控制管線完全相同。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The policies use the spring only in the pulling direction, so one tension spring per knee suffices. The baseline <b>ANYmal</b> is a student distilled from the same teacher at \(a=b=0\) (zero lever arm = no spring)—both share an identical control pipeline.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\boldsymbol d\)</td><td><span data-lang="zh">設計參數 \([\bar q_{\text{KFE}},a,b,\phi_0]\):彈簧平衡角、橢圓長短軸、橢圓初始角。</span><span data-lang="en">Design parameters \([\bar q_{\text{KFE}},a,b,\phi_0]\): spring equilibrium, ellipse semi-axes, ellipse initial angle.</span></td></tr>
+          <tr><td>\(\bar q_{\text{KFE}}\)</td><td><span data-lang="zh">彈簧力為零時的膝角;越過它彈簧才開始拉。</span><span data-lang="en">Knee angle where spring force is zero; past it the spring starts pulling.</span></td></tr>
+          <tr><td>\(\hat{\boldsymbol l}_r(\theta)\)</td><td><span data-lang="zh">彈簧力的力臂:凸輪上與鋼索相切的接觸點,隨膝角移動。</span><span data-lang="en">Lever arm of the spring force: the cam point tangent to the wire; moves with knee angle.</span></td></tr>
+          <tr><td>\(\tau_s=\psi(q,\boldsymbol d)\)</td><td><span data-lang="zh">彈簧給膝關節的力矩;\(a\neq b\) 時對 \(q\) 非線性。</span><span data-lang="en">Spring torque on the knee; nonlinear in \(q\) when \(a\neq b\).</span></td></tr>
+          <tr><td>\(\text{CoTr}\)</td><td><span data-lang="zh">力矩平方積分 / (重量 × 距離):銅損的代理指標。</span><span data-lang="en">Integrated torque squared / (weight × distance): a proxy for copper loss.</span></td></tr>
+          <tr><td>\(f(\boldsymbol d\mid t,\pi)\)</td><td><span data-lang="zh">在任務 \(t\)、固定 policy \(\pi\) 下評估設計 \(\boldsymbol d\) 的分數(此處 = 平均 reward)。</span><span data-lang="en">Score of design \(\boldsymbol d\) on task \(t\) with frozen policy \(\pi\) (here = average reward).</span></td></tr>
+          <tr><td>\(\bar{\boldsymbol l}_t\)</td><td><span data-lang="zh">特權資訊(含 \(\boldsymbol d\))的嵌入;student 需從歷史重建它。</span><span data-lang="en">Embedding of privileged info (incl. \(\boldsymbol d\)); the student must reconstruct it from history.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">先養一個「什麼彈簧都會用」的萬用控制器,再拿它當試駕員,讓 BO 一個個試彈簧,挑出試駕員最省力的那一條——最後只為那條彈簧訓練真正上路的駕駛。</span>
+        <span data-lang="en">First raise a universal controller that "knows how to use any spring," then use it as a test driver while BO tries springs one by one, keeping the one where the driver spends the least effort—and finally train the real road driver for that spring only.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為什麼用 BO 不用梯度?</span><span data-lang="en">Why BO, not gradients?</span></span>
+        <span data-lang="zh">接觸讓 \(f(\boldsymbol d)\) 不可微,Monte Carlo 估計又有雜訊;設計空間只有 2–4 維,每次評估很貴(1000 episodes)。這正是 BO 的主場:低維、昂貴、有雜訊的黑箱。HEBO 的「heteroscedastic」即處理不同設計處雜訊大小不同。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">Contacts make \(f(\boldsymbol d)\) non-differentiable, and the Monte Carlo estimate is noisy; the design space is only 2–4-D and each evaluation is costly (1000 episodes). That is BO's home turf: low-dimensional, expensive, noisy black boxes. HEBO's "heteroscedastic" handles noise levels that vary across designs. <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">BO 真正最佳化的是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">平均 reward,不是 CoTr</mark>。CoTr 是「事後量的效率」;兩者在 2-D 圓盤實驗中恰好一致(最高 reward = 最低 CoTr),但並非一般保證。</span>
+        <span data-lang="en">What BO actually optimizes is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">average reward, not CoTr</mark>. CoTr is the efficiency measured afterwards; they happen to coincide in the 2-D disc study (highest reward = lowest CoTr), but that is not guaranteed in general.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">與 RMA 的關係</span><span data-lang="en">Relation to RMA</span></span>
+        <span data-lang="zh">Teacher 看特權資訊、student 從歷史推估——與本庫 <a href="Kumar2021_RMA.html">RMA</a> 同屬 Lee et al. 2020 這一系的 privileged learning。差別在本文把「機器人自己的硬體參數 \(\boldsymbol d\)」也塞進特權資訊。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">Teacher sees privileged info, student infers from history—the same privileged-learning lineage (Lee et al. 2020) as <a href="Kumar2021_RMA.html">RMA</a> in this library. The twist: the robot's own hardware parameters \(\boldsymbol d\) are put into the privileged information. <span class="add">[guide note]</span></span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實驗 1(模擬):BO 找得到最佳設計嗎?</span><span data-lang="en">Exp. 1 (sim): does BO find the optimal design?</span></h3>
+        <p data-lang="zh">為了能畫出來,把凸輪限制成圓(\(a=b=r\)),設計只剩 \(\boldsymbol d=[\bar q,r]\)。用 40×40 網格、每點 200 台機器人(共 320,000 條軌跡)畫出平均 reward 的等高線,再疊上 25 次 BO 迭代。任務是 1 m/s 前進,含踏石、平地、崎嶇地形,基座擾動最高 50 N / 50 N·m,摩擦 \(\mu\in[0.5,2]\)。</p>
+        <p data-lang="en">To make it plottable, the cam is restricted to a circle (\(a=b=r\)), leaving \(\boldsymbol d=[\bar q,r]\). A 40×40 grid with 200 robots per point (320,000 trajectories) gives the average-reward contour, overlaid with 25 BO iterations. Task: 1 m/s forward walking over stepping stones, flat and rough terrain, base perturbations up to 50 N / 50 N·m, friction \(\mu\in[0.5,2]\).</p>
+        <figure class="fig"><img src="figs/Bjelonic2023/fig8_design_space.png" alt="Figure 8 design space contour">
+          <figcaption data-lang="zh"><b>Fig.8</b> 圓盤凸輪的 2-D 設計空間(灰階 = 平均 reward)。看三件事:① BO 點(青→洋紅)<b>前幾次就聚到</b>黃星附近(\(\bar q\approx 0\)、\(r\approx 6\) cm);② 綠線/綠星是「第一原理」重力補償設計(\(r=9.02\) cm),位在左上的<b>紅色低 reward 區</b>;③ 色條範圍只有 0.90–0.92——<b>reward 地形非常平</b>,底邊 \(r=0\) 就是無彈簧基線。</figcaption>
+          <figcaption data-lang="en"><b>Fig.8</b> The 2-D disc-cam design space (grayscale = average reward). Notice three things: ① BO samples (cyan→magenta) <b>cluster near</b> the yellow star (\(\bar q\approx 0\), \(r\approx 6\) cm) within the first iterations; ② the green line/star is the "first-principles" gravity-compensation design (\(r=9.02\) cm), sitting in the top-left <b>red low-reward region</b>; ③ the colorbar spans only 0.90–0.92—<b>the reward landscape is very flat</b>; the bottom edge \(r=0\) is the no-spring baseline.</figcaption></figure>
+        <table>
+          <tr><th><span data-lang="zh">設計</span><span data-lang="en">Design</span></th><th>\(\bar q\)</th><th>\(r\)</th><th><span data-lang="zh">CoTr vs 基線</span><span data-lang="en">CoTr vs baseline</span></th></tr>
+          <tr><td><span data-lang="zh">無彈簧基線</span><span data-lang="en">No-spring baseline</span></td><td>—</td><td>0 cm</td><td>0%</td></tr>
+          <tr><td><span data-lang="zh">第一原理(重力補償於平均膝角 1.3 rad)</span><span data-lang="en">First-principles (gravity comp. at mean knee angle 1.3 rad)</span></td><td>0.0 rad</td><td>9.02 cm</td><td>−8%</td></tr>
+          <tr><td class="win"><span data-lang="zh">BO 最佳</span><span data-lang="en">BO optimum</span></td><td class="win">≈0.0 rad</td><td class="win">≈6.0 cm</td><td class="win">−33%</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">平均 reward 只差約 1%,但 <mark class="m-result" data-t="RESULT/EVIDENCE">CoTr 差 33%,且是第一原理設計的 4 倍效益</mark>。第一原理設計的盲點:它用「正常 ANYmal 的平均膝角」來設計,卻沒考慮控制器會因彈簧而改變步態。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Average reward differs by only ~1%, yet <mark class="m-result" data-t="RESULT/EVIDENCE">CoTr differs by 33%—4× the first-principles design's benefit</mark>. The first-principles blind spot: it designs around "regular ANYmal's mean knee angle," ignoring that the controller changes its gait once the spring is there.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可重複性與任務依賴</span><span data-lang="en">Repeatability and task dependence</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>5 個 random seed</b>(完整 4-D 空間、平地 1 m/s):最佳設計的角度標準差 <mark class="m-result" data-t="RESULT/EVIDENCE">&lt; 3°</mark>、半徑標準差 <mark class="m-result" data-t="RESULT/EVIDENCE">&lt; 1 mm</mark> → 不會每次給出隨機設計。</li>
+          <li data-lang="en"><b>5 random seeds</b> (full 4-D space, flat terrain 1 m/s): optimal-design std <mark class="m-result" data-t="RESULT/EVIDENCE">&lt; 3°</mark> for angles and <mark class="m-result" data-t="RESULT/EVIDENCE">&lt; 1 mm</mark> for radii → it doesn't spit out random designs.</li>
+          <li data-lang="zh"><b>5 種任務</b>(站立、負重 20 kg、樓梯、平地、崎嶇)各自得到<mark class="m-result" data-t="RESULT/EVIDENCE">明顯不同的凸輪形狀與平衡角</mark>;實機採用「崎嶇地形」那組。</li>
+          <li data-lang="en"><b>5 tasks</b> (standing, 20 kg payload, stairs, flat, rough) each yield a <mark class="m-result" data-t="RESULT/EVIDENCE">visibly different cam shape and equilibrium</mark>; the hardware uses the "rough terrain" design.</li>
+        </ul>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><span class="add">[導讀補充]</span> 後者是兩面刃:它證明方法對任務敏感,但也表示<b>一個實體彈簧只對一種任務最佳</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><span class="add">[guide note]</span> The latter cuts both ways: it shows the method is task-sensitive, but also that <b>one physical spring is optimal for only one task</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實機主結果:ANYmal vs AoPS</span><span data-lang="en">Main hardware results: ANYmal vs AoPS</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">實驗</span><span data-lang="en">Experiment</span></th><th><span data-lang="zh">指標</span><span data-lang="en">Metric</span></th><th>ANYmal</th><th>AoPS</th><th>\(\Delta\)</th></tr>
+          <tr><td rowspan="2"><span data-lang="zh">平地直走 16 m<br><small>前進/後退各 3 次</small></span><span data-lang="en">Flat 16 m straight<br><small>3× fwd, 3× bwd</small></span></td><td>CoTr</td><td>≈12 N·m·s</td><td class="win">≈8 N·m·s</td><td class="ok">−33%</td></tr>
+          <tr><td><span data-lang="zh">速度追蹤誤差</span><span data-lang="en">Velocity tracking error</span></td><td>&lt; 0.25 m/s</td><td>&lt; 0.25 m/s</td><td><span data-lang="zh">無顯著差</span><span data-lang="en">n.s.</span></td></tr>
+          <tr><td rowspan="3"><span data-lang="zh">隨機指令 10×3 s<br><small>LF 腿力矩</small></span><span data-lang="en">Random commands 10×3 s<br><small>LF-leg torques</small></span></td><td><span data-lang="zh">效率增益</span><span data-lang="en">Efficiency gain</span></td><td>—</td><td class="win">≈30%</td><td class="ok">≈−30%</td></tr>
+          <tr><td><span data-lang="zh">膝 (KFE) 平均力矩</span><span data-lang="en">Knee (KFE) mean torque</span></td><td>≈26 N·m</td><td class="win">≈7 N·m</td><td class="ok">−73%</td></tr>
+          <tr><td><span data-lang="zh">最大絕對力矩</span><span data-lang="en">Max absolute torque</span></td><td>73 N·m</td><td class="win">52 N·m</td><td class="ok">−29%</td></tr>
+          <tr><td><span data-lang="zh">野外崎嶇地形</span><span data-lang="en">Outdoor rough terrain</span></td><td><span data-lang="zh">跌倒次數</span><span data-lang="en">Falls</span></td><td>—</td><td class="win">0</td><td>—</td></tr>
+        </table>
+        <figure class="fig"><img src="figs/Bjelonic2023/fig10_cotr.png" alt="Figure 10 CoTr bars">
+          <figcaption data-lang="zh"><b>Fig.10</b> 平地直走的 CoTr,每根柱子是一次試驗。紅(ANYmal)穩定在 ≈12、紫(AoPS)≈8,<b>前進後退都一樣、組內變異極小</b>——差距不是雜訊。但也注意:每組只有 3 次、只有一個速度。(圖說寫 15 m、正文寫 16 m;縱軸單位標成 N·m·s/rad、正文為 N·m·s——小筆誤。)</figcaption>
+          <figcaption data-lang="en"><b>Fig.10</b> Flat-walking CoTr, one bar per trial. Red (ANYmal) sits at ≈12, purple (AoPS) at ≈8, <b>identically forwards and backwards with tiny within-group variance</b>—the gap is not noise. But note: only 3 trials per group, one speed. (Caption says 15 m, text 16 m; the y-axis unit reads N·m·s/rad vs N·m·s in text—minor slips.)</figcaption></figure>
+        <figure class="fig"><img src="figs/Bjelonic2023/fig12_knee_torque.png" alt="Figure 12 joint torque distributions">
+          <figcaption data-lang="zh"><b>Fig.12</b> 隨機指令實驗中 LF 腿各關節力矩分佈(箱型 + violin)。看 <b>KFE(綠)</b>:ANYmal 是 0 附近(swing)與 +30 附近(stance)的雙峰;AoPS 整體下移,變成約 −20 與 +20 的雙峰。<span class="add">[導讀補充]</span> 負的那一峰就是「馬達在對抗彈簧」——彈簧吃掉了 stance 的大力矩,代價是另一相位要反向出力;但平方和仍大幅下降。HFE 平均更接近 0、變異更小;HAA 幾乎不變(彈簧不跨該關節)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.12</b> Per-joint torque distributions on the LF leg during random commands (box + violin). Look at <b>KFE (green)</b>: ANYmal is bimodal near 0 (swing) and near +30 (stance); AoPS shifts down to modes around −20 and +20. <span class="add">[guide note]</span> The negative mode is "the motor fighting the spring"—the spring absorbs the large stance torque at the cost of reverse effort in another phase, yet the sum of squares still falls sharply. HFE's mean moves closer to 0 with less variance; HAA is essentially unchanged (the spring doesn't span it).</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實驗 5:跑道續航(Tab.I)</span><span data-lang="en">Exp. 5: running-track endurance (Tab. I)</span></h3>
+        <table>
+          <tr><th></th><th>AoPS</th><th>ANYmal</th></tr>
+          <tr><td><span data-lang="zh">圈數(400 m 跑道)</span><span data-lang="en">Rounds (400 m track)</span></td><td class="win">7.5</td><td>6.6</td></tr>
+          <tr><td><span data-lang="zh">行進距離</span><span data-lang="en">Distance traveled</span></td><td class="win">3000 m</td><td>2640 m</td></tr>
+          <tr><td><span data-lang="zh">初始 / 結束電量</span><span data-lang="en">Initial / final charge</span></td><td>92% / 11%</td><td>89% / 10%</td></tr>
+          <tr><td><span data-lang="zh">運作時間</span><span data-lang="en">Operation time</span></td><td class="win">68 min</td><td>59 min</td></tr>
+          <tr><td><span data-lang="zh">平均速度(指令 1 m/s)</span><span data-lang="en">Avg velocity (commanded 1 m/s)</span></td><td>0.735 m/s</td><td>0.740 m/s</td></tr>
+          <tr><td><span data-lang="zh">效率</span><span data-lang="en">Efficiency</span></td><td class="win">111%</td><td>100%</td></tr>
+          <tr><td><span data-lang="zh">室外溫度</span><span data-lang="en">Outside temperature</span></td><td>31 °C</td><td>26 °C</td></tr>
+        </table>
+        <p data-lang="zh">效率以距離比並按電量差線性校正:</p>
+        <p data-lang="en">Efficiency is the distance ratio, linearly corrected for the charge mismatch:</p>
+        <div class="eq">$$\text{Efficiency}=\frac{3000\ \text{m}}{2640\ \text{m}}\cdot\frac{0.89-0.10}{0.92-0.11}=1.11$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">結論:<mark class="m-result" data-t="RESULT/EVIDENCE">同一顆電池多走至少 11%</mark>。但與 CoTr 的 33% 落差明顯——作者在結論承認有未建模的電子與機械損失。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Conclusion: <mark class="m-result" data-t="RESULT/EVIDENCE">at least 11% more distance on the same battery</mark>. But the gap to CoTr's 33% is clear—the authors concede unmodeled electrical and mechanical losses.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">證據解讀(本文沒有傳統消融,改讀「對照」)</span><span data-lang="en">Reading the evidence (no classic ablation—read the contrasts)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">對照</span><span data-lang="en">Contrast</span></th><th><span data-lang="zh">結果</span><span data-lang="en">Result</span></th><th><span data-lang="zh">證明了什麼</span><span data-lang="en">What it shows</span></th></tr>
+          <tr><td><span data-lang="zh">BO 最佳 vs 第一原理(模擬)</span><span data-lang="en">BO optimum vs first-principles (sim)</span></td><td>−33% vs −8% CoTr</td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">control-aware 設計</mark>遠勝手算</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Control-aware design</mark> beats hand calculation</span></td></tr>
+          <tr><td><span data-lang="zh">AoPS vs \(a=b=0\) 基線(實機)</span><span data-lang="en">AoPS vs \(a=b=0\) baseline (hardware)</span></td><td>−33% CoTr, −29% peak</td><td><span data-lang="zh">同一控制管線下,PEA 的增益在實機上<b>保留下來</b></span><span data-lang="en">Under the same control pipeline, the PEA gain <b>survives on hardware</b></span></td></tr>
+          <tr><td><span data-lang="zh">5 seeds</span><span data-lang="en">5 seeds</span></td><td>&lt;3°, &lt;1 mm</td><td><span data-lang="zh">設計搜尋可重複</span><span data-lang="en">Design search is repeatable</span></td></tr>
+          <tr><td><span data-lang="zh">5 種任務</span><span data-lang="en">5 tasks</span></td><td><span data-lang="zh">設計各異</span><span data-lang="en">Distinct designs</span></td><td><span data-lang="zh">最佳設計依賴任務</span><span data-lang="en">The optimum is task-dependent</span></td></tr>
+          <tr><td><span data-lang="zh">CoTr vs 電池</span><span data-lang="en">CoTr vs battery</span></td><td>33% vs 11%</td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">代理指標高估了整機效益</mark></span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">The proxy overstates system-level gains</mark></span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><b>能證明</b>:在一個速度(1 m/s)、一種步態下,co-designed PEA 能在實機上顯著降低力矩成本且不傷追蹤與魯棒性。<b>不能證明</b>:條件化 policy 真的對每個設計都近最優;能耗結論能推廣到其他速度/步態;BO 找到的就是全域最佳(4-D 空間沒有網格真值)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><b>Proves</b>: at one speed (1 m/s) and one gait, a co-designed PEA substantially reduces torque cost on hardware without hurting tracking or robustness. <b>Does not prove</b>: that the conditioned policy is near-optimal for every design; that the energy conclusion generalizes to other speeds/gaits; that BO found the global optimum (no grid ground truth in 4-D).</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">模擬裡 BO 幾次就找到比手算好 4 倍的彈簧;實機上膝平均力矩降到約四分之一、峰值降三成、續航多一成,而且在野外一次都沒摔。</span>
+        <span data-lang="en">In sim, BO finds within a few iterations a spring 4× better than the hand-designed one; on hardware, mean knee torque drops to about a quarter, peak by 30%, endurance up 10%—and zero falls outdoors.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">續航實驗<mark class="m-limit" data-t="LIMITATION/FUTURE">每台只跑一次、先後進行、氣溫差 5 °C</mark>、初始電量不同(靠線性校正);崎嶇地形只有質性「沒摔」,<b>沒有量化能耗</b>;隨機指令只報 LF 腿。</span>
+        <span data-lang="en">The endurance test is <mark class="m-limit" data-t="LIMITATION/FUTURE">one run per robot, run sequentially, with a 5 °C temperature difference</mark> and differing initial charge (fixed by linear scaling); rough terrain is only qualitative "no falls," <b>no energy numbers</b>; random-command torques are reported for the LF leg only.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">小筆誤</span><span data-lang="en">Small slips</span></span>
+        <span data-lang="zh">Fig.13 圖說寫「Sec. III-E 的實驗」,實為 III-F(續航);Fig.10 圖說 15 m vs 正文 16 m;CoTr 單位在圖與文不一致。不影響結論。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">Fig.13's caption cites "the experiment in Sec. III-E," but it is III-F (battery); Fig.10 says 15 m vs 16 m in text; CoTr units differ between figure and text. None affects the conclusions. <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">平坦 reward</span><span data-lang="en">flat reward</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">基線公平?</span><span data-lang="en">fair baseline?</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">其他速度?</span><span data-lang="en">other speeds?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「co-optimization」其實是兩階段、序列式的。</b> Policy 在整個 \(\mathcal D\) 上先訓完,BO 才在凍結的 policy 上搜;兩者<mark class="m-assume" data-t="ASSUMPTION/CLAIM">沒有交替更新</mark>,也沒有在 \(\boldsymbol d^*\) 附近再精修 teacher。這叫「amortized bi-level」比叫「joint」更精確。若 policy 的容量在 \(\mathcal D\) 某些區域(例如邊界)較弱,BO 看到的地形就被<b>控制器的偏差</b>而非設計本身的好壞扭曲。作者在結論承認無法保證條件化 policy 與「逐設計訓練」一樣好,並說差距「可忽略」——但<mark class="m-limit" data-t="LIMITATION/FUTURE">本文沒給這個差距的數字</mark>(只引自家 Meta-RL 研究)。</li>
+          <li data-lang="en"><b>"Co-optimization" is really two-stage and sequential.</b> The policy is fully trained over \(\mathcal D\) before BO searches on the frozen policy; there is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">no alternating update</mark>, nor teacher refinement near \(\boldsymbol d^*\). "Amortized bi-level" is more accurate than "joint." If policy capacity is weaker in some regions of \(\mathcal D\) (e.g. the boundary), the landscape BO sees is distorted by <b>controller bias</b> rather than true design quality. The conclusion admits the conditioned policy can't be guaranteed as good as per-design training and calls the gap "negligible"—but <mark class="m-limit" data-t="LIMITATION/FUTURE">no number for that gap is given here</mark> (it defers to the group's own Meta-RL study).</li>
+          <li data-lang="zh"><b>目標函數與敘事不一致。</b> 方法章節把設計目標講成能效(CoTr),實驗卻用<b>平均 reward</b> 當 \(f\);力矩 L2 只是 reward 的一項,權重未公開。而 reward 地形極平(0.90–0.92,約 1%),BO 是在 1000 episodes 的 Monte Carlo 雜訊裡追一個小訊號。「最高 reward = 最低 CoTr」<mark class="m-assume" data-t="ASSUMPTION/CLAIM">只在 2-D 圓盤案例被展示</mark>;4-D 橢圓實機設計的 CoTr 地形並未呈現。</li>
+          <li data-lang="en"><b>Objective vs narrative mismatch.</b> The method frames the design objective as efficiency (CoTr), but experiments use <b>average reward</b> as \(f\); torque L2 is one reward term with undisclosed weights. The reward landscape is extremely flat (0.90–0.92, ~1%), so BO chases a small signal through Monte Carlo noise over 1000 episodes. "Highest reward = lowest CoTr" is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">shown only for the 2-D disc case</mark>; the CoTr landscape for the 4-D elliptic hardware design is never shown.</li>
+          <li data-lang="zh"><b>能耗指標的選擇。</b> \(\int\tau^2dt\) 只代表銅損,忽略機械功、齒輪/傳動摩擦、驅動器與電腦的基礎功耗;且各關節等權。結果是<mark class="m-limit" data-t="LIMITATION/FUTURE">CoTr −33% 只換到電池 +11%</mark>。對 ANYmal 這類有大量感測與運算負載的機器,用「電池續航」或實測電功率當設計目標也許會選出不同的彈簧。另外 PEA 帶來 +1.2 kg,CoTr 雖除以 \(m\),但 \(\int\tau^2\) 本身會因質量增加而上升,這部分並未拆開討論。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>Choice of energy metric.</b> \(\int\tau^2dt\) captures copper loss only, ignoring mechanical work, gear/transmission friction, and the base draw of drives and computers; joints are equally weighted. The upshot: <mark class="m-limit" data-t="LIMITATION/FUTURE">−33% CoTr buys only +11% battery</mark>. For a robot like ANYmal with heavy sensing/compute loads, optimizing battery endurance or measured electrical power might pick a different spring. Also, the PEA adds 1.2 kg; CoTr divides by \(m\), but \(\int\tau^2\) itself rises with mass, and that effect isn't separated. <span class="add">[guide note]</span></li>
+          <li data-lang="zh"><b>基線的公平性。</b> 「ANYmal」基線不是 ANYmal 原廠控制器,也不是專為剛性腿訓練的 policy,而是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">同一個條件化 teacher 在 \(a=b=0\) 處蒸餾出的 student</mark>。這讓比較「控制管線一致」,很乾淨;但 \(r=0\) 位於設計空間的邊界,若條件化 policy 在邊界較差,基線就被低估,增益就被高估。一個「只在剛性腿上訓練」的 specialist 基線會更有說服力。</li>
+          <li data-lang="en"><b>Baseline fairness.</b> The "ANYmal" baseline is neither ANYmal's stock controller nor a policy trained specifically for rigid legs; it is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a student distilled from the same conditioned teacher at \(a=b=0\)</mark>. That keeps the control pipeline identical—clean—but \(r=0\) lies on the edge of the design space; if the conditioned policy is weaker at the edge, the baseline is understated and the gain overstated. A specialist baseline trained only on rigid legs would be more convincing.</li>
+          <li data-lang="zh"><b>只有一個速度、一種步態。</b> 設計與實機都針對 1 m/s 前進(實際平均 0.735–0.740 m/s)。PEA 的效益高度依賴「高負載姿態落在彈簧有效區」,換成慢走、快跑、跳躍、側移或恢復動作時是否仍有利、甚至變成負擔,<mark class="m-limit" data-t="LIMITATION/FUTURE">完全未測</mark>。Fig.9 已顯示不同任務的最佳設計不同,一個固定彈簧注定是折衷。</li>
+          <li data-lang="en"><b>One speed, one gait.</b> Design and hardware both target 1 m/s forward walking (actual average 0.735–0.740 m/s). PEA benefit hinges on "high-load postures landing in the spring's useful range"; whether it still helps—or becomes a burden—for slow walking, fast running, jumping, lateral motion, or recovery is <mark class="m-limit" data-t="LIMITATION/FUTURE">entirely untested</mark>. Fig.9 already shows different tasks want different designs; a fixed spring is necessarily a compromise.</li>
+          <li data-lang="zh"><b>實機統計薄弱。</b> 平地 3+3 次、續航每台各 1 次、先後進行、氣溫 31 vs 26 °C、初始電量 92 vs 89%。效果量(33%)很大,所以結論方向大概率成立,但 <mark class="m-limit" data-t="LIMITATION/FUTURE">+11% 續航的信賴區間其實未知</mark>(鋰電池容量對溫度敏感)。</li>
+          <li data-lang="en"><b>Thin hardware statistics.</b> Flat walking 3+3 trials; endurance one run per robot, sequential, 31 vs 26 °C, initial charge 92 vs 89%. The effect size (33%) is large, so the direction is very likely right, but <mark class="m-limit" data-t="LIMITATION/FUTURE">the confidence interval of the +11% endurance is unknown</mark> (Li-ion capacity is temperature-sensitive).</li>
+          <li data-lang="zh"><b>設計空間很小、只動膝。</b> 4 維、單一關節,BO 輕鬆勝任;但若要把連桿長度、質量分佈納入(作者列為未來工作),條件化 policy 必須涵蓋大得多的 \(\mathcal D\),攤提假設會更吃力。機構本身也限制了膝的工作空間、鋼索實作不精準(作者自承)。</li>
+          <li data-lang="en"><b>Tiny design space, knee only.</b> 4-D, one joint—easy for BO; adding link lengths and mass distribution (listed as future work) would require the conditioned policy to cover a much larger \(\mathcal D\), straining the amortization assumption. The mechanism also limits knee workspace and the cable implementation can be inaccurate (authors concede).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>Joint 還是 sequential?</b> 若在 \(\boldsymbol d^*\) 附近再 fine-tune teacher、重新跑 BO(交替迭代),最佳設計會移動嗎?條件化 policy 與「逐設計 specialist」在 \(\boldsymbol d^*\) 與 \(r=0\) 的 reward/CoTr 差多少?</li>
+          <li data-lang="en"><b>Joint or sequential?</b> If the teacher were fine-tuned near \(\boldsymbol d^*\) and BO re-run (alternating), would the optimum move? How large is the gap between the conditioned policy and a per-design specialist at \(\boldsymbol d^*\) and at \(r=0\)?</li>
+          <li data-lang="zh"><b>平坦的 reward 地形</b>:reward 差 1% 的情況下,BO 的選擇有多少來自 Monte Carlo 雜訊?若直接把 CoTr(或實測電功率)當 \(f\),設計會不同嗎?</li>
+          <li data-lang="en"><b>Flat reward landscape</b>: with only ~1% reward spread, how much of BO's choice is Monte Carlo noise? Would the design differ if CoTr (or measured electrical power) were used as \(f\) directly?</li>
+          <li data-lang="zh"><b>能耗指標</b>:33% 的 CoTr 為何只換到 11% 續航?能否把 ANYmal 的基礎功耗(電腦、感測器)與驅動器效率曲線放進目標,讓模擬指標與電池一致?</li>
+          <li data-lang="en"><b>Energy metric</b>: why does 33% CoTr yield only 11% endurance? Could ANYmal's base power (compute, sensors) and drive efficiency curves be folded into the objective so the sim metric matches the battery?</li>
+          <li data-lang="zh"><b>基線公平</b>:換成「只在剛性腿上訓練」的 specialist policy(或 ANYmal 原廠控制器),AoPS 的 33% 優勢會剩多少?</li>
+          <li data-lang="en"><b>Baseline fairness</b>: against a specialist policy trained only on rigid legs (or ANYmal's stock controller), how much of AoPS's 33% advantage remains?</li>
+          <li data-lang="zh"><b>泛化</b>:在 0.3 m/s、1.5 m/s、側移、爬梯、負重下,AoPS 的 CoTr 相對基線如何?是否存在彈簧反而增加成本的工況?可變剛度/可離合(如 BirdBot)是不是更好的答案?</li>
+          <li data-lang="en"><b>Generality</b>: at 0.3 m/s, 1.5 m/s, lateral walking, stair climbing, under payload—how does AoPS's CoTr compare? Are there regimes where the spring increases cost? Would variable stiffness / clutching (like BirdBot) be the better answer?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把標題的「co-optimize」讀成「設計與控制器在同一個最佳化中一起更新」。實際上是:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">先學一個對所有設計都適用的控制器,再拿它當固定評估器搜設計</mark>,最後只為選中的設計蒸餾部署用 student。這是聰明的工程折衷,但它的最優性完全仰賴「條件化 policy ≈ 每個設計的最佳控制器」這個沒被量化的假設。</span>
+        <span data-lang="en">Reading the title's "co-optimize" as "design and controller updated together in one optimization." What actually happens: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">first learn a controller for all designs, then use it as a fixed evaluator to search the design</mark>, finally distilling a deployment student only for the chosen design. A clever engineering compromise—but its optimality rests entirely on the unquantified assumption "conditioned policy ≈ each design's optimal controller."</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">真正把 PEA 帶出實驗室(森林、山區、蘇黎世車站樓梯),且做了「同一控制管線」的乾淨對照;結論章節坦白列出能耗建模落差、條件化 policy 的最優性、機構限制三大問題。用 privileged learning 吸收 ±10% 製造誤差,省掉彈簧校正,這個工程經驗很實用。</span>
+        <span data-lang="en">It genuinely takes PEAs out of the lab (forests, mountains, Zurich station stairs) with a clean "same control pipeline" comparison; the conclusion candidly lists three open issues—energy-model gap, conditioned-policy optimality, mechanism limits. Using privileged learning to absorb ±10% manufacturing error and skip spring calibration is a very practical lesson.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>條件化 policy = 可重複使用的「設計評估器」。</b> 任何「每個硬體/環境參數都要配最佳控制器」的外層問題(機構設計、感測器擺位、致動器選型),都可以先訓一個以該參數為條件的 policy,再讓 BO/CMA-ES 在上面便宜地搜。記得量化條件化 policy 與 specialist 的差距。</li>
+          <li data-lang="en"><b>A conditioned policy is a reusable "design evaluator."</b> Any outer problem where each hardware/environment parameter needs its own optimal controller (mechanism design, sensor placement, actuator selection) can first train a policy conditioned on that parameter, then let BO/CMA-ES search cheaply on top. Remember to quantify the conditioned-vs-specialist gap.</li>
+          <li data-lang="zh"><b>把「設計目標」和「訓練 reward」分開。</b> 本文用 reward 當設計目標導致地形極平;若你要做 co-design,讓外層直接最佳化你真正在乎的量(能耗、峰值力矩、電池),內層 reward 只負責「學會走」。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>Separate the "design objective" from the "training reward."</b> Using reward as the design objective here made the landscape very flat; in your own co-design, let the outer loop optimize what you truly care about (energy, peak torque, battery) and let the inner reward just "learn to walk." <span class="add">[guide note]</span></li>
+          <li data-lang="zh"><b>把硬體不確定性放進特權觀測 + 隨機化。</b> 自製機構精度不夠時,不必做系統辨識——讓 teacher 看精確值、student 在 ±10% 擾動下學會推斷。</li>
+          <li data-lang="en"><b>Put hardware uncertainty into privileged observations + randomization.</b> When home-built mechanisms are imprecise, skip system ID—let the teacher see exact values and the student learn to infer them under ±10% perturbations.</li>
+          <li data-lang="zh"><b>做能耗研究時,同時報代理指標與整機電池。</b> 本文最誠實的一課就是 33% vs 11% 的落差。</li>
+          <li data-lang="en"><b>In energy studies, report both the proxy and whole-system battery.</b> The 33% vs 11% gap is this paper's most honest lesson.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">在 co-design 版圖中的位置</span><span data-lang="en">Where it sits on the co-design map</span> <span class="add">[導讀補充 · guide note]</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">路線</span><span data-lang="en">Route</span></th><th><span data-lang="zh">代表</span><span data-lang="en">Representatives</span></th><th><span data-lang="zh">與本文的關係</span><span data-lang="en">Relation to this paper</span></th></tr>
+          <tr><td><b><span data-lang="zh">RL 式 co-design</span><span data-lang="en">RL-based co-design</span></b></td><td>Hardware-as-Policy (Chen 2020); Schaff 2019; <b>Meta-RL for Optimal Design</b> (Belmonte-Baeza, Lee, Valsecchi, Hutter, RA-L 2022)</td><td><span data-lang="zh">同一陣營。Meta-RL 那篇出自同一 RSL 團隊,處理「一個 policy 要快速適應很多設計」;本文直接用「看得到 \(\boldsymbol d\)」的條件化 teacher + BO,並把結果<b>真的造出來上實機</b>。作者正是引那篇來支持「條件化 policy 與逐設計 policy 差距可忽略」。</span><span data-lang="en">Same camp. The Meta-RL paper is from the same RSL team and tackles "one policy rapidly adapting to many designs"; this paper uses a teacher that directly observes \(\boldsymbol d\) + BO, and <b>actually builds and deploys</b> the result. The authors cite it to support that the conditioned-vs-per-design gap is negligible.</span></td></tr>
+          <tr><td><b><span data-lang="zh">模型式 co-design</span><span data-lang="en">Model-based co-design</span></b></td><td>Dinev 2022 (Solo); Fadini et al. 2022 (RA-L, simulation-aided robust co-design)</td><td><span data-lang="zh">內層用顯式動力學模型做最佳控制/軌跡最佳化,外層再搜設計;優點是可解釋、樣本效率高、可帶梯度,缺點是需要準確可微模型、接觸序列多半固定,崎嶇地形與擾動難處理。本文反其道:<b>model-free、閉迴路、含擾動與地形隨機化</b>,代價是大量模擬與「條件化 policy 最優性」的假設。</span><span data-lang="en">The inner loop does optimal control / trajectory optimization on an explicit dynamics model, the outer loop searches design; pros: interpretable, sample-efficient, gradients available; cons: needs an accurate differentiable model, contact sequences usually fixed, rough terrain and disturbances are hard. This paper goes the other way: <b>model-free, closed-loop, with disturbance and terrain randomization</b>, at the cost of heavy simulation and the conditioned-policy optimality assumption.</span></td></tr>
+          <tr><td><b><span data-lang="zh">SEA 機器人</span><span data-lang="en">SEA-based robots</span></b></td><td>StarlETH; ANYmal (ANYdrive)</td><td><span data-lang="zh">ETH 這條線一直以 SEA 為核心(StarlETH 的高柔順 SEA → ANYmal 的 ANYdrive),帶來力矩控制與耐衝擊,但<b>不分擔平均力矩</b>。AoPS 等於「SEA + PEA 混合」:保留 SEA 的力矩感測,再用並聯彈簧卸掉膝的 stance 負載。</span><span data-lang="en">ETH's lineage has centered on SEAs (StarlETH's highly compliant SEAs → ANYmal's ANYdrive), giving torque control and impact tolerance but <b>no sharing of mean torque</b>. AoPS is effectively an "SEA + PEA hybrid": keep SEA torque sensing, add a parallel spring to offload stance knee load.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「PEA 在動態四足行走中也能省力」</span><span data-lang="en">"PEAs save effort in dynamic quadruped walking too"</span></td><td><span data-lang="zh">實機 CoTr −33%、峰值力矩 −30%、續航 +11%,且為室外評估。</span><span data-lang="en">Hardware CoTr −33%, peak torque −30%, endurance +11%, evaluated outdoors.</span></td></tr>
+          <tr><td><span data-lang="zh">「design-conditioned RL + BO 可做機構 co-design」</span><span data-lang="en">"Design-conditioned RL + BO enables mechanism co-design"</span></td><td><span data-lang="zh">引其兩階段框架與 5-seed 可重複性。</span><span data-lang="en">Cite the two-stage framework and the 5-seed repeatability.</span></td></tr>
+          <tr><td><span data-lang="zh">「第一原理設計不夠,需 control-aware」</span><span data-lang="en">"First-principles design falls short; be control-aware"</span></td><td><span data-lang="zh">模擬 −33% vs −8% 的對照。</span><span data-lang="en">The sim contrast of −33% vs −8%.</span></td></tr>
+          <tr><td><span data-lang="zh">「力矩平方代理指標會高估電池效益」</span><span data-lang="en">"Torque-squared proxies overstate battery gains"</span></td><td><span data-lang="zh">33% CoTr vs 11% 續航的落差(作者自承)。</span><span data-lang="en">The 33% CoTr vs 11% endurance gap (acknowledged by the authors).</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">本文用「條件化 RL policy 當評估器 + BO 搜設計 + teacher-student 上實機」為 ANYmal 設計出並聯彈性膝,在實機上把力矩成本降三成、續航拉長一成;它的價值在於證明<b>學習式控制可以把機構設計拉進迴圈</b>,而它的弱點在於「co-design」其實是序列式攤提、目標是平坦的 reward、且只驗證了一個速度。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">Using "a conditioned RL policy as evaluator + BO over design + teacher-student to hardware," the paper designs a parallel-elastic knee for ANYmal that cuts torque cost by a third and extends endurance by a tenth on the real robot; its value is showing that <b>learning-based control can bring mechanism design into the loop</b>, while its weaknesses are that the "co-design" is a sequential amortization, the objective is a flat reward, and only one speed is validated.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Lee et al. 2020 (teacher-student)</span>
+          <span class="chip">Miki et al. 2022 (perceptive)</span>
+          <span class="chip">Belmonte-Baeza 2022 (Meta-RL design)</span>
+          <span class="chip">Chen 2020 (Hardware-as-Policy)</span>
+          <span class="chip">Dinev 2022 (co-design)</span>
+          <span class="chip">HEBO</span>
+          <span class="chip">SpaceBok / BirdBot / STEPPR</span>
+        </div>
+        <span style="display:block;margin-top:8px;font-size:12.5px"><span data-lang="zh"><span class="add">[導讀補充]</span> 在本庫的位置:與 <a href="Kumar2021_RMA.html">RMA</a> 共享 privileged teacher-student 骨架,但把「適應的對象」從環境延伸到機器人自身的硬體參數,是 Legged Robotics 線裡少數處理<b>硬體設計</b>而非純控制的一篇。</span><span data-lang="en"><span class="add">[guide note]</span> Place in this library: it shares the privileged teacher-student backbone with <a href="Kumar2021_RMA.html">RMA</a>, but extends "what is adapted to" from the environment to the robot's own hardware parameters—one of the few papers in the Legged Robotics thread about <b>hardware design</b> rather than pure control.</span></span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論(含 PEA/SEA 入門推導、bi-level 改寫、Fadini 2022 與 StarlETH 的定位——後兩者原文未引用),其餘事實與數據均出自原論文(arXiv:2301.03509v1)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences (incl. the PEA/SEA primer derivations, the bi-level rewrite, and the positioning of Fadini 2022 and StarlETH—neither is cited by the paper); all other facts and figures come from the original paper (arXiv:2301.03509v1).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Bjelonic et al. 2023 (PEA Co-Design, RA-L) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'PEA co-design reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

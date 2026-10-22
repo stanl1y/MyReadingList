@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Lifelike Agility &amp; Play (Han 2024) — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Lifelike Agility and Play in Quadrupedal Robots using Reinforcement Learning and Generative Pre-trained Models","authors":"Lei Han, Qingxu Zhu, Jiapeng Sheng, Chong Zhang, Tingguang Li, Yizheng Zhang, He Zhang, Yuzhen Liu, Cheng Zhou, Rui Zhao, Jie Li, Yufeng Zhang, Rui Wang, Wanchao Chi, Xiong Li, Yonghui Zhu, Lingzhu Xiang, Xiao Teng, Zhengyou Zhang","year":"2024","venue":"Nature Machine Intelligence","tags":["Legged Robotics","Reinforcement Learning","Motion Imitation","Generative Models","Quadruped","Hierarchical RL","Self-Play / Multi-Agent","Sim-to-Real"],"tldr":"騰訊 Robotics X 先把一隻拉布拉多約 40 分鐘的 mocap 壓進 VQ-VAE 式離散 latent 的原始運動控制器(VQ-PMC),再凍結重用其 decoder 訓練感知環境的越障層(鑽桿、跨欄、跳箱、上樓梯,蒸餾成單一網路),最後用 self-play 訓練策略層玩雙機 Chase Tag——三層皆可預訓練、重用、擴充,並零樣本部署到自研 14 kg 四足 MAX。","tldr_en":"Tencent Robotics X compresses about 40 minutes of Labrador mocap into a VQ-VAE-style discrete-latent primitive motor controller, freezes and reuses its decoder to learn perceptive obstacle traversal (creeping, hurdles, blocks, stairs; distilled into one network), then trains a strategic layer by self-play for a two-robot chase tag game - three pre-trainable, reusable levels deployed zero-shot on the in-house 14 kg MAX quadruped."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:88px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">這篇把「<b>大型生成式預訓練</b>」的想法搬進四足機器人控制:先用 RL 讓一個 <mark class="m-method" data-t="METHOD/IDEA">VQ-VAE 式離散 latent 控制器(VQ-PMC)</mark>模仿一隻拉布拉多的所有 mocap 動作,把「怎麼像動物一樣動」壓進 256 個離散碼;再<b>凍結</b>這個 decoder,往上疊<b>環境層</b>(看地形、學鑽桿/跨欄/跳箱/上樓梯)與<b>策略層</b>(用 self-play 玩雙機 Chase Tag)。三層各自可預訓練、重用、擴充,並<mark class="m-result" data-t="RESULT/EVIDENCE">零樣本部署到自研 14 kg 四足 MAX</mark>,在實機上出現撲擊、放棄追逐、徘徊等「像動物」的行為。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">This paper ports the idea of <b>large generative pre-training</b> into quadruped control. First, RL trains a <mark class="m-method" data-t="METHOD/IDEA">VQ-VAE-style discrete-latent controller (VQ-PMC)</mark> to imitate every mocap clip of a Labrador retriever, compressing "how to move like an animal" into 256 discrete codes. That decoder is then <b>frozen</b>, and an <b>environmental level</b> (perceives terrain; learns creeping, hurdles, blocks, stairs) and a <b>strategic level</b> (plays a two-robot Chase Tag game via self-play) are stacked on top. Each level is pre-trainable, reusable and enrichable, and the whole stack is <mark class="m-result" data-t="RESULT/EVIDENCE">deployed zero-shot on the in-house 14 kg MAX quadruped</mark>, where animal-like behaviours (pouncing, giving up a chase, wandering) appear on real hardware.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 四足 RL 敏捷技能(parkour、跳躍)多半靠<mark class="m-problem" data-t="PROBLEM/GAP">每個技能各寫一套 6~16 項的手工 reward + 地形 curriculum</mark>;動物模仿(如 Peng 2020)雖自然,但<mark class="m-problem" data-t="PROBLEM/GAP">一段 clip 一個策略、只停在一般走跑</mark>,學到的東西無法被更高層任務重用。</li>
+          <li data-lang="en"><b>Problem</b> — Agile quadruped RL skills (parkour, jumping) mostly rely on <mark class="m-problem" data-t="PROBLEM/GAP">a hand-crafted 6–16-term reward plus a terrain curriculum per skill</mark>; animal imitation (e.g., Peng 2020) looks natural but is <mark class="m-problem" data-t="PROBLEM/GAP">one policy per clip and stops at basic walking/running</mark>, so what it learns cannot be reused by higher-level tasks.</li>
+          <li data-lang="zh"><b>方法</b> — <mark class="m-method" data-t="METHOD/IDEA">三階段、由下往上凍結重用</mark>:① primitive 層 VQ-PMC 模仿全部動物資料(只看本體感覺);② environmental 層輸出「選哪個離散碼」的分類分佈,加上外感知與速度/方向指令,各障礙分開訓練再 multi-expert 蒸餾成一個;③ strategic 層只輸出方向/速度指令,用 PFSP self-play 學 Chase Tag。</li>
+          <li data-lang="en"><b>Method</b> — <mark class="m-method" data-t="METHOD/IDEA">Three stages, each frozen and reused from the bottom up</mark>: (1) the primitive level, VQ-PMC, imitates all animal data from proprioception only; (2) the environmental level outputs a categorical distribution over the discrete codes, adding exteroception and a direction/speed command; per-obstacle experts are distilled into one network; (3) the strategic level outputs only a direction/speed command and learns Chase Tag through PFSP self-play.</li>
+          <li data-lang="zh"><b>結果</b> — VQ 先驗在模仿(≈0.80 vs β-VAE 不穩/失敗)與<b>重用</b>(平地指令跟隨 ≈0.77 vs ≈0.61)都勝過高斯 latent;重用預訓練層讓 sparse reward 的鑽桿/跨欄/跳箱<mark class="m-result" data-t="RESULT/EVIDENCE">從「從頭練幾乎學不會」變成約 6 小時學會</mark>;實機越障成功率多在 80–100%;Chase Tag 對人類搖桿操控的 MPC 機器人 2:0。</li>
+          <li data-lang="en"><b>Results</b> — The VQ prior beats Gaussian latents at imitation (≈0.80 vs unstable/failed β-VAE) and at <b>reuse</b> (flat-terrain command following ≈0.77 vs ≈0.61). Reusing the pre-trained level turns sparse-reward creeping/hurdles/blocks <mark class="m-result" data-t="RESULT/EVIDENCE">from "barely learnable from scratch" into solved in about 6 hours</mark>. Real-world traversal success is mostly 80–100%; in Chase Tag the learned policy beats a joystick-driven MPC robot 2:0.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">四足學習控制在 2019–2022 年間由 ETH(Hwangbo、Lee、Miki)、RMA 等工作確立「<mark class="m-method" data-t="METHOD/IDEA">模擬中 RL + domain randomization → 零樣本上實機</mark>」的主流。2023 年的 parkour 浪潮(Extreme Parkour、Robot Parkour Learning、ANYmal Parkour、Barkour)把敏捷性推到極致,但<mark class="m-problem" data-t="PROBLEM/GAP">每個技能都需要精心設計的 reward 與 curriculum</mark>,且動作「像機器」而非「像動物」。</p>
+        <p data-lang="en">From 2019 to 2022, ETH (Hwangbo, Lee, Miki), RMA and others established the mainstream recipe for legged learning: <mark class="m-method" data-t="METHOD/IDEA">RL in simulation + domain randomization → zero-shot transfer to hardware</mark>. The 2023 parkour wave (Extreme Parkour, Robot Parkour Learning, ANYmal Parkour, Barkour) pushed agility to the limit, but <mark class="m-problem" data-t="PROBLEM/GAP">every skill needs a carefully engineered reward and curriculum</mark>, and the motions look robotic rather than animal-like.</p>
+        <p data-lang="zh">另一條線是<b>動物/人類動作模仿</b>:Peng et al. 2020 用 mocap + RL 讓 Laikago 跑出狗的步態;DeepMind 的 Bohez et al. 2022(Imitate and Repurpose)把動作壓成<mark class="m-method" data-t="METHOD/IDEA">高斯 latent 技能先驗</mark>再重用。電腦圖學(MVAE、NPMP、模擬人形足球)早已證明「動作先驗 + 階層策略」可以解複雜任務,但<mark class="m-problem" data-t="PROBLEM/GAP">幾乎都只在模擬器裡</mark>。</p>
+        <p data-lang="en">The other line is <b>animal/human motion imitation</b>: Peng et al. 2020 used mocap + RL to make Laikago reproduce dog gaits; DeepMind&#39;s Bohez et al. 2022 (Imitate and Repurpose) compressed motions into a <mark class="m-method" data-t="METHOD/IDEA">Gaussian latent skill prior</mark> for reuse. Computer graphics (MVAE, NPMP, simulated humanoid football) had already shown that "motion prior + hierarchical policy" solves complex tasks—but <mark class="m-problem" data-t="PROBLEM/GAP">almost exclusively in simulation</mark>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的賭注是:<b>把「控制」也當作預訓練問題</b>。像 LLM 先學語言再微調任務,這裡先學「動物怎麼動」(與任務無關、不看環境),再學「怎麼對環境動」,最後學「為什麼動」。關鍵設計選擇是用 <b>VQ 離散碼</b>(仿 DALL·E 用的 VQ-VAE)而非高斯 latent 當中間介面——上層只要「選詞」,下層負責把詞「念」成自然的關節動作。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">The bet: <b>treat control itself as a pre-training problem</b>. As an LLM learns language before task fine-tuning, the robot first learns "how animals move" (task-agnostic, environment-blind), then "how to move with respect to the environment," and finally "why to move." The key design choice is a <b>VQ discrete code</b> (from the VQ-VAE used in DALL·E) rather than a Gaussian latent as the interface—upper levels just "pick words," and the lower level "pronounces" them as natural joint motions. <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是「機器狗會玩鬼抓人」,而是底下這幾個設計觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What is worth taking away is not "robot dogs can play tag," but these design ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">依「感知層級」切分知識。</b> primitive 只看本體感覺、environmental 加外感知與指令、strategic 加任務資訊——三層的輸入互不重疊,作者稱為<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「高度正交」的多層先驗</mark>,因此換任務只動上層、換障礙只動中層。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Partition knowledge by perception level.</b> Primitive sees only proprioception; environmental adds exteroception and a command; strategic adds task info. Inputs don&#39;t overlap, giving what the authors call <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"highly orthogonal" multi-level priors</mark>: a new task touches only the top level, a new obstacle only the middle.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">離散碼是更好的「動作詞彙」。</b> VQ codebook(\(K=256\),\(D=32\))<mark class="m-result" data-t="RESULT/EVIDENCE">不需調 \(\beta\) 就同時兼顧模仿品質與可重用性</mark>;高斯 latent 的 β-VAE 要在「貼近先驗」與「重建品質」之間拉扯,常數 \(\beta\) 直接學不起來。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Discrete codes make a better "motion vocabulary."</b> A VQ codebook (\(K=256\), \(D=32\)) <mark class="m-result" data-t="RESULT/EVIDENCE">gets imitation quality and reusability without tuning \(\beta\)</mark>; Gaussian-latent β-VAE is torn between "close to the prior" and "good reconstruction," and with a constant \(\beta\) it fails outright.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">先驗把 reward engineering 換成資料。</b> 因為 decoder 只會產生「像狗」的動作,越障任務的 reward 只剩<mark class="m-assume" data-t="ASSUMPTION/CLAIM">方向 + 速度兩項</mark>,且速度只在 episode 結束時給(sparse)、不用 curriculum——自然性與節能不再靠 reward 項目去「拗」。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">The prior swaps reward engineering for data.</b> Since the decoder only produces dog-like motion, the traversal reward shrinks to <mark class="m-assume" data-t="ASSUMPTION/CLAIM">two terms (direction + speed)</mark>, with speed paid only at episode end (sparse) and no curriculum—naturalness and efficiency no longer have to be coaxed out by reward terms.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">預訓練的價值在 sparse reward 時最明顯。</b> 從頭練的同架構網路在鑽桿/跨欄/跳箱上<mark class="m-result" data-t="RESULT/EVIDENCE">幾乎卡在 0.1–0.15</mark>;重用 primitive 層則 6 小時內解掉。先驗等於提供了一個「隨便選碼都像樣」的探索空間。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Pre-training pays off most under sparse reward.</b> A same-architecture net trained from scratch <mark class="m-result" data-t="RESULT/EVIDENCE">stalls around 0.1–0.15</mark> on creeping/hurdles/blocks, while reusing the primitive level solves them within 6 hours. The prior gives an exploration space where "any code you pick looks reasonable."</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">策略層只說「往哪、多快」。</b> 把高層動作空間壓到導航指令,讓 self-play 只需處理博弈(追/逃/搶旗),在 sparse ±1 獎勵下 40 小時收斂——<b>這是「階層 + 先驗」讓多智能體 RL 在實體機器人上變得可行</b>的示範。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">The strategic level only says "where and how fast."</b> Squeezing the high-level action space into navigation commands lets self-play focus purely on the game (chase/evade/grab the flag), converging in 40 hours under sparse ±1 reward—<b>a demonstration that "hierarchy + prior" makes multi-agent RL feasible on physical robots</b>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Lifelike Agility and Play in Quadrupedal Robots using Reinforcement Learning and Generative Pre-trained Models</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Lei Han*, Qingxu Zhu*, Jiapeng Sheng*, Chong Zhang*, Tingguang Li*, Yizheng Zhang*, He Zhang*, … , Zhengyou Zhang <small>(19 authors; * equal)</small></span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Tencent Robotics X, Shenzhen</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2024 · Nature Machine Intelligence (arXiv:2308.15143v2)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Legged Robotics · Motion Priors</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>tencent-roboticsx.github.io/lifelike-agility-and-play · Code Ocean doi:10.24433/CO.8441152.v3</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">第一個在<b>實體四足</b>上同時展示「動物動作先驗 → 感知越障 → 多智能體策略」完整階層的工作。它把電腦圖學裡的「技能先驗 + 階層 RL」(NPMP、模擬足球)從模擬搬上真實硬體,並公開狗的原始 mocap 與 retarget 資料。</span>
+        <span data-lang="en">The first work to show the full "animal motion prior → perceptive traversal → multi-agent strategy" hierarchy on a <b>physical quadruped</b>. It carries graphics-style "skill prior + hierarchical RL" (NPMP, simulated football) from simulation onto real hardware, and releases the raw dog mocap and retargeted data.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">名詞速查</span><span data-lang="en">Jargon</span></span>
+        <span data-lang="zh"><b>PMC / EPMC / SEPMC</b>:三階段的「完整控制器」—— Primitive、Environmental–Primitive、Strategic–Environmental–Primitive Motor Controller。<b>VQ</b>:向量量化,把連續向量換成 codebook 裡最近的那一個。<b>PFSP</b>:prioritized fictitious self-play,AlphaStar 用的「優先挑打不贏的舊版本當對手」。<b>XMPC</b>:團隊既有的模型預測控制器(作為人類搖桿操控的對手)。</span>
+        <span data-lang="en"><b>PMC / EPMC / SEPMC</b>: the complete controller at each stage—Primitive, Environmental–Primitive, Strategic–Environmental–Primitive Motor Controller. <b>VQ</b>: vector quantization—replace a continuous vector with its nearest codebook entry. <b>PFSP</b>: prioritized fictitious self-play (AlphaStar-style: preferentially pick historical versions you lose to as opponents). <b>XMPC</b>: the team&#39;s existing model-predictive controller (the human-joysticked opponent).</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">VQ-VAE</span><span class="chip">Motion prior</span>
+          <span class="chip">Hierarchical RL</span><span class="chip">GAIL</span>
+          <span class="chip">Policy distillation</span><span class="chip">PFSP self-play</span>
+          <span class="chip">Chase Tag</span><span class="chip">MAX robot</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">端到端 RL 學敏捷技能</span><span data-lang="en">End-to-end RL for agile skills</span></b><br><small>Barkour, ANYmal Parkour, Robot Parkour, Extreme Parkour</small></td><td><span data-lang="zh">每個技能<mark class="m-problem" data-t="PROBLEM/GAP">各自訓練、各寫 reward(3~16 項,外加 waypoints)與地形 curriculum</mark>,技能之間不互相受益;動作自然度不是目標。</span><span data-lang="en">Each skill is <mark class="m-problem" data-t="PROBLEM/GAP">trained in isolation with its own reward (3–16 terms, plus waypoints) and terrain curriculum</mark>; skills don&#39;t benefit one another, and naturalness is not a goal.</span></td></tr>
+          <tr><td><b><span data-lang="zh">動物動作模仿</span><span data-lang="en">Animal motion imitation</span></b><br><small>Peng 2020; Bohez 2022</small></td><td><span data-lang="zh">實機上<mark class="m-problem" data-t="PROBLEM/GAP">只涵蓋一般走、跑等運動</mark>;Peng 2020 一段 clip 一個策略,沒有外感知,也沒有被上層任務重用。</span><span data-lang="en">On real robots it <mark class="m-problem" data-t="PROBLEM/GAP">only covers general walking/running</mark>; Peng 2020 trains one policy per clip with no exteroception and no reuse by higher-level tasks.</span></td></tr>
+          <tr><td><b><span data-lang="zh">高斯 latent 技能先驗</span><span data-lang="en">Gaussian latent skill priors</span></b><br><small>β-VAE, Bohez 2022, NPMP</small></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">\(\beta\) 難調</mark>:\(\beta\) 大→latent 好用但動作品質差;\(\beta\) 小→模仿好但 latent 難被上層使用;退火排程又帶來訓練不穩。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">\(\beta\) is hard to tune</mark>: large \(\beta\) → usable latent but poor motion; small \(\beta\) → good imitation but a latent the upper level can hardly use; annealing schedules add instability.</span></td></tr>
+          <tr><td><b><span data-lang="zh">圖學中的階層 + 先驗</span><span data-lang="en">Hierarchy + prior in graphics</span></b><br><small>MVAE, NPMP, CoMic, humanoid football</small></td><td><span data-lang="zh">能解複雜任務甚至多智能體合作,但<mark class="m-problem" data-t="PROBLEM/GAP">全部停在模擬器</mark>。Ji et al. 2022 的四足射門雖上實機,卻是單一特定任務。</span><span data-lang="en">Solve complex tasks, even multi-agent cooperation, but <mark class="m-problem" data-t="PROBLEM/GAP">all in simulation</mark>. Ji et al. 2022 (quadruped soccer shooting) reaches hardware, but for one specific task.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「能不能像大型預訓練模型那樣,讓機器人先學一套通用、像動物的運動知識,再在上面逐層組裝出感知與策略能力——並且在真實機器人上成立?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"Can a robot, like a large pre-trained model, first learn general, animal-like motor knowledge, then assemble perception and strategy on top of it layer by layer—and can this hold on a real robot?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,這篇怎麼補</span><span data-lang="en">Gap table — who lacks what, and how this paper fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">本文如何補上</span><span data-lang="en">How this paper fills it</span></th></tr>
+          <tr>
+            <td><b>Peng 2020</b><br><small>Motion Imitation</small></td>
+            <td><span data-lang="zh">一 clip 一策略、盲走、無重用。</span><span data-lang="en">One policy per clip, blind, no reuse.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">單一 VQ-PMC 模仿全部 66 段 clip</mark>(含鏡像),prioritized sampling 平衡難易;decoder 成為可重用的生成式動作先驗。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">One VQ-PMC imitates all 66 clips</mark> (mirrored), with prioritized sampling to balance difficulty; its decoder becomes a reusable generative motion prior.</span></td>
+          </tr>
+          <tr>
+            <td><b>Bohez 2022 / β-VAE</b></td>
+            <td><span data-lang="zh">高斯 latent 的 \(\beta\) 取捨。</span><span data-lang="en">Gaussian-latent \(\beta\) trade-off.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">離散 codebook</mark>,上層輸出 256 類的分類分佈即可驅動。</span><span data-lang="en">A <mark class="m-method" data-t="METHOD/IDEA">discrete codebook</mark>; the upper level just outputs a 256-way categorical distribution.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">Parkour 系列</span><span data-lang="en">Parkour line</span></b><br><small><span data-lang="zh">2023 同期</span><span data-lang="en">2023 concurrent</span></small></td>
+            <td><span data-lang="zh">reward 多項、curriculum、技能孤立。</span><span data-lang="en">Many reward terms, curriculum, isolated skills.</span></td>
+            <td><span data-lang="zh">共用 primitive 層;越障 reward <mark class="m-method" data-t="METHOD/IDEA">只有 2 項且速度為 sparse</mark>;無 curriculum;各障礙專家再 KL 蒸餾合一。</span><span data-lang="en">A shared primitive level; traversal reward has <mark class="m-method" data-t="METHOD/IDEA">only 2 terms, with sparse speed</mark>; no curriculum; per-obstacle experts KL-distilled into one.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">模擬中的階層策略</span><span data-lang="en">Hierarchical policies in sim</span></b></td>
+            <td><span data-lang="zh">不上實機;無策略層實驗。</span><span data-lang="en">No hardware; no strategy-level experiments on robots.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">strategic 層 + PFSP self-play</mark>,在兩台實體 MAX 上玩 Chase Tag。</span><span data-lang="en">A <mark class="m-method" data-t="METHOD/IDEA">strategic level + PFSP self-play</mark>, playing Chase Tag on two physical MAX robots.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這篇主打的痛點不是「做不到某個技能」——同期 parkour 工作的單項敏捷度其實更極端——而是<b>知識無法累積與重用</b>。因此評估重點是「重用之後學得多快、多自然」,而非與 parkour 方法正面比成功率。這個定位決定了它的實驗設計(也決定了它的弱點,見 05)。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">Note that the headline pain point is not "a skill we can&#39;t do"—concurrent parkour work is arguably more extreme on individual skills—but that <b>knowledge cannot accumulate or be reused</b>. So the evaluation centers on "how fast and how naturally you learn after reuse," not on head-to-head success rates against parkour methods. That framing shapes the experiments (and their weaknesses; see 05). <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把「越障 reward 只有 2 項」讀成「<b>不需要任何工程</b>」。工程被搬到別處:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">5 項加權的模仿 reward、狗的 mocap 採集與 IK retarget(還手動降低機身、加寬左右腿距)、平地的 GAIL reward、樓梯的邊緣懲罰與 residual 輸出、障礙邊緣的隱形膨脹圓柱</mark>,以及 domain randomization。</span>
+        <span data-lang="en">Don&#39;t read "the traversal reward has only 2 terms" as "<b>no engineering needed</b>." The engineering moved elsewhere: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a 5-term weighted imitation reward, dog mocap collection and IK retargeting (with a manually lowered body and widened stance), a GAIL reward on flat ground, a stair-edge penalty and residual head, invisible inflated cylinders on obstacle edges</mark>, and domain randomization.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">如果「動作先驗 + 階層」可行,那麼新任務的成本就從「重新設計 reward + curriculum」降為「只訓練上層」;新障礙只需再訓一個環境層專家並蒸餾進去,primitive 與 strategic 層都不用動。</span>
+        <span data-lang="en">If "motion prior + hierarchy" works, a new task costs "train only the upper level" instead of "redesign reward + curriculum"; a new obstacle needs just one more environmental expert distilled in, leaving the primitive and strategic levels untouched.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">「像動物」怎麼量?</span><span data-lang="en">measuring lifelike</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">從頭練的對照公平嗎?</span><span data-lang="en">fair scratch baseline?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">管線總覽:三層 RL,由下往上凍結</span><span data-lang="en">Pipeline: three RL stages, frozen bottom-up</span></h3>
+        <div class="flow">
+          <div class="step"><div class="ph mono">STAGE 1 · PRIMITIVE</div><b>VQ-PMC</b><small><span data-lang="zh">輸入本體感覺 + 參考未來軌跡;RL 模仿全部狗 mocap;得到 codebook + decoder。</span><span data-lang="en">Proprioception + reference future; RL imitation of all dog mocap; yields codebook + decoder.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STAGE 2 · ENVIRONMENTAL</div><b>EPMC ×N → distill</b><small><span data-lang="zh">加外感知 + 方向/速度指令,輸出選碼分佈;平地/樓梯/鑽桿/跨欄/跳箱/跌倒恢復各訓一個,再蒸餾成一個。</span><span data-lang="en">Adds exteroception + direction/speed command; outputs a code distribution; one expert per scenario (flat/stairs/creep/hurdle/block/fall-recovery), then distilled into one.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STAGE 3 · STRATEGIC</div><b>SEPMC</b><small><span data-lang="zh">加任務資訊(角色、對手、旗子),輸出導航指令;PFSP self-play 學 Chase Tag。</span><span data-lang="en">Adds task info (role, opponent, flag); outputs navigation commands; PFSP self-play on Chase Tag.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">DEPLOY</div><b><span data-lang="zh">零樣本上 MAX</span><span data-lang="en">Zero-shot on MAX</span></b><small><span data-lang="zh">PyBullet + PPO(TLeague 分散式);domain randomization;實機外感知來自 mocap 系統。</span><span data-lang="en">PyBullet + PPO (distributed via TLeague); domain randomization; real-world exteroception from a mocap system.</span></small></div>
+        </div>
+        <figure class="fig"><img src="figs/Han2024/fig1_framework.png" alt="Figure 1 framework overview">
+          <figcaption data-lang="zh"><b>Fig.1</b> 框架總覽。看三件事:① Stage 1(左上)的 <b>MLP Encoder → 最近鄰查表 → MLP Decoder</b> 就是 VQ-VAE,只是 decoder 輸出的是關節動作而非重建影像;② Stage 2(左下)把 encoder 拿掉,換成看得到地形的 <b>LSTM Controller 輸出「選第幾個碼」的分類分佈</b>,primitive 層上了鎖頭(凍結);③ Stage 3(右)strategic 層只輸出 <b>direction &amp; speed 指令</b>,下面兩層都上鎖。注意圖中「Frozen and copy to (or KL-regularize an unlocked version)」——環境層也可選擇以 KL 正則化方式解凍微調。</figcaption>
+          <figcaption data-lang="en"><b>Fig.1</b> Framework overview. Notice three things: (1) Stage 1 (top-left) <b>MLP Encoder → nearest-neighbour lookup → MLP Decoder</b> is a VQ-VAE whose decoder emits joint actions instead of reconstructions; (2) Stage 2 (bottom-left) drops the encoder and puts a terrain-aware <b>LSTM Controller outputting a categorical distribution over code indices</b>, with the primitive level padlocked (frozen); (3) Stage 3 (right) outputs only a <b>direction &amp; speed command</b>, with both lower levels locked. Note "Frozen and copy to (or KL-regularize an unlocked version)"—the environmental level can optionally be unfrozen under a KL regularizer.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Stage 1 · VQ-PMC:把狗的動作壓成離散碼</span><span data-lang="en">Stage 1 · VQ-PMC: compressing dog motion into discrete codes</span></h3>
+        <p data-lang="zh"><b>資料。</b>一隻受訓的中型拉布拉多在訓犬師引導下完成走、跑、跳、坐,沿直線/方形/圓形軌跡,每種重複 4–6 次:約 <b>30 分鐘、120 fps</b>;另有約 9 分鐘上下三階樓梯(階寬 0.32 m、高 0.16 m)。共 33 段 clip,鏡像後 66 段。以肩、肩胛、臀部等關鍵點決定機身位姿、腳趾對齊末端執行器,其餘關節用 IK 解(沿用 Peng 2020),並<mark class="m-assume" data-t="ASSUMPTION/CLAIM">手動降低機身高度、加寬左右腿距</mark>以減少形態差異。</p>
+        <p data-lang="en"><b>Data.</b> A trained medium-sized Labrador, guided by a dog trainer, walked, ran, jumped and sat along straight/square/circle paths, each repeated 4–6 times: about <b>30 minutes at 120 fps</b>, plus about 9 minutes of climbing a 3-step staircase (0.32 m wide, 0.16 m high). 33 clips, 66 after mirroring. Shoulder, shoulder-blade and haunch keypoints fix the base pose, toes align with end effectors, the rest is solved by IK (following Peng 2020), and the authors <mark class="m-assume" data-t="ASSUMPTION/CLAIM">manually lower the body and widen the left–right stance</mark> to reduce morphology mismatch.</p>
+        <p data-lang="zh"><b>RL 設定。</b>標準 MDP,最大化折扣回報:</p>
+        <p data-lang="en"><b>RL setup.</b> A standard MDP maximizing discounted return:</p>
+        <div class="eq">$$J_{\text{RL}}(\pi)=\mathbb{E}_{\tau\sim\pi(\tau)}\big[R(\tau)\big]=\mathbb{E}_{\tau\sim\pi(\tau)}\Big[\sum_{t=0}\gamma^t r_t\Big],\qquad \pi(\tau)=p(s_0)\prod_{t=0}\pi(a_t\mid s_t)\,p(s_{t+1}\mid s_t,a_t)$$</div>
+        <p data-lang="zh"><b>借來的 VQ-VAE。</b>原始 VQ-VAE 的損失 = 重建項 + codebook 項 + commitment 項:</p>
+        <p data-lang="en"><b>The borrowed VQ-VAE.</b> The original VQ-VAE loss = reconstruction + codebook + commitment terms:</p>
+        <div class="eq">$$\mathcal{L}_{\text{VQ-VAE}}=-\log p\big(x\mid z_q(x)\big)+\big\|\operatorname{sg}[z_e(x)]-e\big\|_2^2+\beta\,\big\|z_e(x)-\operatorname{sg}[e]\big\|_2^2$$</div>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted)">\(\operatorname{sg}\) 為 stop-gradient;\(e\) 是離 encoder 輸出 \(z_e(x)\) 最近的碼。<span class="add">[導讀補充] 論文原式寫作 \(+\log p\),此處改成負對數似然,使三項皆為最小化目標。</span></p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted)">\(\operatorname{sg}\) is stop-gradient; \(e\) is the code nearest to the encoder output \(z_e(x)\). <span class="add">[guide note] The paper writes \(+\log p\); shown here as a negative log-likelihood so that all three terms are minimized.</span></p>
+        <p data-lang="zh"><b>改成「條件式控制器」。</b>VQ-PMC 不重建輸入,而是<mark class="m-method" data-t="METHOD/IDEA">在本體狀態條件下產生控制訊號</mark>:</p>
+        <p data-lang="en"><b>Turned into a conditional controller.</b> VQ-PMC does not reconstruct its input; it <mark class="m-method" data-t="METHOD/IDEA">generates control signals conditioned on the proprioceptive state</mark>:</p>
+        <div class="eq">$$z^e_t\sim p_e\big(z^e_t\mid s^p_t,\,s^f_{t+1:t+k}\big),\qquad z^q_t=e_k,\ \ k=\operatorname*{arg\,min}_j\big\|z^e_t-e_j\big\|_2,\qquad a_t\sim\pi_d\big(a_t\mid s^p_t,\,z^q_t\big)$$</div>
+        <p data-lang="zh">encoder 看「現在的身體 + 參考動作的未來」(0.03/0.06/0.3/1 秒後),決定該用哪個碼;decoder 只看「現在的身體 + 碼」,輸出 12 維 <b>PD 目標的殘差關節位置</b>(目標 = 當前關節位置 + \(a_t\))。PMC 50 Hz、PD 500 Hz。codebook \(e\in\mathbb{R}^{K\times D}\),\(K=256\)、\(D=32\)、commitment 係數 \(\beta=0.25\)。</p>
+        <p data-lang="en">The encoder sees "current body + the reference motion&#39;s future" (0.03/0.06/0.3/1 s ahead) and decides which code to use; the decoder sees only "current body + code" and outputs a 12-D <b>residual joint-position PD target</b> (target = current joint position + \(a_t\)). PMC runs at 50 Hz, PD at 500 Hz. Codebook \(e\in\mathbb{R}^{K\times D}\) with \(K=256\), \(D=32\), commitment coefficient \(\beta=0.25\).</p>
+        <div class="eq">$$\mathcal{L}_{\text{PMC}}\;\approx\;\mathcal{L}_{\text{PPO}}\big(\pi_d\circ q\circ p_e\big)\;+\;\big\|\operatorname{sg}[z^e_t]-z^q_t\big\|_2^2\;+\;\beta\,\big\|z^e_t-\operatorname{sg}[z^q_t]\big\|_2^2$$</div>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted)"><span class="add">[導讀補充]</span> 論文沒有寫出 PMC 的總損失;此式是導讀的推斷:重建項由 RL(PPO)目標取代,而 Table S1 列出 commitment 係數 \(\beta=0.25\),表示 codebook/commitment 項仍保留。梯度如何穿過 argmin(常見作法為 straight-through)論文未說明。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted)"><span class="add">[guide note]</span> The paper never writes the PMC total loss; this is the guide&#39;s inference: the reconstruction term is replaced by the RL (PPO) objective, and Table S1&#39;s commitment coefficient \(\beta=0.25\) implies the codebook/commitment terms are kept. How gradients pass the argmin (straight-through is customary) is not stated.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">模仿 reward 與 prioritized sampling</span><span data-lang="en">Imitation reward and prioritized sampling</span></h3>
+        <p data-lang="zh">追蹤 reward 與 Peng 2020 同型(5 項指數核加權和):</p>
+        <p data-lang="en">The tracking reward follows Peng 2020 (a weighted sum of 5 exponential kernels):</p>
+        <div class="eq">$$r_t=0.6\,r^{jp}_t+0.05\,r^{jv}_t+0.1\,r^{k}_t+0.15\,r^{r}_t+0.1\,r^{v}_t$$
+        $$r^{jp}_t=\exp\Big[-1.0\sum_j\big(q^*_{t,j}-q_{t,j}\big)^2\Big],\qquad r^{jv}_t=\exp\Big[-0.1\sum_j\big(\dot q^*_{t,j}-\dot q_{t,j}\big)^2\Big],\qquad r^{k}_t=\exp\Big[-40\sum_k\big\|p^*_{t,k}-p_{t,k}\big\|^2\Big]$$
+        $$r^{r}_t=\exp\big[-20\,\|p^*_{t,r}-p_{t,r}\|^2-10\,\theta^2\big],\qquad r^{v}_t=\exp\big[-2\,\|v^*_{t,r}-v_{t,r}\|^2-0.2\,\|\omega^*_{t,r}-\omega_{t,r}\|^2\big]$$</div>
+        <p data-lang="zh">依序是關節角、關節速度、四個腳趾相對機身的位置、機身位置+朝向(\(\theta\) 為 \(R^*R^{-1}\) 的軸角)、機身線/角速度。每個 episode 從 clip 中隨機一幀起始,跌倒或偏離過大即 early termination。</p>
+        <p data-lang="en">Respectively: joint angles, joint velocities, four toe positions relative to the base, base position + orientation (\(\theta\) is the axis-angle of \(R^*R^{-1}\)), and base linear/angular velocity. Each episode starts from a random frame of a clip; falling or large deviation triggers early termination.</p>
+        <p data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">Prioritized sampling</mark>:跳躍等敏捷動作在資料中少、又難追,均勻抽樣會被忽略。改依「越難追越常抽」:</p>
+        <p data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Prioritized sampling</mark>: agile clips like jumps are rare and hard, so uniform sampling neglects them. Instead, "the harder to track, the more often sampled":</p>
+        <div class="eq">$$p_i=\frac{f(R_{m_i})}{\sum_{m\in\mathcal{M}}f(R_m)},\qquad f(x)=(1-x)^{\alpha_1},\ \ \alpha_1=3,\ \ R_m\in[0,1]$$</div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Stage 2 · 環境層:看得到地形的「選碼器」</span><span data-lang="en">Stage 2 · Environmental level: a terrain-aware "code picker"</span></h3>
+        <p data-lang="zh">拿掉 encoder,<b>凍結</b> codebook + decoder。新的環境層網路輸入本體 \(s^p_t\)、外感知 \(s^{ex}_t\) 與指令,經 conv + FC(256) + LSTM(32) 輸出 <mark class="m-method" data-t="METHOD/IDEA">256 類碼的分類分佈</mark>,抽到的碼交給 decoder 出動作。外感知模擬 LiDAR/深度相機:機身周圍 2.4 m×1.2 m 的 25×13 高度圖、前方 0.5×0.6×3 m 的 25×13 深度圖、水平 360° 共 128 條測距射線。指令是隨機方向 + 速度 \([0.5,3.0]\) m/s。</p>
+        <p data-lang="en">The encoder is removed; the codebook + decoder are <b>frozen</b>. A new environmental network takes proprioception \(s^p_t\), exteroception \(s^{ex}_t\) and a command, and through conv + FC(256) + LSTM(32) outputs a <mark class="m-method" data-t="METHOD/IDEA">categorical distribution over the 256 codes</mark>; the sampled code drives the decoder. Exteroception mimics LiDAR/depth cameras: a 25×13 height map over 2.4 m×1.2 m around the body, a 25×13 front depth map over 0.5×0.6×3 m, and 128 horizontal range rays over 360°. The command is a random direction + speed in \([0.5,3.0]\) m/s.</p>
+        <p data-lang="zh"><b>只有兩項的任務 reward:</b></p>
+        <p data-lang="en"><b>A two-term task reward:</b></p>
+        <div class="eq">$$r_t=0.5\,r_{\text{dir}}+0.5\,r_{\text{vel}},\qquad r_{\text{dir}}=\exp\big(-5\,|1-d\cdot\hat d|\big),\qquad r_{\text{vel}}=\exp\big(-4\,|v^*-d\cdot v|\big)$$</div>
+        <p data-lang="zh">\(d\) 為指令方向、\(\hat d\) 為機身朝向、\(v^*\) 為指令速度、\(v\) 為機身全域線速度。依場景再加上各自的技巧:</p>
+        <p data-lang="en">\(d\) is the commanded direction, \(\hat d\) the facing direction, \(v^*\) the commanded speed, \(v\) the global base velocity. Each scenario adds its own trick:</p>
+        <table>
+          <tr><th><span data-lang="zh">場景</span><span data-lang="en">Scenario</span></th><th><span data-lang="zh">額外設計</span><span data-lang="en">Extra design</span></th></tr>
+          <tr><td><b><span data-lang="zh">平地</span><span data-lang="en">Flat</span></b></td><td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">GAIL 對抗式模仿 reward</mark>(權重 1.0),判別器分辨「PMC 產生的」與「EPMC 產生的」\((s^p,a)\)——對象是 PMC 策略,而非原始狗資料。</span><span data-lang="en">A <mark class="m-method" data-t="METHOD/IDEA">GAIL adversarial imitation reward</mark> (weight 1.0); the discriminator separates \((s^p,a)\) pairs from the PMC vs. the EPMC—the reference is the PMC policy, not the raw dog data.</span></td></tr>
+          <tr><td><b><span data-lang="zh">樓梯</span><span data-lang="en">Stairs</span></b></td><td><span data-lang="zh">環境層多輸出一個<mark class="m-method" data-t="METHOD/IDEA">residual 動作偏移</mark>加在 primitive 動作上;另加踩邊懲罰 \(r_{\text{stair}}=-\sum_{i=1}^{4}0.25\,I_i\)(腳趾離階緣 5 cm 內)。</span><span data-lang="en">The environmental net adds a <mark class="m-method" data-t="METHOD/IDEA">residual action offset</mark> to the primitive action; plus an edge penalty \(r_{\text{stair}}=-\sum_{i=1}^{4}0.25\,I_i\) (toe within 5 cm of a step edge).</span></td></tr>
+          <tr><td><b><span data-lang="zh">鑽桿 / 跨欄 / 跳箱</span><span data-lang="en">Creep / hurdle / block</span></b></td><td><span data-lang="zh">\(r_{\text{dir}}\) 每步給,但 <mark class="m-method" data-t="METHOD/IDEA">\(r_{\text{vel}}\) 只在 episode 結束、且解題成功時以平均速度結算</mark>(sparse)——因為鑽桿不能太快、跳欄不能太慢,逐步強迫跟速度會讓任務無解。</span><span data-lang="en">\(r_{\text{dir}}\) every step, but <mark class="m-method" data-t="METHOD/IDEA">\(r_{\text{vel}}\) is paid only at episode end, on success, using the average speed</mark> (sparse)—you can&#39;t creep fast or jump slowly, so per-step speed tracking would make the task unsolvable.</span></td></tr>
+        </table>
+        <div class="eq">$$\min_D\;-\mathbb{E}_{(s^p,a)\sim\pi_{\text{PMC}}}\big[\log D(s^p,a)\big]-\mathbb{E}_{(s^p,a)\sim\pi_{\text{EPMC}}}\big[\log\big(1-D(s^p,a)\big)\big],\qquad r_{\text{GAIL}}=-\log\big(1-D(s^p,a)\big)$$</div>
+        <p data-lang="zh"><b>Multi-expert 蒸餾。</b>各場景專家 \(\pi_{\text{EPMC}_i}\) 以 on-policy KL 壓成單一環境層(樓梯的 residual 結構保留,其他場景學著輸出零偏移):</p>
+        <p data-lang="en"><b>Multi-expert distillation.</b> Per-scenario experts \(\pi_{\text{EPMC}_i}\) are compressed into one environmental net by on-policy KL (the stair residual head is kept; other scenarios learn to output zero offset):</p>
+        <div class="eq">$$\min_{\bar\pi_{\text{EPMC}}}\;\mathbb{E}_{i\sim\{\text{flat, creeping, hurdle, block, stair},\dots\}}\;\mathbb{E}_{\tau\sim\text{env}_i,\,\bar\pi_{\text{EPMC}}}\;\mathrm{KL}\big(\bar\pi_{\text{EPMC}}\,\|\,\pi_{\text{EPMC}_i}\big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">跌倒恢復也這樣加進來:老師換成 \(\pi_{\text{teacher}_i}=\mathbf{1}[s\notin\mathcal{R}]\,\pi_{\text{EPMC}_i}+\mathbf{1}[s\in\mathcal{R}]\,\pi_{\text{recovery}}\),\(\mathcal{R}\) 為跌倒狀態集合。學生半小時即達平均 reward 0.7(老師平均約 0.74),21 小時(單張 V100)後追平。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Fall recovery joins the same way, with teacher \(\pi_{\text{teacher}_i}=\mathbf{1}[s\notin\mathcal{R}]\,\pi_{\text{EPMC}_i}+\mathbf{1}[s\in\mathcal{R}]\,\pi_{\text{recovery}}\), where \(\mathcal{R}\) is the set of fallen states. The student hits average reward 0.7 in half an hour (teachers average ≈0.74) and matches them after 21 hours on one V100.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Stage 3 · 策略層:Chase Tag 與 PFSP self-play</span><span data-lang="en">Stage 3 · Strategic level: Chase Tag and PFSP self-play</span></h3>
+        <p data-lang="zh"><b>遊戲規則</b>(簡化自 World Chase Tag):4.5 m×4.5 m 場地內有跨欄與橫桿;兩台 MAX 隨機一追一逃。兩機距離 \(\lt 0.6\) m 即追方勝、遊戲結束;逃方若到達旗子 0.3 m 內則<mark class="m-method" data-t="METHOD/IDEA">角色互換</mark>,旗子隨機重生。</p>
+        <p data-lang="en"><b>Rules</b> (simplified from World Chase Tag): a 4.5 m×4.5 m arena with hurdles and a spanning pole; two MAX robots are randomly assigned chaser/evader. If they come within \(0.6\) m the chaser wins and the game ends; if the evader gets within 0.3 m of the flag, <mark class="m-method" data-t="METHOD/IDEA">roles swap</mark> and the flag respawns randomly.</p>
+        <p data-lang="zh">策略層輸入本體、外感知與任務資訊 \(s^{ta}_t\)(1 維角色、7 維旗子、15 維對手狀態),FC + LSTM(32) 後<b>只輸出導航指令</b>。獎勵是純 sparse 的零和:勝 \(+1\)、敗 \(-1\)、1000 步未分勝負雙方 0。對手依 PFSP 從每小時存檔的歷史版本中挑選:</p>
+        <p data-lang="en">The strategic net takes proprioception, exteroception and task info \(s^{ta}_t\) (1-D role, 7-D flag, 15-D opponent state); after FC + LSTM(32) it <b>outputs only a navigation command</b>. Reward is purely sparse and zero-sum: win \(+1\), lose \(-1\), both 0 if undecided after 1000 steps. Opponents are drawn by PFSP from hourly snapshots:</p>
+        <div class="eq">$$p_i=\frac{g(P_i)}{\sum_{o\in\mathcal{O}}g(P_o)},\qquad g(x)=(1-x)^{\alpha_2},\ \ \alpha_2=2$$</div>
+        <p data-lang="zh">\(P_o\) 為目前策略打贏對手 \(o\) 的機率——越打不贏越常被抽到。整體可寫成 <span class="add">[導讀補充:論文未寫出此式]</span>:</p>
+        <p data-lang="en">\(P_o\) is the current agent&#39;s win probability against \(o\)—the harder the opponent, the more often it is drawn. Overall <span class="add">[guide note: this formula is not in the paper]</span>:</p>
+        <div class="eq">$$\max_{\pi_{\text{S}}}\;\mathbb{E}_{o\sim p_{\text{PFSP}}}\;\mathbb{E}_{\tau\sim(\pi_{\text{S}}\circ\pi_{\text{E}}\circ\pi_d,\ \pi_o)}\big[r_T\big],\qquad r_T\in\{+1,-1,0\}$$</div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Sim-to-real 與「拿掉 mocap」的延伸</span><span data-lang="en">Sim-to-real and the "no-mocap" extension</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>Domain randomization</b>(所有階段):摩擦 \([0.4,1.0]\);每 1 秒對機身施加 0.2 秒隨機推力(水平 0–50 N、垂直 0–10 N);扭矩上限模擬中 \([15,18]\) Nm、實機設 15 Nm。</li>
+          <li data-lang="en"><b>Domain randomization</b> (all stages): friction \([0.4,1.0]\); a random push on the base every 1 s for 0.2 s (0–50 N horizontal, 0–10 N vertical); torque limit \([15,18]\) Nm in sim, 15 Nm on hardware.</li>
+          <li data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">隱形膨脹圓柱</mark>:障礙邊緣包上半徑 0–2 cm、看不見但碰得到的圓柱,逼策略遠離邊緣以降低實機跌倒風險。</li>
+          <li data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Invisible inflated cylinders</mark>: obstacle edges are wrapped in unobservable but collidable cylinders of radius 0–2 cm, pushing the policy away from edges to reduce real-world falls.</li>
+          <li data-lang="zh"><mark class="m-assume" data-t="ASSUMPTION/CLAIM">實機的外感知與全域位置全部來自 mocap 系統 + 離線地形圖</mark>(Fig.2–4 的所有實機結果皆然)。</li>
+          <li data-lang="en"><mark class="m-assume" data-t="ASSUMPTION/CLAIM">On hardware, exteroception and global positions all come from a mocap system + an offline terrain map</mark> (true of every real-world result in Figs.2–4).</li>
+          <li data-lang="zh"><b>板載深度相機版</b>:以原環境層為老師,蒸餾一個只吃 RealSense D455 深度圖(240×424 降採樣到 48×64,模擬中加 Gaussian/patch 雜訊)的學生環境層,加一個 LSTM 線速度估計器;單張 V100 約 3 小時收斂。primitive 層原封不動重用。<mark class="m-limit" data-t="LIMITATION/FUTURE">僅以影片展示跨欄場景</mark>(暗室與戶外廣場)。</li>
+          <li data-lang="en"><b>Onboard depth-camera version</b>: with the original environmental net as teacher, a student that sees only RealSense D455 depth (240×424 downsampled to 48×64, with Gaussian/patch noise in sim) is distilled, plus an LSTM linear-velocity estimator; converges in ~3 hours on one V100. The primitive level is reused untouched. <mark class="m-limit" data-t="LIMITATION/FUTURE">Shown only via video on hurdle scenes</mark> (a dark room and an open square).</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(s^p_t\)</td><td><span data-lang="zh">本體感覺(135 維):t−2…t 三幀的關節角/速度、機身線/角速度、重力向量,加上前 3 步動作。</span><span data-lang="en">Proprioception (135-D): three frames t−2…t of joint angles/velocities, base linear/angular velocity, gravity vector, plus the last 3 actions.</span></td></tr>
+          <tr><td>\(s^f_{t+1:t+k}\)</td><td><span data-lang="zh">參考動作的未來目標(72 維),只在 Stage 1 給 encoder 看。</span><span data-lang="en">Future reference targets (72-D), seen only by the Stage 1 encoder.</span></td></tr>
+          <tr><td>\(e\in\mathbb{R}^{K\times D}\)</td><td><span data-lang="zh">codebook:256 個 32 維「動作詞」。</span><span data-lang="en">Codebook: 256 "motion words" of dimension 32.</span></td></tr>
+          <tr><td>\(z^e_t,\ z^q_t\)</td><td><span data-lang="zh">encoder 的連續輸出、以及量化後選中的碼。</span><span data-lang="en">The encoder&#39;s continuous output, and the quantized code it snaps to.</span></td></tr>
+          <tr><td>\(\pi_d(a_t\mid s^p_t,z^q_t)\)</td><td><span data-lang="zh">decoder = 被重用的 primitive 層;輸出殘差 PD 目標。</span><span data-lang="en">Decoder = the reused primitive level; outputs residual PD targets.</span></td></tr>
+          <tr><td>\(s^{ex}_t\)</td><td><span data-lang="zh">外感知:高度圖、前方深度圖、360° 射線。</span><span data-lang="en">Exteroception: height map, front depth map, 360° rays.</span></td></tr>
+          <tr><td>\(s^{ta}_t\)</td><td><span data-lang="zh">任務資訊:角色、旗子、對手(全域位姿與速度)。</span><span data-lang="en">Task info: role, flag, opponent (global pose and velocity).</span></td></tr>
+          <tr><td>\(\alpha_1,\ \alpha_2\)</td><td><span data-lang="zh">「越難越常抽」的銳度:clip 抽樣用 3,對手抽樣用 2。</span><span data-lang="en">Sharpness of "sample the hard ones": 3 for clips, 2 for opponents.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">先讓一個「口譯員」(decoder)學會把 256 個詞念成狗的動作;之後上層只需學「在這個地形下該說哪個詞」,再上層只需學「該往哪走、走多快」。<b>每一層都只學自己那一層的新知識。</b></span>
+        <span data-lang="en">First train an "interpreter" (the decoder) to pronounce 256 words as dog motions; then the next level only learns "which word to say on this terrain," and the top only learns "where to go and how fast." <b>Each level learns only its own new knowledge.</b></span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何用離散碼?</span><span data-lang="en">Why discrete codes?</span></span>
+        <span data-lang="zh">高斯 latent 的上層要在連續空間裡「找」一個點,容易落到 decoder 沒見過的區域、產生怪動作;離散碼則把上層動作空間變成 256 選 1,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">每個選項都保證是 decoder 練過的</mark>。作者也提到 VQ 表徵理論上近似 Gaussian mixture。<span class="add">[導讀補充] 代價是時間解析度:碼以 50 Hz 切換,細微連續調整只能靠 decoder 對 \(s^p_t\) 的回饋,或樓梯那樣額外加 residual。</span></span>
+        <span data-lang="en">With a Gaussian latent, the upper level must "find" a point in continuous space and can wander into regions the decoder never saw, producing odd motions; discrete codes turn the upper action space into a 256-way choice where <mark class="m-assume" data-t="ASSUMPTION/CLAIM">every option is one the decoder was trained on</mark>. The authors also note VQ representations theoretically resemble Gaussian mixtures. <span class="add">[guide note] The price is resolution: codes switch at 50 Hz, so fine continuous adjustment relies on the decoder&#39;s feedback on \(s^p_t\), or on an extra residual as with stairs.</span></span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">網路規模</span><span data-lang="en">Network sizes</span></span>
+        <span data-lang="zh">全是小網路:encoder FC [256,256]、decoder FC [128,256,256](輸出高斯均值 + 可學對角共變異)、value FC [256,256];環境層 conv + FC256 + LSTM32;策略層 FC[256,256] + FC256 + LSTM32。PPO,\(\gamma=0.95\)、GAE \(\lambda=0.95\)。<b>「生成式預訓練」指的是方法論,不是模型規模。</b></span>
+        <span data-lang="en">All small: encoder FC [256,256], decoder FC [128,256,256] (Gaussian mean + learnable diagonal covariance), value FC [256,256]; environmental conv + FC256 + LSTM32; strategic FC[256,256] + FC256 + LSTM32. PPO with \(\gamma=0.95\), GAE \(\lambda=0.95\). <b>"Generative pre-training" refers to the methodology, not model scale.</b></span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">實機 Chase Tag 時,策略層<mark class="m-assume" data-t="ASSUMPTION/CLAIM">只輸出方向,速度被人工固定在 0.5 m/s</mark>(訓練範圍的下限),理由是場地小、怕危險。所以實機上看到的「策略」少了「何時加速」這一半。</span>
+        <span data-lang="en">In real-world Chase Tag the strategic level <mark class="m-assume" data-t="ASSUMPTION/CLAIM">outputs only direction; speed is manually fixed at 0.5 m/s</mark> (the training range&#39;s lower bound) for safety in the small arena. So the "strategy" seen on hardware is missing the "when to speed up" half.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Primitive 層:VQ vs 高斯 latent(Fig.2B / 3F,normalized reward ↑)</span><span data-lang="en">Primitive level: VQ vs Gaussian latent (Fig.2B / 3F, normalized reward ↑)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">primitive 先驗</span><span data-lang="en">Primitive prior</span></th><th><span data-lang="zh">模仿全部 clip(Fig.2B,5e9 樣本)</span><span data-lang="en">Imitate all clips (Fig.2B, 5e9 samples)</span></th><th><span data-lang="zh">重用於平地指令跟隨(Fig.3F,3e9 樣本)</span><span data-lang="en">Reused for flat command-following (Fig.3F, 3e9 samples)</span></th></tr>
+          <tr><td>β-VAE, \(\beta=0.01\) <span data-lang="zh">常數</span><span data-lang="en">constant</span></td><td class="bad">≈0.05 <small><span data-lang="zh">(學不起來)</span><span data-lang="en">(fails)</span></small></td><td class="bad">≈0.12</td></tr>
+          <tr><td>β-VAE, \(\beta\!:\!0\to0.01\) <span data-lang="zh">退火</span><span data-lang="en">annealed</span></td><td>≈0.75 <small><span data-lang="zh">(約 1e9 時崩跌再爬回)</span><span data-lang="en">(dips near 1e9, recovers)</span></small></td><td>≈0.61</td></tr>
+          <tr><td class="win">VQ-PMC</td><td class="win">≈0.80</td><td class="win">≈0.77</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted);margin-top:6px">數值為導讀從圖上讀取的近似值(3 seeds 平均)。退火版的最大 \(\beta\) 已在 {0.001, 0.01, 0.1} 中挑最佳的 0.01。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted);margin-top:6px">Values are approximate, read off the figures by the guide (mean of 3 seeds). The annealed variant&#39;s max \(\beta\) was chosen as the best of {0.001, 0.01, 0.1}, i.e., 0.01.</p>
+        <p data-lang="zh">模仿時 VQ 與退火 β-VAE 差距不大,但<mark class="m-result" data-t="RESULT/EVIDENCE">一旦被上層重用,差距拉大到 ≈0.16</mark>——這才是論文真正想證明的:離散先驗是「更好用」的先驗,而不只是「更會模仿」。</p>
+        <p data-lang="en">At imitation, VQ and annealed β-VAE are close, but <mark class="m-result" data-t="RESULT/EVIDENCE">once reused by the upper level the gap widens to ≈0.16</mark>—which is what the paper really wants to show: the discrete prior is a more <i>usable</i> prior, not just a better imitator.</p>
+        <figure class="fig"><img src="figs/Han2024/fig2_primitive.png" alt="Figure 2 primitive motor controller evaluation">
+          <figcaption data-lang="zh"><b>Fig.2</b> Primitive 層評估。(A) 實機在室內地板與草地上模仿 mocap;(B) 模仿學習曲線,紅=VQ-PMC 最高且平穩、綠=退火 β-VAE 在 1e9 附近有一次崩跌、橘=常數 \(\beta\) 貼地;(C) 倒數第二層的 t-SNE,stand/walk/run/sit/jump 大致分群(但 walk 與 run 有明顯交疊);(D) <b>步態小提琴圖</b>:比較 swing time、stance time、step distance、step height 的分佈——PMC VQ 的形狀最貼近 Data,而加上命令跟隨的 EPMC 開始走樣,GAIL 能拉回一些;(E) 模擬 vs 實機追蹤 reward:walk ≈0.96→0.80、run ≈0.90→0.67、jump ≈0.74→0.49,<b>越敏捷的動作 sim-to-real 落差越大</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> Primitive-level evaluation. (A) The real robot imitating mocap on indoor floor and grass; (B) imitation learning curves—red VQ-PMC highest and smooth, green annealed β-VAE collapses once near 1e9, orange constant-\(\beta\) flat at the bottom; (C) t-SNE of the penultimate layer: stand/walk/run/sit/jump roughly cluster (though walk and run overlap heavily); (D) <b>gait violin plots</b> of swing time, stance time, step distance and step height—PMC VQ matches Data best, EPMC (adding command following) drifts, and GAIL pulls it partly back; (E) tracking reward sim vs real: walk ≈0.96→0.80, run ≈0.90→0.67, jump ≈0.74→0.49—<b>the more agile the motion, the larger the sim-to-real drop</b>.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Environmental 層:實機越障成功率(Fig.3E,每格 10 次)</span><span data-lang="en">Environmental level: real-world traversal success (Fig.3E, 10 trials per cell)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">任務 / 高度</span><span data-lang="en">Task / height</span></th><th>0.6 m/s</th><th>0.8 m/s</th><th>1.0 m/s</th><th><span data-lang="zh">訓練範圍</span><span data-lang="en">Train range</span></th></tr>
+          <tr><td><span data-lang="zh">鑽桿</span><span data-lang="en">Creep</span> 25 / 30 cm</td><td class="win">10/10 · 10/10</td><td class="win">10/10 · 10/10</td><td class="win">10/10 · 10/10</td><td>25–30 cm</td></tr>
+          <tr><td><span data-lang="zh">樓梯</span><span data-lang="en">Stair</span> 10 cm</td><td class="win">10/10</td><td class="win">10/10</td><td>9/10</td><td rowspan="3">0–18 cm</td></tr>
+          <tr><td><span data-lang="zh">樓梯</span><span data-lang="en">Stair</span> 14 cm</td><td>9/10</td><td class="win">10/10</td><td class="win">10/10</td></tr>
+          <tr><td><span data-lang="zh">樓梯</span><span data-lang="en">Stair</span> 18 cm</td><td>9/10</td><td>8/10</td><td class="bad">7/10</td></tr>
+          <tr><td><span data-lang="zh">跨欄</span><span data-lang="en">Hurdle</span> 10 cm</td><td class="win">10/10</td><td>8/10</td><td class="win">10/10</td><td rowspan="2">5–15 cm</td></tr>
+          <tr><td><span data-lang="zh">跨欄</span><span data-lang="en">Hurdle</span> 15 cm</td><td class="win">10/10</td><td class="win">10/10</td><td class="win">10/10</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted);margin-top:6px">成功率由導讀從長條圖讀出。實機場景另有:5 階樓梯(第一階 18 cm、其餘 13 cm)、25 cm 橫桿、10/15 cm 跨欄、四個 10/25 cm 高的箱子(Fig.3A–D)。模擬中成功率「恆為 100%」。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted);margin-top:6px">Rates read off the bar chart by the guide. Real scenes also include a 5-step staircase (first step 18 cm, the rest 13 cm), a 25 cm pole, 10/15 cm hurdles, and four 10/25 cm blocks (Fig.3A–D). In simulation success is "always 100%."</p>
+        <p data-lang="zh">最難的是 <mark class="m-result" data-t="RESULT/EVIDENCE">18 cm 樓梯 @1.0 m/s 的 70%</mark>——恰好是訓練分佈的上緣。扭矩箱形圖的主體落在約 ±5–8 Nm,作者據此稱動作「省力」;但<mark class="m-limit" data-t="LIMITATION/FUTURE">鬚線與樓梯的離群點頂到 ±15 Nm,正好是實機扭矩上限</mark>,意味著部分時刻是飽和的 <span class="add">[導讀補充]</span>。</p>
+        <p data-lang="en">The hardest cell is <mark class="m-result" data-t="RESULT/EVIDENCE">70% on 18 cm stairs at 1.0 m/s</mark>—exactly the upper edge of the training distribution. The torque box plots sit mostly within about ±5–8 Nm, which the authors read as efficient motion; but <mark class="m-limit" data-t="LIMITATION/FUTURE">whiskers and stair outliers reach ±15 Nm, exactly the hardware torque limit</mark>, so the actuators do saturate at times <span class="add">[guide note]</span>.</p>
+        <figure class="fig"><img src="figs/Han2024/fig3_traversal.png" alt="Figure 3 environmental-primitive controller evaluation">
+          <figcaption data-lang="zh"><b>Fig.3</b> Environmental 層評估。(A–D) 實機鑽 25 cm 橫桿、上樓梯、連跨 10/15 cm 欄、跑跳 10/25 cm 箱——<b>這些動作完全不在狗的 mocap 裡</b>;(E) 上:成功率;下:扭矩分佈(注意 y 軸被 ±15 截斷);(F) 重用不同 primitive 層訓練平地環境層:VQ ≈0.77 > 退火 β-VAE ≈0.61 \(\gg\) 常數 \(\beta\) ≈0.12;(G) <b>重用 vs 從頭練</b>:鑽桿、跨欄、跳箱上紅線(reuse)約 6 小時爬到 0.6–0.75,藍線(scratch)停在 0.1–0.15;但<b>樓梯</b>(唯一使用逐步速度 reward 的場景)scratch 最後也逼近 reuse,只是慢得多。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Environmental-level evaluation. (A–D) On hardware: creeping under a 25 cm pole, climbing stairs, consecutive 10/15 cm hurdles, freerunning over 10/25 cm blocks—<b>none of these motions exist in the dog mocap</b>; (E) top: success rate; bottom: torque distribution (note the y-axis clipped at ±15); (F) training the flat-ground environmental net on different primitive levels: VQ ≈0.77 &gt; annealed β-VAE ≈0.61 \(\gg\) constant \(\beta\) ≈0.12; (G) <b>reuse vs from scratch</b>: on creeping, hurdles and blocks the red (reuse) curve climbs to 0.6–0.75 in ~6 hours while blue (scratch) stalls at 0.1–0.15; but on <b>stairs</b> (the only scenario with a per-step speed reward) scratch eventually approaches reuse, just much more slowly.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融怎麼讀</span><span data-lang="en">Reading the ablations</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">拿掉 / 替換</span><span data-lang="en">Removed / replaced</span></th><th><span data-lang="zh">代價</span><span data-lang="en">Cost</span></th><th><span data-lang="zh">證明了什麼</span><span data-lang="en">What it proves</span></th></tr>
+          <tr><td><span data-lang="zh">VQ → 退火 β-VAE</span><span data-lang="en">VQ → annealed β-VAE</span></td><td><span data-lang="zh">模仿 −0.05;重用 −0.16;步態分佈偏離</span><span data-lang="en">imitation −0.05; reuse −0.16; gait distributions drift</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">離散先驗主要贏在可重用性</mark></span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">the discrete prior wins mainly on reusability</mark></span></td></tr>
+          <tr><td><span data-lang="zh">VQ → 常數 β-VAE</span><span data-lang="en">VQ → constant-\(\beta\) β-VAE</span></td><td class="bad"><span data-lang="zh">模仿與重用都失敗</span><span data-lang="en">fails at both</span></td><td><span data-lang="zh">\(\beta\) 的敏感度是高斯先驗的實際痛點</span><span data-lang="en">\(\beta\) sensitivity is a real pain for Gaussian priors</span></td></tr>
+          <tr><td><span data-lang="zh">預訓練 primitive → 隨機初始化</span><span data-lang="en">pre-trained primitive → random init</span></td><td class="bad"><span data-lang="zh">sparse 任務幾乎學不會</span><span data-lang="en">sparse tasks barely learned</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">先驗讓 sparse reward + 無 curriculum 變得可行</mark></span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">the prior makes sparse reward + no curriculum feasible</mark></span></td></tr>
+          <tr><td><span data-lang="zh">EPMC 去掉 GAIL</span><span data-lang="en">EPMC without GAIL</span></td><td><span data-lang="zh">步態小提琴圖更偏離 Data(定性)</span><span data-lang="en">gait violins drift further from Data (qualitative)</span></td><td><span data-lang="zh">光凍結 decoder 不足以完全保住自然度</span><span data-lang="en">freezing the decoder alone does not fully preserve naturalness</span></td></tr>
+          <tr><td><span data-lang="zh">N 個專家 → 蒸餾單一網路</span><span data-lang="en">N experts → one distilled net</span></td><td class="ok"><span data-lang="zh">reward ≈0.74 → 追平(21 h)</span><span data-lang="en">reward ≈0.74 → matched (21 h)</span></td><td><span data-lang="zh">環境層技能可加法式擴充</span><span data-lang="en">environmental skills can be added incrementally</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Strategic 層:Chase Tag</span><span data-lang="en">Strategic level: Chase Tag</span></h3>
+        <figure class="fig"><img src="figs/Han2024/fig4_chasetag.png" alt="Figure 4 Chase Tag game snapshots and analysis">
+          <figcaption data-lang="zh"><b>Fig.4</b> 實機 Chase Tag(紅框=追方、藍框=逃方)。(A) 追方 MAX2 判斷趕不及,<b>放棄追逐</b>;(B) 追方在原地<b>徘徊</b>等旗子重生;(C) 追方即將抓到時<b>撲擊</b>;(D) 逃方撲向旗子;(E) 一整局 ~6.7 秒的機身高度、線速度、角速度與扭矩曲線,黃線標出 5 個關鍵幀(兩次 switch role)。注意這些「策略行為」是作者從影片中<b>挑選並命名</b>的,沒有出現頻率統計。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Real-world Chase Tag (red box = chaser, blue = evader). (A) Chaser MAX2 judges it can&#39;t make it and <b>gives up</b>; (B) the chaser <b>wanders</b> waiting for the flag to respawn; (C) the chaser <b>pounces</b> just before catching; (D) the evader pounces on the flag; (E) one ~6.7 s episode: root height, linear/angular velocity and torque curves, with yellow lines marking 5 key frames (two role switches). Note these "strategic behaviours" are <b>selected and named</b> by the authors from videos; no frequency statistics are given.</figcaption></figure>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh">只靠 sparse ±1 獎勵,<mark class="m-result" data-t="RESULT/EVIDENCE">40 小時(4×V100)收斂</mark>;每小時存一版共 40 版,兩兩對打 100 局做 round-robin,<b>Elo 從 0 單調升到約 385,約 30 小時後趨平</b>(Fig.S3)。</li>
+          <li data-lang="en">With only sparse ±1 reward it <mark class="m-result" data-t="RESULT/EVIDENCE">converges in 40 hours (4×V100)</mark>; 40 hourly snapshots play a 100-match round robin per pair, and <b>Elo rises monotonically from 0 to about 385, flattening after ~30 hours</b> (Fig.S3).</li>
+          <li data-lang="zh">人類用搖桿操控 XMPC(最高 0.8 m/s,比學習策略的 0.5 m/s 還快)對戰學習策略:<mark class="m-result" data-t="RESULT/EVIDENCE">人類 0:2 敗</mark>。作者歸因於 MPC 的週期性 trot 無法急轉或撲擊。</li>
+          <li data-lang="en">A human joysticking XMPC (max 0.8 m/s, faster than the learned policy&#39;s 0.5 m/s) versus the learned policy: <mark class="m-result" data-t="RESULT/EVIDENCE">the human loses 0:2</mark>. The authors attribute this to MPC&#39;s periodic trot being unable to turn sharply or pounce.</li>
+        </ul>
+        <figure class="fig" style="max-width:420px"><img src="figs/Han2024/figS3_elo.png" alt="Figure S3 Elo scores during PFSP training">
+          <figcaption data-lang="zh"><b>Fig.S3</b> PFSP 訓練中各存檔版本的 Elo。單調上升、無明顯循環(rock-paper-scissors)退化——但 Elo 是<b>相對自己的歷史版本</b>計算的,只說明「越練越強」,不代表對外部對手的絕對強度。</figcaption>
+          <figcaption data-lang="en"><b>Fig.S3</b> Elo of stored snapshots during PFSP training. Monotonic, with no visible cyclic (rock-paper-scissors) regressions—but Elo is computed <b>against its own history</b>, so it shows "steadily stronger," not absolute strength against outside opponents.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">算力帳</span><span data-lang="en">Compute ledger</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">階段</span><span data-lang="en">Stage</span></th><th>GPU</th><th><span data-lang="zh">時間</span><span data-lang="en">Time</span></th></tr>
+          <tr><td>Stage 1 · VQ-PMC</td><td>2× V100</td><td><span data-lang="zh">2 天</span><span data-lang="en">2 days</span></td></tr>
+          <tr><td><span data-lang="zh">Stage 2 · 每個場景專家</span><span data-lang="en">Stage 2 · each scenario expert</span></td><td><span data-lang="zh">4× V100 / 場景</span><span data-lang="en">4× V100 / scenario</span></td><td><span data-lang="zh">4 天 / 場景(約 6 小時即可解題)</span><span data-lang="en">4 days / scenario (solvable in ~6 h)</span></td></tr>
+          <tr><td><span data-lang="zh">Multi-expert 蒸餾</span><span data-lang="en">Multi-expert distillation</span></td><td>1× V100</td><td>21 h</td></tr>
+          <tr><td>Stage 3 · PFSP</td><td>4× V100</td><td>40 h</td></tr>
+          <tr><td><span data-lang="zh">深度相機學生</span><span data-lang="en">Depth-camera student</span></td><td>1× V100</td><td>~3 h</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:6px">正文寫「所有訓練最多用 4 張 V100、4 天」,但與附錄的「每場景 4 卡 4 天」×(\(\ge 5\) 個場景 + 跌倒恢復)加總不一致——比較像是「單一任務的上限」。<span class="add">[導讀補充]</span> 依附錄加總(PMC 4 + 約 6 個場景專家 ×16 + 蒸餾 ≈1 + PFSP ≈7)約 <b>100 V100 GPU-天</b>量級;PyBullet 模擬所需的 CPU 規模論文未報告。遠小於大模型訓練,學術實驗室負擔得起。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:6px">The main text says "all training used up to four V100s and 4 days," which does not add up against the appendix&#39;s "4 GPUs × 4 days per scenario" × (\(\ge 5\) scenarios + fall recovery)—it reads more like a per-task ceiling. <span class="add">[guide note]</span> Summing the appendix (PMC 4 + ~6 scenario experts ×16 + distillation ≈1 + PFSP ≈7) gives roughly <b>~100 V100 GPU-days</b>; the CPU fleet for PyBullet simulation is not reported. Far below large-model training and within reach of an academic lab.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">最硬的證據是 <b>Fig.3F/3G</b>:同一個上層任務,換成 VQ 先驗學得更快更好,沒有先驗則在 sparse reward 下幾乎學不會。實機部分則是「能做到」的存在性證明,而非與其他方法的量化比較。</span>
+        <span data-lang="en">The hardest evidence is <b>Fig.3F/3G</b>: for the same upper-level task, a VQ prior learns faster and better, and without a prior the sparse-reward tasks barely get learned. The hardware part is an existence proof ("it can be done"), not a quantitative comparison with other methods.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">實驗證明了 / 沒證明</span><span data-lang="en">Proven / not proven</span></span>
+        <span data-lang="zh"><b class="ok">證明了</b>:VQ 先驗比 β-VAE 先驗更適合被重用;重用先驗大幅降低 sparse 越障任務的學習難度;整套階層可零樣本上實機並在 mocap 輔助下完成越障與遊戲。<br><b class="bad">沒證明</b>:比同期 parkour 方法更敏捷或更穩;「像動物」在越障與遊戲場景中有量化依據;在沒有 mocap 的實機上(除了影片)能維持同樣表現;Chase Tag 策略對人類有統計上的優勢(只有 2 局)。</span>
+        <span data-lang="en"><b class="ok">Proven</b>: the VQ prior is more reusable than a β-VAE prior; reusing it sharply eases sparse-reward traversal learning; the whole hierarchy transfers zero-shot and, with mocap assistance, completes traversal and the game on hardware.<br><b class="bad">Not proven</b>: more agile or robust than concurrent parkour methods; a quantitative basis for "lifelike" in traversal and game settings; equal performance on hardware without mocap (beyond videos); a statistically meaningful edge over humans in Chase Tag (only 2 games).</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">讀圖陷阱</span><span data-lang="en">Figure-reading trap</span></div>
+        <span data-lang="zh">Fig.3G 的「從頭練」用的是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">與本文同樣的 sparse reward、同樣無 curriculum</mark>——這正是為預訓練方法量身打造的設定。parkour 方法的從頭練會配 dense reward 與 curriculum,所以這張圖不能讀成「從頭練學不會鑽桿」。</span>
+        <span data-lang="en">Fig.3G&#39;s "from scratch" uses <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the same sparse reward and no curriculum</mark>—a setting tailored to the pre-training method. Parkour methods training from scratch use dense rewards and curricula, so this figure can&#39;t be read as "creeping is unlearnable from scratch."</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">實機證據強度</span><span data-lang="en">real-world evidence</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">mocap 依賴</span><span data-lang="en">mocap reliance</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「像動物(lifelike)」量的到底是什麼?</b> 唯一的量化指標是<mark class="m-limit" data-t="LIMITATION/FUTURE">模擬中、平地上、約 1000 幀行走軌跡的四個步態參數</mark>(swing/stance time、step distance/height)以小提琴圖目視比較,沒有分佈距離或統計檢定;t-SNE 只說明表徵能分步態。越障與 Chase Tag 的「像動物」——撲擊、放棄、徘徊——<b>完全是影片定性描述</b>,而那些動作本來就不在資料裡,也就沒有可比的 ground truth。標題的核心形容詞,證據最薄。</li>
+          <li data-lang="en"><b>What does "lifelike" actually measure?</b> The only quantitative metric is <mark class="m-limit" data-t="LIMITATION/FUTURE">four gait parameters over ~1000 frames of flat-ground walking in simulation</mark> (swing/stance time, step distance/height), compared by eyeballing violin plots—no distribution distance, no statistical test; t-SNE only shows the representation separates gaits. "Lifelike" in traversal and Chase Tag—pouncing, giving up, wandering—is <b>purely qualitative video description</b>, and those motions aren&#39;t in the data, so no ground truth exists. The title&#39;s key adjective has the thinnest evidence.</li>
+          <li data-lang="zh"><b>對 mocap 的雙重依賴。</b> 一是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">資料:單一隻拉布拉多、約 40 分鐘、受訓犬 + 訓犬師 + mocap 棚</mark>——先驗的多樣性被這隻狗的動作庫上限框住(沒有側跳、攀爬、匍匐的原始資料),作者自己也承認資料昂貴、需要改從影片取得。二是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">部署:Fig.2–4 的所有實機結果,外感知與全域位置都來自 mocap 系統與離線地形圖</mark>;Chase Tag 的對手、旗子位置同樣是「上帝視角」。板載相機版只用影片展示跨欄。</li>
+          <li data-lang="en"><b>A double reliance on mocap.</b> First, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">data: one Labrador, ~40 minutes, a trained dog + trainer + mocap studio</mark>—the prior&#39;s diversity is capped by this dog&#39;s repertoire (no raw data for side-jumps, climbing or crawling), and the authors themselves call data expensive and suggest videos instead. Second, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">deployment: every real-world result in Figs.2–4 uses exteroception and global positions from a mocap system and an offline terrain map</mark>; Chase Tag&#39;s opponent and flag positions are likewise "god&#39;s-eye." The onboard-camera version is shown only by video, on hurdles.</li>
+          <li data-lang="zh"><b>模擬 vs 實機證據不對等。</b> 學習曲線、消融、Elo 全在模擬;實機只有:模仿 reward 3 次重複(Fig.2E)、三個基本障礙各 10 次(Fig.3E)、以及影片。實機測試參數<mark class="m-limit" data-t="LIMITATION/FUTURE">全部落在訓練分佈內</mark>(橫桿 25/30 cm \(\subset[25,30]\);欄 10/15 \(\subset[5,15]\);梯 \(\le 18\subset[0,18]\)),速度只測 0.6–1.0 m/s(訓練到 3.0)。沒有 OOD 障礙、沒有連續多障礙的實機成功率,Chase Tag 實機也只有影片 + 對人類 2 局。</li>
+          <li data-lang="en"><b>Unequal sim vs real evidence.</b> Learning curves, ablations and Elo are all in simulation; on hardware there are only imitation reward over 3 repeats (Fig.2E), 10 trials per elementary obstacle (Fig.3E), and videos. Real-world test settings <mark class="m-limit" data-t="LIMITATION/FUTURE">all lie inside the training distribution</mark> (pole 25/30 cm \(\subset[25,30]\); hurdle 10/15 \(\subset[5,15]\); stair \(\le 18\subset[0,18]\)), and speeds were tested only at 0.6–1.0 m/s (training goes to 3.0). No OOD obstacles, no real success rates for multi-obstacle courses; real Chase Tag is videos + 2 games against a human.</li>
+          <li data-lang="zh"><b>Baseline 的公平性。</b> (a) β-VAE 只試了 \(\beta=0.01\) 常數與退火;常數版「完全學不起來」很可疑,更小的常數 \(\beta\)(如 0.001)沒報告。(b) 沒有與<mark class="m-problem" data-t="PROBLEM/GAP">最自然的對手——不經 latent、直接 per-clip 模仿(Peng 2020)或 AMP 式對抗先驗</mark>——比較。(c) 與同期 parkour 方法的比較(Table S4)是<b>勾選式的特性表</b>,不是同硬體、同場景的量化對比。(d) 「從頭練」對照在 sparse reward、無 curriculum 下進行,先天不利。</li>
+          <li data-lang="en"><b>Baseline fairness.</b> (a) β-VAE is tried only at constant \(\beta=0.01\) and annealed; a constant version that "completely fails" is suspicious, and smaller constant \(\beta\) (e.g., 0.001) is not reported. (b) There is no comparison with <mark class="m-problem" data-t="PROBLEM/GAP">the most natural rivals—latent-free per-clip imitation (Peng 2020) or an AMP-style adversarial prior</mark>. (c) The comparison with concurrent parkour methods (Table S4) is a <b>checkbox feature table</b>, not a quantitative same-hardware, same-course comparison. (d) The from-scratch control runs with sparse reward and no curriculum, a built-in handicap.</li>
+          <li data-lang="zh"><b>「2 項 reward」的計數方式。</b> Table S4 把本文列為 2 terms、他人 6–16 terms,但本文的總工程包含 5 項模仿 reward、GAIL、樓梯懲罰與 residual、隱形圓柱、手動調整 retarget。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「節能」也沒有 cost of transport 等量化</mark>,只有扭矩箱形圖。</li>
+          <li data-lang="en"><b>How "2 reward terms" is counted.</b> Table S4 lists this work at 2 terms vs. others&#39; 6–16, yet the total engineering includes a 5-term imitation reward, GAIL, a stair penalty and residual head, invisible cylinders, and hand-tuned retargeting. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"Energy-efficient" is also not quantified</mark> (no cost of transport)—only torque box plots.</li>
+          <li data-lang="zh"><b>算力與可重現性。</b> 算力本身不高(約百 GPU-天量級,見 04),但正文「4 卡 4 天完成全部」與附錄不一致。重現性的真正門檻是<mark class="m-limit" data-t="LIMITATION/FUTURE">自研 MAX 硬體、自家 TLeague 分散式框架、PyBullet 環境與 mocap 棚</mark>。值得肯定的是原始 .bvh、retarget 資料與程式碼都已在 Code Ocean 公開,至少 primitive 層可被他人重用。</li>
+          <li data-lang="en"><b>Compute and reproducibility.</b> Compute itself is modest (~100 GPU-days; see 04), but the main text&#39;s "4 GPUs, 4 days for everything" conflicts with the appendix. The real reproducibility barrier is <mark class="m-limit" data-t="LIMITATION/FUTURE">in-house MAX hardware, the in-house TLeague distributed framework, the PyBullet environments, and a mocap studio</mark>. To their credit, raw .bvh, retargeted data and code are released on Code Ocean, so at least the primitive level can be reused by others.</li>
+          <li data-lang="zh"><b>「正交」與「可擴充」只示範了一半。</b> 新增技能的路徑(訓新專家 → 蒸餾)用跌倒恢復示範過;但<mark class="m-limit" data-t="LIMITATION/FUTURE">「換一個新的上層任務而不動下兩層」只有 Chase Tag 一個例子</mark>,也沒測蒸餾後的環境層是否讓策略層需要重訓。</li>
+          <li data-lang="en"><b>"Orthogonal" and "enrichable" are only half-demonstrated.</b> Adding a skill (train a new expert → distill) is shown with fall recovery, but <mark class="m-limit" data-t="LIMITATION/FUTURE">"swap in a new top-level task without touching the lower two" has a single example—Chase Tag</mark>, and whether a re-distilled environmental level forces the strategic level to retrain is untested.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>Lifelike 的度量</b>:能否在實機越障時,用狗在相似障礙上的 mocap(或影片姿態估計)計算分佈距離?沒有這個,「像動物」和「像 PMC」有什麼區別?</li>
+          <li data-lang="en"><b>Measuring lifelike</b>: could one compute a distribution distance on real traversal against dog mocap (or video pose estimates) on similar obstacles? Without that, how is "animal-like" different from "PMC-like"?</li>
+          <li data-lang="zh"><b>實機證據</b>:在訓練分佈外(如 20 cm 欄、22 cm 樓梯、更低的桿)與 1.5–3 m/s 的速度下,成功率會怎麼掉?連續多障礙路線的完成率是多少?</li>
+          <li data-lang="en"><b>Real-world evidence</b>: how does success degrade out of distribution (20 cm hurdles, 22 cm stairs, a lower pole) and at 1.5–3 m/s? What is the completion rate on multi-obstacle courses?</li>
+          <li data-lang="zh"><b>公平的從頭練</b>:如果給 scratch 基線 parkour 方法常用的 dense reward + curriculum,它與「重用先驗」的差距還剩多少?先驗省下的到底是「樣本」還是「人工」?</li>
+          <li data-lang="en"><b>A fair scratch baseline</b>: give the scratch baseline the dense reward + curriculum parkour methods use—how much of the gap to "reused prior" remains? Does the prior save samples, or human effort?</li>
+          <li data-lang="zh"><b>拿掉 mocap</b>:板載相機版能否重做 Fig.3E 與 Chase Tag 的量化(對手位置改由板載感知估計)?</li>
+          <li data-lang="en"><b>Dropping mocap</b>: can the onboard-camera version reproduce Fig.3E and Chase Tag quantitatively (with opponent position estimated onboard)?</li>
+          <li data-lang="zh"><b>Codebook 的利用率</b>:256 個碼實際被用到多少?越障時的選碼分佈是否集中在少數「跳」的碼?K 與 D 的敏感度如何?</li>
+          <li data-lang="en"><b>Codebook utilization</b>: how many of the 256 codes are actually used? Does code selection during traversal collapse onto a few "jump" codes? How sensitive are results to K and D?</li>
+          <li data-lang="zh"><b>策略的統計</b>:「放棄追逐 / 撲擊」在多少局中出現?對人類 0:2 若擴充到 20 局、讓人類練習後還成立嗎?</li>
+          <li data-lang="en"><b>Strategy statistics</b>: in how many games do "giving up / pouncing" occur? Does 0:2 versus a human hold over 20 games, after the human practices?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把「lifelike agility」讀成「<b>已被量化證明的動物級敏捷</b>」。實際上:量化的自然度只在模擬平地行走上;實機越障是 10 次一格的成功率、且都在訓練分佈內;實機感知仰賴 mocap。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">這是一篇強在「框架與可重用性」的論文,不是強在「敏捷度紀錄」的論文</mark>。</span>
+        <span data-lang="en">Reading "lifelike agility" as "<b>quantitatively proven animal-level agility</b>." In fact: quantified naturalness covers only simulated flat walking; real traversal is 10 trials per cell, all in-distribution; real perception relies on mocap. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">This paper&#39;s strength is the framework and reusability, not agility records</mark>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">公開狗的原始 mocap(.bvh)、retarget 資料與程式碼;坦白交代 mocap 依賴並補上板載相機版;Supplementary 6.5 主動與五個同期方法逐項對照;sim vs real 落差(Fig.2E)誠實呈現而非只報模擬。</span>
+        <span data-lang="en">Releases the raw dog mocap (.bvh), retargeted data and code; is upfront about mocap reliance and adds an onboard-camera version; Supplementary 6.5 compares item-by-item with five concurrent methods; the sim-vs-real drop (Fig.2E) is shown honestly rather than reporting sim only.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">作者自述的未來方向</span><span data-lang="en">Authors&#39; future work</span></span>
+        <span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">動作資料昂貴,需要更經濟的取得方式</mark>——例如從網路影片抽取動作(圖學中 SFV、廣播網球影片已有示範),再轉移到實體機器人控制。</span>
+        <span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">Motion data is expensive; cheaper acquisition is needed</mark>—e.g., extracting motion from online videos (shown in graphics by SFV and broadcast-tennis work), then transferring to real robot control.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>把「動作先驗」當成上層 RL 的動作空間。</b> 上層輸出離散碼(或導航指令)而非關節角,探索空間立刻變成「每個動作都合理」,sparse reward 也能學。這套「凍結 decoder + 上層選碼」可直接搬到操作、人形或任何有示範資料的平台。</li>
+          <li data-lang="en"><b>Use a motion prior as the upper-level RL action space.</b> Output a discrete code (or navigation command) rather than joint angles and exploration becomes "every action is reasonable," so even sparse rewards are learnable. The "frozen decoder + upper-level code picker" recipe ports to manipulation, humanoids, or any platform with demonstration data.</li>
+          <li data-lang="zh"><b>依感知/資訊層級切分網路。</b> 本體 → 外感知 → 任務資訊的分層,讓每層的重訓成本與影響範圍都受控;想加相機,只蒸餾環境層(primitive 不動),本文就是這樣做的。</li>
+          <li data-lang="en"><b>Split networks by perception/information level.</b> Proprioception → exteroception → task info keeps the retraining cost and blast radius of each level contained; to add a camera, distill only the environmental level (primitive untouched)—exactly what this paper does.</li>
+          <li data-lang="zh"><b>想做多智能體 / 遊戲類機器人任務時</b>,先把低層壓到「方向 + 速度」再做 self-play,是讓 PFSP 這類 AlphaStar 技術在實體機器人上可行的務實路徑。</li>
+          <li data-lang="en"><b>For multi-agent / game-like robot tasks</b>, squeezing the low level down to "direction + speed" before self-play is a pragmatic way to make AlphaStar-style PFSP feasible on physical robots.</li>
+          <li data-lang="zh"><b>若要宣稱「自然 / 像動物」</b>,請比這篇多做一步:在目標情境(而非只在平地)用分佈距離量化,並在實機上量測。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>If you claim "natural / animal-like"</b>, go one step beyond this paper: quantify with a distribution distance in the target setting (not only flat ground), and measure on hardware. <span class="add">[guide note]</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">與 Peng 2020(Motion Imitation)的關係</span><span data-lang="en">Relation to Peng 2020 (Motion Imitation)</span></h3>
+        <table>
+          <tr><th></th><th>Peng et al. 2020 (RSS)</th><th>Han et al. 2024 (NMI)</th></tr>
+          <tr><td><b><span data-lang="zh">模仿單位</span><span data-lang="en">Imitation unit</span></b></td><td><span data-lang="zh">一段 clip → 一個策略</span><span data-lang="en">one clip → one policy</span></td><td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">全部 clip → 一個生成式先驗</mark>(離散 codebook + decoder)</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">all clips → one generative prior</mark> (discrete codebook + decoder)</span></td></tr>
+          <tr><td><b><span data-lang="zh">模仿 reward</span><span data-lang="en">Imitation reward</span></b></td><td colspan="2"><span data-lang="zh">同型:關節角/速度、末端、機身位姿/速度的指數核加權和;retarget 也沿用 Peng 的 IK 流程。</span><span data-lang="en">Same form: weighted exponential kernels on joint angles/velocities, end effectors, base pose/velocity; retargeting also follows Peng&#39;s IK pipeline.</span></td></tr>
+          <tr><td><b>Sim-to-real</b></td><td><span data-lang="zh">資訊瓶頸 latent + 實機約 50 次 AWR 適應</span><span data-lang="en">info-bottleneck latent + ~50 real-world AWR adaptation trials</span></td><td><span data-lang="zh">純 domain randomization,零樣本</span><span data-lang="en">pure domain randomization, zero-shot</span></td></tr>
+          <tr><td><b><span data-lang="zh">下游</span><span data-lang="en">Downstream</span></b></td><td><span data-lang="zh">無(重現步態本身即目標)</span><span data-lang="en">none (reproducing the gait is the goal)</span></td><td><span data-lang="zh">感知越障 + 多智能體遊戲,皆重用同一個 decoder</span><span data-lang="en">perceptive traversal + multi-agent game, all reusing one decoder</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:10px">一句話:<b>從「單段模仿」走到「預訓練一個可被重用的生成式動作先驗」</b>——模仿不再是終點,而是給上層任務用的詞彙表。中間的 Bohez et al. 2022(高斯 latent 技能先驗)是兩者之間的橋,本文把它換成 VQ 離散碼。</p>
+        <p data-lang="en" style="margin-top:10px">In one line: <b>from "single-clip imitation" to "pre-training a reusable generative motion prior"</b>—imitation is no longer the endpoint but a vocabulary for upper-level tasks. Bohez et al. 2022 (Gaussian-latent skill prior) is the bridge in between; this paper swaps it for VQ discrete codes.</p>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What&#39;s worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「離散(VQ)動作先驗比高斯 latent 更易被重用」</span><span data-lang="en">"Discrete (VQ) motion priors are more reusable than Gaussian latents"</span></td><td><span data-lang="zh">Fig.2B / 3F 的 VQ vs β-VAE 對照。</span><span data-lang="en">The VQ vs β-VAE comparisons in Fig.2B / 3F.</span></td></tr>
+          <tr><td><span data-lang="zh">「動作先驗讓 sparse reward 越障可學、免 curriculum」</span><span data-lang="en">"Motion priors make sparse-reward traversal learnable without curriculum"</span></td><td><span data-lang="zh">Fig.3G 的 reuse vs scratch(注意 scratch 同樣無 curriculum)。</span><span data-lang="en">Fig.3G reuse vs scratch (noting scratch also lacks curriculum).</span></td></tr>
+          <tr><td><span data-lang="zh">「階層式預訓練控制可上實體四足、並支援多智能體 self-play」</span><span data-lang="en">"Hierarchical pre-trained control works on physical quadrupeds and supports multi-agent self-play"</span></td><td><span data-lang="zh">實機 Chase Tag 作為存在性示範。</span><span data-lang="en">Real-world Chase Tag as an existence proof.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">這篇把四足控制重寫成「<b>先預訓練動作詞彙、再逐層學會用詞</b>」:VQ 離散先驗讓上層只需選碼、讓 sparse reward 與 self-play 在實體機器人上變得可行。它最有力的證據是「重用效率」,最薄弱的則是標題裡的「lifelike」——自然度只在模擬平地上被量化,實機感知仍靠 mocap。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">This paper recasts quadruped control as "<b>pre-train a motion vocabulary, then learn to use it level by level</b>": a VQ discrete prior lets upper levels just pick codes, making sparse rewards and self-play feasible on physical robots. Its strongest evidence is reuse efficiency; its weakest is the title&#39;s "lifelike"—naturalness is quantified only on simulated flat ground, and real-world perception still leans on mocap.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Peng 2020 · Motion Imitation</span>
+          <span class="chip">Bohez 2022 · Imitate &amp; Repurpose</span>
+          <span class="chip">VQ-VAE (van den Oord 2017)</span>
+          <span class="chip">Zhu 2023 · Neural Categorical Priors</span>
+          <span class="chip">Merel 2018 · NPMP</span>
+          <span class="chip">Liu 2022 · Humanoid Football</span>
+          <span class="chip">Extreme / Robot Parkour 2023</span>
+          <span class="chip">AlphaStar (PFSP)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">在本論文庫中</span><span data-lang="en">In this library</span></span>
+        <span data-lang="zh">前作:<b>Peng2020 Motion Imitation</b>(單段模仿 + 實機適應)。對照:<b>Kumar2021 RMA</b>、<b>Nahrendra2023 DreamWaQ</b>(不用動物資料、專注魯棒行走)、<b>Margolis2022 Walk These Ways</b>(用人可指定的步態參數而非學到的碼來索引行為)。</span>
+        <span data-lang="en">Predecessor: <b>Peng2020 Motion Imitation</b> (single-clip imitation + real-world adaptation). Contrasts: <b>Kumar2021 RMA</b>, <b>Nahrendra2023 DreamWaQ</b> (no animal data; robust walking), <b>Margolis2022 Walk These Ways</b> (indexes behaviours by human-specified gait parameters instead of learned codes).</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論;標「≈」的數值為導讀從圖中讀取的近似值;其餘事實與數據均出自原論文(含 Supplementary)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences; values marked "≈" are approximations read off figures by the guide; all other facts and numbers come from the original paper (including the Supplementary).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Han et al. 2024 (Lifelike Agility &amp; Play) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Lifelike agility reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

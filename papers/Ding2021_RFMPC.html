@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>RF-MPC — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Representation-Free Model Predictive Control for Dynamic Motions in Quadrupeds","authors":"Yanran Ding, Abhishek Pandala, Chuanzheng Li, Young-Ha Shin, Hae-Won Park","year":"2021","venue":"IEEE T-RO","tags":["Legged Robotics","Quadruped","MPC","Model Predictive Control","Optimization-Based Control","Lie Groups","Model-based Control"],"tldr":"把機身姿態直接用旋轉矩陣表示,在 SO(3) 上做 variation-based 線性化,再把姿態誤差近似成仿射形式,讓單剛體 MPC 變成標準 QP(160-250 Hz),徹底避開 Euler 角奇異與四元數 unwinding;5.5 kg 四足 Panther 實機完成多種步態與穿越 Euler 奇異姿態的受控後空翻。","tldr_en":"Represents body orientation directly with the rotation matrix, linearizes the single-rigid-body dynamics on SO(3) with a variation-based scheme and an affine orientation error, and so turns MPC into a standard QP solved at 160-250 Hz, sidestepping Euler-angle singularity and quaternion unwinding; the 5.5 kg quadruped Panther runs several gaits and a controlled backflip that passes through the Euler singularity."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  .cols > div, .cols > aside{min-width:0}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .tscroll{overflow-x:auto}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .dstep{border-top:1px dashed var(--line); padding-top:12px; margin-top:14px}
+  .dstep:first-of-type{border-top:none; margin-top:0; padding-top:0}
+  .dno{display:inline-block; font-size:10.5px; letter-spacing:.12em; color:var(--navy); background:var(--gold-soft);
+    border-radius:5px; padding:2px 8px; font-weight:700; margin-bottom:6px}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:120px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">RF-MPC 把四足機身的姿態<b>直接用旋轉矩陣 \(R\in\mathrm{SO}(3)\)</b> 表示,不經過 Euler 角或四元數。作者在<mark class="m-method" data-t="METHOD/IDEA">當前姿態附近做 variation-based 線性化</mark>(\(R_k\approx R_{op}\exp(\hat\xi_k)\)),再把姿態誤差近似成 \(\xi_k\) 的仿射函數,讓整個單剛體 MPC 變成<b>標準 QP</b>,在 5.5 kg 的 Panther 上以 <mark class="m-result" data-t="RESULT/EVIDENCE">160–250 Hz 即時求解</mark>。結果是:實機完成多種步態,並做出一個<mark class="m-result" data-t="RESULT/EVIDENCE">穿越 Euler 角奇異姿態的受控後空翻</mark>,這是 Euler 角 MPC 在模擬中會發散的情境。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">RF-MPC represents the quadruped body orientation <b>directly with the rotation matrix \(R\in\mathrm{SO}(3)\)</b>, with no Euler angles or quaternions. The authors <mark class="m-method" data-t="METHOD/IDEA">linearize around the current attitude with a variation-based scheme</mark> (\(R_k\approx R_{op}\exp(\hat\xi_k)\)) and approximate the orientation error as an affine function of \(\xi_k\), so the whole single-rigid-body MPC becomes a <b>standard QP</b> solved <mark class="m-result" data-t="RESULT/EVIDENCE">in real time at 160–250 Hz</mark> on the 5.5 kg robot Panther. The payoff: several gaits on hardware and a <mark class="m-result" data-t="RESULT/EVIDENCE">controlled backflip that passes through the Euler-angle singularity</mark>, the very situation where Euler-angle MPC diverges in simulation.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Ding2021/fig16_backflip.png" alt="Figure 16 controlled backflip">
+        <figcaption data-lang="zh"><b>Fig.16</b> Panther 的受控後空翻(前腳從 80 mm 平台起跳)。上排是實拍,下排是由實驗資料重建的姿態:方塊是機身座標軸(旋轉矩陣),三個彩色圓環是 roll-pitch-yaw 三個 Euler 角的轉軸。<b>看 (a3)/(b3),\(t\approx300\) ms</b>:機身直立、三個 Euler 圓環幾乎重疊成一個平面,也就是 gimbal lock。此時後腳仍著地,RF-MPC 正在出力控制它。</figcaption>
+        <figcaption data-lang="en"><b>Fig.16</b> Panther&#39;s controlled backflip (front legs launch from an 80 mm platform). Top: video frames. Bottom: attitude reconstructed from experiment data. The box shows the body axes (the rotation matrix); the three colored rings show the roll-pitch-yaw Euler-angle axes. <b>Look at (a3)/(b3), \(t\approx300\) ms</b>: the body is upright and the three Euler rings nearly collapse into one plane, i.e. gimbal lock. The hind legs are still on the ground and RF-MPC is actively commanding them at that moment.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 四足 MPC 社群幾乎都用 <mark class="m-problem" data-t="PROBLEM/GAP">Euler 角</mark>描述姿態,在 pitch \(=\pm\pi/2\) 有奇異點(gimbal lock);四元數雖無奇異,卻<mark class="m-problem" data-t="PROBLEM/GAP">雙重覆蓋 \(\mathrm{SO}(3)\)</mark>,會出現 unwinding,預測式控制又不適合切換 chart。翻轉、爬垂直面這類大角度動作因此做不了。</li>
+          <li data-lang="en"><b>Problem</b> — Quadruped MPC almost always uses <mark class="m-problem" data-t="PROBLEM/GAP">Euler angles</mark> for attitude, which are singular at pitch \(=\pm\pi/2\) (gimbal lock). Quaternions avoid the singularity but <mark class="m-problem" data-t="PROBLEM/GAP">double-cover \(\mathrm{SO}(3)\)</mark>, causing unwinding, and chart switching is a bad fit for predictive control. Flips, vertical climbing and other large-rotation motions are therefore off the table.</li>
+          <li data-lang="zh"><b>方法</b> — 狀態直接帶旋轉矩陣 \(R\);在當前姿態 \(R_{op}\) 的切空間用 3 維向量 \(\xi\) 描述偏差,<mark class="m-method" data-t="METHOD/IDEA">variation-based 線性化 + Kronecker 向量化</mark>得到仿射動力學;<mark class="m-method" data-t="METHOD/IDEA">仿射化的姿態誤差</mark>讓 cost 保持二次正定,最後變成可在嵌入式電腦上快速求解的 QP(自家 solver qpSWIFT)。</li>
+          <li data-lang="en"><b>Method</b> — Keep the rotation matrix \(R\) in the state; describe deviations by a 3-vector \(\xi\) in the tangent space at the current attitude \(R_{op}\). <mark class="m-method" data-t="METHOD/IDEA">Variation-based linearization + Kronecker vectorization</mark> give affine dynamics, and an <mark class="m-method" data-t="METHOD/IDEA">affine orientation error</mark> keeps the cost quadratic and positive definite. The result is a QP that an embedded computer solves quickly (with the authors&#39; own solver, qpSWIFT).</li>
+          <li data-lang="zh"><b>結果</b> — 模擬中 Euler 角 MPC 在離奇異姿態 \(\lt 0.3\) rad 時明顯失穩,RF-MPC 不受影響;實機上完成 pose/平衡控制、walking/running trot、bounding,以及 <mark class="m-result" data-t="RESULT/EVIDENCE">10 次受控後空翻</mark>(\(\kappa^{-1}(\mathcal{T}_\Theta)\) 降到 \(10^{-1}\) 以下,即確實經過奇異點)。</li>
+          <li data-lang="en"><b>Results</b> — In simulation, Euler-angle MPC degrades badly once within \(0.3\) rad of the singular pose, while RF-MPC is unaffected. On hardware: pose/balance control, walking and running trot, bounding, and <mark class="m-result" data-t="RESULT/EVIDENCE">10 controlled backflip trials</mark> (\(\kappa^{-1}(\mathcal{T}_\Theta)\) drops below \(10^{-1}\), so the robot really does pass through the singularity).</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">2018–2020 年,四足控制的主流是 <mark class="m-method" data-t="METHOD/IDEA">MPC + 簡化模型</mark>:把整台機器人看成一個<b>單剛體(Single Rigid Body, SRB)</b>,腿質量忽略(Panther 的腿加起來 \(\lt 10\%\) 總質量),每個控制週期解一個有限時域最佳化問題,輸出四隻腳的地面反作用力(GRF)。MIT Cheetah 3 的 <b>convex MPC</b>(Di Carlo 2018,本文 [55])是代表作,它能變成凸 QP,關鍵之一是用 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Euler 角並假設姿態不偏離 nominal 太多</mark>。</p>
+        <p data-lang="en">From 2018–2020, mainstream quadruped control was <mark class="m-method" data-t="METHOD/IDEA">MPC on a simplified model</mark>: treat the whole robot as a <b>single rigid body (SRB)</b>, ignore leg mass (Panther&#39;s legs are \(\lt 10\%\) of total mass), and at each control cycle solve a finite-horizon optimization that outputs the four ground reaction forces (GRFs). MIT Cheetah 3&#39;s <b>convex MPC</b> (Di Carlo 2018, ref. [55]) is the flagship; one key to its convex QP form is using <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Euler angles and assuming the attitude stays near nominal</mark>.</p>
+        <p data-lang="zh">對平地行走,這個假設很合理;但只要動作要 <mark class="m-problem" data-t="PROBLEM/GAP">大幅轉動機身</mark>(像山羊爬近乎垂直的崖壁、狗跑酷的翻越動作),姿態就可能經過 Euler 角的奇異點附近。另一方面,幾何控制(geometric control)在 UAV 領域早已示範:直接在 \(\mathrm{SO}(3)\) 上用旋轉矩陣設計控制器,可以全域、無奇異(Lee et al. [48]);Wu &amp; Sreenath [33] 進一步提出 \(\mathrm{SO}(3)\) 上的 <b>variation-based linearization</b>。RF-MPC 把這條幾何控制的工具線,帶進<b>預測式</b>的足式機器人控制。</p>
+        <p data-lang="en">For flat-ground walking the assumption is fine. But any motion that <mark class="m-problem" data-t="PROBLEM/GAP">rotates the body a lot</mark>, such as a goat on a near-vertical cliff or a parkour dog, can bring the attitude near the Euler-angle singularity. Meanwhile, geometric control in the UAV world had already shown that designing controllers directly on \(\mathrm{SO}(3)\) with rotation matrices is global and singularity-free (Lee et al. [48]), and Wu &amp; Sreenath [33] proposed <b>variation-based linearization</b> on \(\mathrm{SO}(3)\). RF-MPC carries that geometric-control toolkit into <b>predictive</b> control for legged robots.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px"><span class="add">[導讀補充]</span> 這篇的賭注是「<b>換座標,不換 solver</b>」:保留 convex MPC 那種「每拍解一個 QP」的速度優勢,只把姿態的表示與線性化方式換成幾何上正確的版本。它不走 NMPC(一般非線性規劃)那條更準但更重的路,而是證明:只要線性化做在流形上,QP 也能撐起翻轉動作。</p>
+          <p data-lang="en" style="margin-top:6px"><span class="add">[guide note]</span> The bet is <b>change the coordinates, not the solver</b>: keep convex MPC&#39;s one-QP-per-tick speed and only swap the attitude representation and linearization for a geometrically correct one. Instead of the more accurate but heavier NMPC route, it shows that a QP can handle flipping motions as long as the linearization is done on the manifold.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不只是「四足會後空翻了」,還有下面幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">The takeaway is not just that a quadruped can backflip, but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-problem)">奇異點屬於座標,不屬於機器人。</b> Euler 角在 pitch \(\pm\pi/2\) 的奇異,是「把 \(\mathrm{SO}(3)\) 攤平成三個角度」這個<b>參數化</b>造成的;旋轉矩陣本身是全域、唯一的表示。問題出在控制器的模型,不在物理上。</li>
+          <li data-lang="en"><b style="color:var(--c-problem)">The singularity belongs to the coordinates, not the robot.</b> The Euler-angle singularity at pitch \(\pm\pi/2\) comes from the <b>parametrization</b> that flattens \(\mathrm{SO}(3)\) into three angles; the rotation matrix itself is a global, unique representation. The flaw lives in the controller&#39;s model, not in the physics.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">在流形上線性化,局部座標每拍重新置中。</b> 偏差 \(\xi\) 定義在<b>當前姿態</b> \(R_{op}\) 的切空間,且每個 MPC 週期 \(x_{t|t}=x_{op}\) 讓 \(\xi_0=0\)。<span class="add">[導讀補充]</span> 等於「每拍都換一張以當下姿態為中心的局部地圖」,所以永遠不會走到地圖邊緣(奇異點)。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Linearize on the manifold, re-center the local chart every tick.</b> The deviation \(\xi\) lives in the tangent space at the <b>current</b> attitude \(R_{op}\), and every MPC cycle sets \(x_{t|t}=x_{op}\), so \(\xi_0=0\). <span class="add">[guide note]</span> It amounts to drawing a fresh local map centered on today&#39;s attitude at each tick, so the map&#39;s edge (the singularity) is never reached.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">兩個小技巧把矩陣問題壓回 QP。</b> (i) 用常數矩陣 \(N\) 與 Kronecker 積把 \(\dot R\) 這種矩陣乘矩陣的式子寫成向量仿射式;(ii) 把含矩陣對數的姿態誤差近似成 \(\log(R_d^\top R_{op})^\vee+\xi\),cost 因此是 \(\xi\) 的二次正定函數。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Two tricks squeeze a matrix problem back into a QP.</b> (i) A constant matrix \(N\) plus Kronecker products turn matrix-matrix expressions like \(\dot R\) into affine vector form; (ii) the matrix-log orientation error is approximated as \(\log(R_d^\top R_{op})^\vee+\xi\), so the cost is quadratic and positive definite in \(\xi\).</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">反直覺:在「當前狀態」線性化比在「參考軌跡」線性化更穩。</b> 後者用的資訊更多(時變 \(A_k,B_k\)),但當機器人被推離參考時,線性模型在錯的地方展開,預測就崩了(Fig.7)。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Counter-intuitive: linearizing at the current state beats linearizing along the reference.</b> The latter uses more information (time-varying \(A_k,B_k\)), but once the robot is pushed off the reference the model is expanded at the wrong place and prediction collapses (Fig.7).</li>
+          <li data-lang="zh"><b style="color:var(--c-limit)">代價寫在式子裡。</b> 一階近似使預測出的 \(R_k\) <mark class="m-limit" data-t="LIMITATION/FUTURE">不在 \(\mathrm{SO}(3)\) 上</mark>,預測時域越長誤差越大,所以 horizon 長度變成「看得遠」與「模型準」之間的取捨。</li>
+          <li data-lang="en"><b style="color:var(--c-limit)">The price is written into the equations.</b> The first-order approximation means the predicted \(R_k\) <mark class="m-limit" data-t="LIMITATION/FUTURE">is not on \(\mathrm{SO}(3)\)</mark>; error grows with the horizon, so horizon length becomes a trade-off between seeing far and keeping the model accurate.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Representation-Free Model Predictive Control for Dynamic Motions in Quadrupeds</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Yanran Ding, Abhishek Pandala, Chuanzheng Li, Young-Ha Shin, Hae-Won Park</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>UIUC · Virginia Tech · KAIST</span>
+          <b><span data-lang="zh">發表</span><span data-lang="en">Venue</span></b><span><span data-lang="zh">IEEE Transactions on Robotics(2020/12 接受,2021 刊出;arXiv:2012.10002)</span><span data-lang="en">IEEE Transactions on Robotics (accepted Dec 2020, published 2021; arXiv:2012.10002)</span></span>
+          <b><span data-lang="zh">前身</span><span data-lang="en">Prior</span></b><span><span data-lang="zh">ICRA 2019 版 [1](本文為期刊擴充版)</span><span data-lang="en">ICRA 2019 version [1] (this is the journal extension)</span></span>
+          <b><span data-lang="zh">平台</span><span data-lang="en">Robot</span></b><span><span data-lang="zh">Panther,5.5 kg 自製電動四足</span><span data-lang="en">Panther, a 5.5 kg in-house electric quadruped</span></span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span><span data-lang="zh">論文未附連結 <span class="add">[導讀補充] 據導讀者所知,第一作者 GitHub 有 MATLAB 版 RF-MPC 模擬</span></span><span data-lang="en">No link in the paper <span class="add">[guide note] to my knowledge the first author hosts a MATLAB RF-MPC simulation on GitHub</span></span></span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它把「MPC 只能管小角度姿態」這個默認限制拿掉了。作者自稱這是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">第一個在實機上用 MPC 控制、穿越奇異姿態的雜技動作</mark>(據作者所知)。對整條模型派四足控制線來說,這是「姿態表示」這個環節的標準答案之一。</span>
+        <span data-lang="en">It removes the default assumption that MPC can only handle small attitude deviations. The authors claim this is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the first hardware demonstration of MPC controlling an acrobatic motion through a singular pose</mark> (to their knowledge). For the model-based quadruped line, it is one of the standard answers for the attitude-representation piece.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">在模型派譜系中的位置</span><span data-lang="en">Place in the model-based line</span></span>
+        <span data-lang="zh"><b>Di Carlo 2018 convex MPC</b>(Euler 角線性化,Cheetah 3)→ <b>Ding ICRA 2019</b>(\(\mathrm{SO}(3)\) 上的 MPC 初版)→ <b>本文 RF-MPC</b>。同期的 <b>Kim 2019 WBIC+MPC</b> 以 convex MPC 為上層,再接 500 Hz 全身控制;RF-MPC 則是單層 MPC 直接以 160–250 Hz 出力。<span class="add">[導讀補充]</span> 原則上 RF-MPC 可以替換掉 Kim 2019 堆疊裡的 convex MPC。</span>
+        <span data-lang="en"><b>Di Carlo 2018 convex MPC</b> (Euler-angle linearization, Cheetah 3) → <b>Ding ICRA 2019</b> (first MPC on \(\mathrm{SO}(3)\)) → <b>this paper, RF-MPC</b>. The contemporaneous <b>Kim 2019 WBIC+MPC</b> uses convex MPC as the upper layer feeding a 500 Hz whole-body controller; RF-MPC is a single-layer MPC that commands forces directly at 160–250 Hz. <span class="add">[guide note]</span> In principle RF-MPC could replace the convex MPC in the Kim 2019 stack.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Single Rigid Body</span><span class="chip">SO(3)</span>
+          <span class="chip">Variation-based linearization</span><span class="chip">Kronecker vectorization</span>
+          <span class="chip">Friction pyramid</span><span class="chip">qpSWIFT</span><span class="chip">Gimbal lock</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <div class="tscroll"><table>
+          <tr><th><span data-lang="zh">姿態表示</span><span data-lang="en">Attitude representation</span></th><th><span data-lang="zh">優點</span><span data-lang="en">Upside</span></th><th><span data-lang="zh">痛點</span><span data-lang="en">Pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">Euler 角</span><span data-lang="en">Euler angles</span></b><br><small>[23]–[26], [55]</small></td><td><span data-lang="zh">3 個數字、直觀,小角度下線性化很準。</span><span data-lang="en">Three numbers, intuitive, very accurate linearization at small angles.</span></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">在 pitch \(\theta=\pm\pi/2\) 奇異</mark>:\(\dot\Theta=\mathcal{T}_\Theta^{-1}\omega\) 中出現 \(1/\cos\theta\) 與 \(\tan\theta\),接近時數值爆掉,動作必須避開奇異姿態。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Singular at pitch \(\theta=\pm\pi/2\)</mark>: \(\dot\Theta=\mathcal{T}_\Theta^{-1}\omega\) contains \(1/\cos\theta\) and \(\tan\theta\), which blow up nearby, so motions must steer clear of singular poses.</span></td></tr>
+          <tr><td><b><span data-lang="zh">四元數</span><span data-lang="en">Quaternion</span></b><br><small>[28]–[31]</small></td><td><span data-lang="zh">無奇異,UAV 界常用於反應式控制器。</span><span data-lang="en">Singularity-free; common in reactive UAV controllers.</span></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">雙重覆蓋 \(\mathrm{SO}(3)\)</mark>(\(q\) 與 \(-q\) 同一姿態)→ <b>unwinding</b>:起點很接近目標,卻可能繞一大圈。解法是 sign function 或混合系統切換 chart,但<mark class="m-problem" data-t="PROBLEM/GAP">對 MPC 這種預測式控制,切換 chart 很麻煩</mark>。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Double-covers \(\mathrm{SO}(3)\)</mark> (\(q\) and \(-q\) are the same attitude) → <b>unwinding</b>: starting close to the target yet rotating through a large angle. Fixes use sign functions or hybrid chart switching, but <mark class="m-problem" data-t="PROBLEM/GAP">chart switching is undesirable for predictive controllers like MPC</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">旋轉矩陣</span><span data-lang="en">Rotation matrix</span></b><br><small>[32]</small></td><td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">全域、唯一、無奇異</mark>,是 \(\mathrm{SO}(3)\) 的原生表示。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Global, unique, singularity-free</mark>: the native representation of \(\mathrm{SO}(3)\).</span></td><td><span data-lang="zh">動力學 \(\dot R=R\hat\omega\) 非線性,且 \(R\) 受 \(R^\top R=I,\ \det R=1\) 約束。<mark class="m-problem" data-t="PROBLEM/GAP">直接塞進 MPC 會變成非凸 NLP</mark>,難以在嵌入式電腦上即時求解。</span><span data-lang="en">Dynamics \(\dot R=R\hat\omega\) are nonlinear and \(R\) is constrained by \(R^\top R=I,\ \det R=1\). <mark class="m-problem" data-t="PROBLEM/GAP">Plugged straight into MPC it becomes a nonconvex NLP</mark>, hard to solve in real time on an embedded computer.</span></td></tr>
+        </table></div>
+        <p data-lang="zh" style="margin-top:14px">本文要回答的核心問題:<b>能不能保留旋轉矩陣的全域性,同時讓 MPC 仍是一個能以數百 Hz 求解的 QP?</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>can we keep the rotation matrix&#39;s global validity and still have the MPC be a QP solvable at hundreds of Hz?</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Euler 角的奇異點到底在哪</span><span data-lang="en">Where exactly the Euler singularity sits</span></h3>
+        <p data-lang="zh">本文的 Euler 角 MPC(EA-MPC)用 Z-Y-X 順序:\(R=R_z(\psi)R_y(\theta)R_x(\phi)\)。角速度與 Euler 角速率的關係是</p>
+        <p data-lang="en">The Euler-angle MPC (EA-MPC) in the paper uses the Z-Y-X sequence, \(R=R_z(\psi)R_y(\theta)R_x(\phi)\). Angular velocity relates to Euler-angle rates by</p>
+        <div class="eq">$$\omega=\mathcal{T}_\Theta\,\dot\Theta=\begin{bmatrix}\cos\theta\cos\psi &amp; -\sin\psi &amp; 0\\ \cos\theta\sin\psi &amp; \cos\psi &amp; 0\\ -\sin\theta &amp; 0 &amp; 1\end{bmatrix}\dot\Theta,\qquad \Theta=[\phi\ \ \theta\ \ \psi]^\top$$</div>
+        <p data-lang="zh">\(\mathcal{T}_\Theta\) 在 \(\theta=\pm\pi/2\) 不可逆 <span class="add">[導讀補充] 可直接算出 \(\det\mathcal{T}_\Theta=\cos\theta\)</span>。作者用<mark class="m-method" data-t="METHOD/IDEA">條件數的倒數 \(\kappa^{-1}(\mathcal{T}_\Theta)\in(0,1]\)</mark> 量化「離奇異多近」:越接近 0 越危險。後面所有實驗都用這個量證明機器人「真的經過了奇異點」。</p>
+        <p data-lang="en">\(\mathcal{T}_\Theta\) is not invertible at \(\theta=\pm\pi/2\) <span class="add">[guide note] one can check \(\det\mathcal{T}_\Theta=\cos\theta\)</span>. The authors quantify closeness to singularity with the <mark class="m-method" data-t="METHOD/IDEA">inverse condition number \(\kappa^{-1}(\mathcal{T}_\Theta)\in(0,1]\)</mark>: the closer to 0, the more dangerous. Every later experiment uses it to prove the robot really passed through the singularity.</p>
+        <figure class="fig"><img src="figs/Ding2021/fig3_singularity.png" alt="Figure 3 singularity pose control">
+          <figcaption data-lang="zh"><b>Fig.3</b> 奇異點附近的姿態控制模擬(四腳固定、拿掉力約束,只看奇異的影響)。(a) 陰影方塊是奇異姿態 \(R_s\)(直立),實心方塊是目標姿態 \(R_d\)。(b) 橫軸是目標離奇異姿態的角距 \(|\log(R_s^\top R_d)^\vee|\);左軸(log)是 0.5 s 後的 CoM 偏差。<b>注意兩條藍線</b>:EA-MPC(實線)在離奇異越近時偏差衝到 \(10^{-1}\)–\(10^{0}\) m 並劇烈震盪,RF-MPC(虛線)在整個範圍都維持在約 \(10^{-3}\) m 量級。橘線是 \(\kappa^{-1}(\mathcal{T}_\Theta)\),隨角距線性上升。作者以文字給出門檻:\(\lt 0.3\) rad(\(\kappa^{-1}\lt 0.15\))時 EA-MPC 明顯受影響。<span class="add">[導讀補充] 從圖上看,EA-MPC 偏差偏高的區間其實延伸到約 0.6 rad。</span></figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Pose-control simulation near the singularity (feet fixed, force constraints lifted to isolate the singularity effect). (a) Shaded box: singular pose \(R_s\) (upright); solid box: commanded pose \(R_d\). (b) The x-axis is the angular distance from the singular pose, \(|\log(R_s^\top R_d)^\vee|\); the left (log) axis is CoM deviation after 0.5 s. <b>Compare the two blue curves</b>: EA-MPC (solid) shoots to \(10^{-1}\)–\(10^{0}\) m and oscillates wildly as the target nears the singularity, while RF-MPC (dashed) stays around \(10^{-3}\) m across the whole range. The orange line is \(\kappa^{-1}(\mathcal{T}_\Theta)\), rising linearly with distance. The text states the threshold: EA-MPC is significantly affected below \(0.3\) rad (\(\kappa^{-1}\lt 0.15\)). <span class="add">[guide note] Reading the plot, elevated EA-MPC error actually extends to about 0.6 rad.</span></figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,RF-MPC 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how RF-MPC fills it</span></h3>
+        <div class="tscroll"><table>
+          <tr><th><span data-lang="zh">既有方法</span><span data-lang="en">Existing method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">RF-MPC 如何補上</span><span data-lang="en">How RF-MPC fills it</span></th></tr>
+          <tr>
+            <td><b>Convex MPC</b><br><small>Di Carlo 2018 [55]</small></td>
+            <td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">Euler 角 + 姿態接近 nominal 的假設</mark>;大角度動作不在設計範圍內。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Euler angles + near-nominal attitude assumption</mark>; large rotations are outside its design envelope.</span></td>
+            <td><span data-lang="zh">直接用 \(R\);<mark class="m-method" data-t="METHOD/IDEA">在 \(\mathrm{SO}(3)\) 上線性化</mark>,任意姿態都適用,仍維持 QP。</span><span data-lang="en">Use \(R\) directly; <mark class="m-method" data-t="METHOD/IDEA">linearize on \(\mathrm{SO}(3)\)</mark>, valid at any attitude, still a QP.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">四元數控制器</span><span data-lang="en">Quaternion controllers</span></b><br><small>[30], [31]</small></td>
+            <td><span data-lang="zh">需處理雙重覆蓋(sign function / 混合系統),不適合預測式控制。</span><span data-lang="en">Must handle the double cover (sign function / hybrid system); a poor fit for predictive control.</span></td>
+            <td><span data-lang="zh">旋轉矩陣<b>一對一</b>覆蓋 \(\mathrm{SO}(3)\),無 chart 切換。</span><span data-lang="en">Rotation matrices cover \(\mathrm{SO}(3)\) <b>one-to-one</b>; no chart switching.</span></td>
+          </tr>
+          <tr>
+            <td><b>NMPC / TO</b><br><small>[36], [37]</small></td>
+            <td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">非凸、有局部最優</mark>,不易在嵌入式電腦即時跑。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Nonconvex with local optima</mark>; hard to run in real time on embedded hardware.</span></td>
+            <td><span data-lang="zh">線性化 + 向量化後是<b>凸 QP</b>,qpSWIFT 160–250 Hz。</span><span data-lang="en">After linearization + vectorization it is a <b>convex QP</b>; qpSWIFT at 160–250 Hz.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">作者 ICRA 2019 版</span><span data-lang="en">Authors&#39; ICRA 2019 version</span></b><br><small>[1]</small></td>
+            <td><span data-lang="zh">用 9 維 variation <b>矩陣</b>;姿態 cost 只在預測的 \(R\) 落在 \(\mathrm{SO}(3)\) 上時才保證正定。</span><span data-lang="en">Used a 9-D variation <b>matrix</b>; the orientation cost was positive definite only when the predicted \(R\) lay on \(\mathrm{SO}(3)\).</span></td>
+            <td><span data-lang="zh">改用 <mark class="m-method" data-t="METHOD/IDEA">3 維 variation 向量 \(\xi\)</mark>;新的姿態誤差<b>恆為正定</b>;新增線性化方案比較、running trot、後空翻實驗。</span><span data-lang="en">Switch to a <mark class="m-method" data-t="METHOD/IDEA">3-D variation vector \(\xi\)</mark>; the new orientation cost is <b>always positive definite</b>; adds a linearization-scheme study, running trot and backflip experiments.</span></td>
+          </tr>
+        </table></div>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意作者自己也承認:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">其他表示法可以為特定動作「重新對齊」以避開奇異</mark>(例如換一個 Euler 順序)。所以旋轉矩陣的真正賣點不是「某一個動作做得到」,而是<b>不必為每個動作挑座標</b>,任意 3D 姿態都用同一個控制器。這個論點要靠真正 3D 的動作來支撐,讀 Results 時請記住這點。</p>
+          <p data-lang="en" style="margin-top:6px">Note the authors themselves concede that <mark class="m-assume" data-t="ASSUMPTION/CLAIM">other representations can be re-aligned for a specific motion to dodge their singularity</mark> (e.g. a different Euler sequence). So the rotation matrix&#39;s real selling point is not that one particular motion becomes possible, but that <b>you never have to pick coordinates per motion</b>: one controller for any 3D attitude. That argument needs truly 3D motions to back it up, so keep it in mind when reading Results.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">「Representation-free」<b>不是</b>「沒有表示」。它其實是「<b>全域表示用旋轉矩陣 \(R\),局部偏差用切空間的 3 維向量 \(\xi\)</b>」。\(\xi\) 本身就是一種局部座標(指數座標),只是每拍以當前姿態為中心重新展開,所以不會碰到它的奇異範圍。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">&quot;Representation-free&quot; does <b>not</b> mean no representation. It really means <b>a global representation via the rotation matrix \(R\) plus local deviations as a 3-vector \(\xi\) in the tangent space</b>. \(\xi\) is itself a local coordinate (exponential coordinates), just re-expanded around the current attitude every tick, so it never reaches its own bad region. <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">在 Euler 角 MPC 裡,「機身不要轉太多」是一個<mark class="m-assume" data-t="ASSUMPTION/CLAIM">隱藏在模型裡的動作限制</mark>。拿掉它,翻轉、爬牆、甚至天花板行走(作者在 future work 提到)才有機會由同一個 MPC 處理。</span>
+        <span data-lang="en">In Euler-angle MPC, &quot;don&#39;t rotate the body too much&quot; is a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">motion restriction hidden inside the model</mark>. Removing it is what lets flips, wall climbing, even ceiling walking (mentioned as future work) be handled by one MPC.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">換 Euler 順序行不行</span><span data-lang="en">re-aligned Euler?</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">為何不用 NMPC</span><span data-lang="en">why not NMPC</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">整體流程:從非線性單剛體到一個 QP</span><span data-lang="en">The pipeline: from a nonlinear rigid body to one QP</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STEP 1</span><b><span data-lang="zh">\(\mathrm{SO}(3)\) 單剛體</span><span data-lang="en">SRB on \(\mathrm{SO}(3)\)</span></b><small><span data-lang="zh">狀態 \([p,\dot p,R,\omega]\in\mathbb{R}^{18}\),輸入是四腳 GRF</span><span data-lang="en">state \([p,\dot p,R,\omega]\in\mathbb{R}^{18}\), input = 4 GRFs</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 2</span><b><span data-lang="zh">Variation 線性化</span><span data-lang="en">Variation linearization</span></b><small><span data-lang="zh">\(R_k\approx R_{op}(I+\hat\xi_k)\),在當前狀態展開</span><span data-lang="en">\(R_k\approx R_{op}(I+\hat\xi_k)\), expanded at current state</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 3</span><b><span data-lang="zh">向量化</span><span data-lang="en">Vectorization</span></b><small><span data-lang="zh">\(N\) 矩陣 + Kronecker 積,得 12 維仿射動力學</span><span data-lang="en">\(N\) matrix + Kronecker products → 12-D affine dynamics</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 4</span><b><span data-lang="zh">仿射姿態誤差</span><span data-lang="en">Affine attitude error</span></b><small><span data-lang="zh">\(e_R\approx\log(R_d^\top R_{op})^\vee+\xi\),cost 二次正定</span><span data-lang="en">\(e_R\approx\log(R_d^\top R_{op})^\vee+\xi\), PD quadratic cost</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 5</span><b>QP @ 160–250 Hz</b><small><span data-lang="zh">摩擦金字塔 + qpSWIFT,輸出 GRF</span><span data-lang="en">friction pyramid + qpSWIFT → GRFs</span></small></div>
+        </div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">一般 MPC 的形式是:最小化終端 cost \(\ell_T\) 加上 \(N\) 步 stage cost \(\ell\),受限於動力學 \(x_{t+k+1|t}=f(x)+g(x)u\)、狀態/輸入集合,以及初值 \(x_{t|t}=x_{op}\)(下標 \(op\) = 當前 operating point)。若 \(f,g\) 非線性,就是 NMPC。本文的整個推導,就是把這個問題<b>一步步改寫成 QP</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Generic MPC minimizes a terminal cost \(\ell_T\) plus \(N\) stage costs \(\ell\), subject to dynamics \(x_{t+k+1|t}=f(x)+g(x)u\), state/input sets, and the initial condition \(x_{t|t}=x_{op}\) (subscript \(op\) = the current operating point). With nonlinear \(f,g\) this is NMPC. The whole derivation is about <b>rewriting this problem into a QP, step by step</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">逐步推導</span><span data-lang="en">Step-by-step derivation</span></h3>
+
+        <div class="dstep">
+          <span class="dno mono">STEP 1 · SRB MODEL (eq. 2–4)</span>
+          <p data-lang="zh">狀態把旋轉矩陣<b>原封不動</b>放進去(攤成向量),角速度表示在機身座標 \(\{B\}\):</p>
+          <p data-lang="en">The state keeps the rotation matrix <b>as is</b> (reshaped into a vector), with angular velocity expressed in the body frame \(\{B\}\):</p>
+          <div class="eq">$$x:=[\,p\ \ \dot p\ \ R\ \ {}^B\omega\,]\in\mathbb{R}^{18},\qquad R\in\mathrm{SO}(3)=\{R\in\mathbb{R}^{3\times3}\mid R^\top R=I,\ \det R=+1\}$$</div>
+          <p data-lang="zh">四腳 GRF \(u_i\in\mathbb{R}^3\) 作用在腳位置 \(p^f_i\),相對 CoM 的力臂 \(r_i=p^f_i-p\)。合成的外力 wrench:</p>
+          <p data-lang="en">Each GRF \(u_i\in\mathbb{R}^3\) acts at foot position \(p^f_i\), with lever arm \(r_i=p^f_i-p\) from the CoM. The net wrench:</p>
+          <div class="eq">$$\begin{bmatrix}F\\ \tau\end{bmatrix}=\sum_{i=1}^{4}\begin{bmatrix}I\\ \hat r_i\end{bmatrix}u_i,\qquad \hat\alpha\beta=\alpha\times\beta$$</div>
+          <p data-lang="zh">完整動力學(\(M=5.5\) kg,\(a_g=[0,0,-g]^\top\),\({}^BI\) 是機身座標下的常數慣量):</p>
+          <p data-lang="en">Full dynamics (\(M=5.5\) kg, \(a_g=[0,0,-g]^\top\), \({}^BI\) the constant body-frame inertia):</p>
+          <div class="eq">$$\ddot p=\tfrac{1}{M}F+a_g,\qquad \dot R=R\,{}^B\hat\omega,\qquad {}^BI\,{}^B\dot\omega=R^\top\tau-{}^B\hat\omega\,{}^BI\,{}^B\omega$$</div>
+          <p data-lang="zh" style="font-size:14px;color:var(--muted)">非線性來源有三個:\(\dot R=R\hat\omega\) 是 \(R\) 與 \(\omega\) 的乘積;陀螺項 \(\hat\omega I\omega\) 對 \(\omega\) 二次;\(\tau=\sum\hat r_i u_i\) 是力臂與力的乘積。平移部分(\(p,\dot p\))本來就是線性的。</p>
+          <p data-lang="en" style="font-size:14px;color:var(--muted)">Three sources of nonlinearity: \(\dot R=R\hat\omega\) is a product of \(R\) and \(\omega\); the gyroscopic term \(\hat\omega I\omega\) is quadratic in \(\omega\); \(\tau=\sum\hat r_i u_i\) multiplies lever arms and forces. The translational part (\(p,\dot p\)) is already linear.</p>
+        </div>
+
+        <div class="dstep">
+          <span class="dno mono">STEP 2 · VARIATION OF R (eq. 5)</span>
+          <p data-lang="zh">假設預測的姿態離當前姿態 \(R_{op}\) 不遠,用李代數 \(\mathfrak{so}(3)\) 上的小偏差 \(\delta R_k\) 描述,並取矩陣指數的一階展開:</p>
+          <p data-lang="en">Assume predicted attitudes stay close to the current one, \(R_{op}\); describe the offset by a small element \(\delta R_k\) of the Lie algebra \(\mathfrak{so}(3)\) and take the first-order expansion of the matrix exponential:</p>
+          <div class="eq">$$R_k\approx R_{op}\exp(\delta R_k)\approx R_{op}\,(I+\delta R_k),\qquad \delta R_k=\hat\xi_k\in\mathfrak{so}(3),\ \ \xi_k\in\mathbb{R}^3$$</div>
+          <p data-lang="zh" style="font-size:14px;color:var(--muted)">作者明說這裡用了<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「小旋轉可交換」的假設(\(\delta R\) 小)</mark>。\(\xi_k\) 就是最終進 QP 的姿態變數:3 個數字,但定義在 \(R_{op}\) 的切空間,而不是任何全域角度。</p>
+          <p data-lang="en" style="font-size:14px;color:var(--muted)">The authors explicitly invoke <mark class="m-assume" data-t="ASSUMPTION/CLAIM">commutativity of small rotations (small \(\delta R\))</mark>. \(\xi_k\) is the attitude variable that ends up in the QP: three numbers, but defined in the tangent space at \(R_{op}\), not as any global angle.</p>
+        </div>
+
+        <div class="dstep">
+          <span class="dno mono">STEP 3 · VARIATION OF \(\omega\) (eq. 7–8)</span>
+          <p data-lang="zh">\(\dot R_k\) 與 \(\dot R_{op}\) 位在<b>不同的切空間</b>,不能直接相減,所以先用 transport map \(\omega_{op}\mapsto R_k^\top R_{op}\omega_{op}\) 把 \(\omega_{op}\) 搬過來再比較:</p>
+          <p data-lang="en">\(\dot R_k\) and \(\dot R_{op}\) live in <b>different tangent spaces</b> and cannot be subtracted directly, so first move \(\omega_{op}\) over with the transport map \(\omega_{op}\mapsto R_k^\top R_{op}\omega_{op}\):</p>
+          <div class="eq">$$\delta\omega_k=\omega_k-R_k^\top R_{op}\,\omega_{op}\quad\Longrightarrow\quad \omega_k=(I+\delta R_k)^\top\omega_{op}+\delta\omega_k=\omega_{op}+\delta\omega_k-\delta R_k\,\omega_{op}$$</div>
+          <p data-lang="zh" style="font-size:14px;color:var(--muted)">最後一步用了 \(\delta R_k\) 是斜對稱矩陣(\(\delta R_k^\top=-\delta R_k\))。</p>
+          <p data-lang="en" style="font-size:14px;color:var(--muted)">The last step uses skew-symmetry, \(\delta R_k^\top=-\delta R_k\).</p>
+        </div>
+
+        <div class="dstep">
+          <span class="dno mono">STEP 4 · LINEARIZE \(\dot R\) AND \(\dot\omega\) (eq. 9–13)</span>
+          <p data-lang="zh">把 STEP 2、3 代回 \(\dot R=R\hat\omega\),丟掉二階以上的 variation 項:</p>
+          <p data-lang="en">Substitute STEPs 2–3 into \(\dot R=R\hat\omega\) and drop higher-order variation terms:</p>
+          <div class="eq">$$\dot R_k=R_{op}(I+\delta R_k)\big(\hat\omega_{op}+\widehat{\delta\omega_k}-\widehat{\delta R_k\omega_{op}}\big)\approx R_{op}\hat\omega_{op}+R_{op}\widehat{\delta\omega_k}-R_{op}\widehat{\delta R_k\omega_{op}}+R_{op}\,\delta R_k\,\hat\omega_{op}$$</div>
+          <p data-lang="zh">再用叉積恆等式 \(\widehat{\delta R_k\omega_{op}}=\delta R_k\hat\omega_{op}-\hat\omega_{op}\delta R_k\) 消去,得到漂亮的形式:</p>
+          <p data-lang="en">The cross-product identity \(\widehat{\delta R_k\omega_{op}}=\delta R_k\hat\omega_{op}-\hat\omega_{op}\delta R_k\) then simplifies it to:</p>
+          <div class="eq">$$\dot R_k\approx R_{op}\hat\omega_{op}+R_{op}\hat\omega_{op}\,\delta R_k+R_{op}\widehat{\delta\omega_k}$$</div>
+          <p data-lang="zh">角速度動力學同樣在 operating point 展開(\(\delta\tau_k\) 是淨力矩的 variation,\(\delta u\) 是 GRF 相對 \(u_{op}\) 的變化):</p>
+          <p data-lang="en">Angular-velocity dynamics are expanded the same way (\(\delta\tau_k\): variation of the net torque; \(\delta u\): GRF change from \(u_{op}\)):</p>
+          <div class="eq">$${}^BI\dot\omega_k\approx R_{op}^\top\tau_{op}+\delta R_k^\top\tau_{op}+R_{op}^\top\delta\tau_k-\hat\omega_{op}{}^BI\omega_{op}-\widehat{\delta\omega_k}\,{}^BI\omega_{op}-\hat\omega_{op}{}^BI\,\delta\omega_k$$
+          $$\delta\tau_k=\Big(\sum_{i=1}^{4}\hat u_{i,op}\Big)\delta p_k+\sum_{i=1}^{4}\hat r_{i,op}\,\delta u_{i,k}$$</div>
+          <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(\delta\tau\) 的第一項來自「CoM 移動 → 力臂改變」,第二項來自「力改變」。<mark class="m-method" data-t="METHOD/IDEA">決策變數因此從 \(u\) 變成 \(\delta u\)</mark>,下一拍實際施加的 GRF 是 \(u_{op}+\delta u_1\)。</p>
+          <p data-lang="en" style="font-size:14px;color:var(--muted)">The first term of \(\delta\tau\) comes from the CoM moving (lever arms change), the second from the forces changing. <mark class="m-method" data-t="METHOD/IDEA">The decision variable therefore becomes \(\delta u\) instead of \(u\)</mark>; the GRF applied next is \(u_{op}+\delta u_1\).</p>
+        </div>
+
+        <div class="dstep">
+          <span class="dno mono">STEP 5 · VECTORIZATION (eq. 14–24)</span>
+          <p data-lang="zh">上面還是「矩陣乘矩陣」,QP 要的是「矩陣乘向量」。作者定義常數矩陣 \(N\in\mathbb{R}^{9\times3}\) 使 \(\mathrm{vec}(\hat v)=Nv\),再用 Kronecker 積的標準恆等式 \(\mathrm{vec}(AXB)=(B^\top\otimes A)\,\mathrm{vec}(X)\):</p>
+          <p data-lang="en">These are still matrix-times-matrix; a QP needs matrix-times-vector. Define a constant \(N\in\mathbb{R}^{9\times3}\) with \(\mathrm{vec}(\hat v)=Nv\), then use the standard Kronecker identity \(\mathrm{vec}(AXB)=(B^\top\otimes A)\,\mathrm{vec}(X)\):</p>
+          <div class="eq">$$\mathrm{vec}(R_{op}\hat\omega_{op}\delta R_k)=(I\otimes R_{op}\hat\omega_{op})N\xi_k,\qquad \mathrm{vec}(R_{op}\widehat{\delta\omega_k})=(I\otimes R_{op})\,\mathrm{vec}(\widehat{\delta\omega_k})$$
+          $$\mathrm{vec}(\dot R_k)=C^c_\xi+C^\xi_\xi\,\xi_k+C^\omega_\xi\,\omega_k$$
+          $$C^c_\xi=\mathrm{vec}(R_{op}\hat\omega_{op})-(I\otimes R_{op})N\omega_{op},\quad C^\xi_\xi=(I\otimes R_{op}\hat\omega_{op})N-(I\otimes R_{op})N\hat\omega_{op},\quad C^\omega_\xi=(I\otimes R_{op})N$$</div>
+          <p data-lang="zh">離散化用 forward Euler:\(R_{k+1}=R_k+\dot R_k\,dt\),配合一階近似得 \(\delta R_{k+1}=\delta R_k+R_{op}^\top\dot R_k\,dt\)。向量化後左乘 \(N\) 的左偽逆 \(N^{*}\):</p>
+          <p data-lang="en">Discretize with forward Euler, \(R_{k+1}=R_k+\dot R_k\,dt\); with the first-order approximation this gives \(\delta R_{k+1}=\delta R_k+R_{op}^\top\dot R_k\,dt\). Vectorize and pre-multiply by the left pseudo-inverse \(N^{*}\):</p>
+          <div class="eq">$$\xi_{k+1}=\xi_k+dt\,N^{*}(I\otimes R_{op}^\top)\big(C^c_\xi+C^\xi_\xi\,\xi_k+C^\omega_\xi\,\omega_k\big)$$
+          $${}^BI\dot\omega_k=C^c_{\dot\omega}+C^{\delta p}_{\dot\omega}\,p_k+C^{\xi}_{\dot\omega}\,\xi_k+C^{\omega}_{\dot\omega}\,\omega_k+C^{\delta u}_{\dot\omega}\,\delta u_k,\qquad \omega_{k+1}=\omega_k+dt\,\dot\omega_k$$
+          $$C^{\omega}_{\dot\omega}=\widehat{{}^BI\omega_{op}}-\hat\omega_{op}{}^BI,\qquad C^{\delta u}_{\dot\omega}=R_{op}^\top\big[\hat r_{1,op}\ \ \hat r_{2,op}\ \ \hat r_{3,op}\ \ \hat r_{4,op}\big]$$</div>
+          <p data-lang="zh" style="font-size:13.5px;color:var(--muted)"><span class="add">[導讀補充] 符號小坑</span> 由 STEP 3 可推出 \(\delta\omega_k=\omega_k-\omega_{op}-\hat\omega_{op}\xi_k\)(因為 \(\hat\xi\,\omega_{op}=-\hat\omega_{op}\xi\))。論文 eq.(22) 與 eq.(17) 的常數都和這個負號一致,但 arXiv 版 eq.(15) 印成 \(+\hat\omega_{op}\xi_k\),應是筆誤。自己實作時以 (17)/(22) 為準。</p>
+          <p data-lang="en" style="font-size:13.5px;color:var(--muted)"><span class="add">[guide note] Sign gotcha</span> From STEP 3, \(\delta\omega_k=\omega_k-\omega_{op}-\hat\omega_{op}\xi_k\) (since \(\hat\xi\,\omega_{op}=-\hat\omega_{op}\xi\)). The constants in the paper&#39;s eq.(22) and eq.(17) agree with this minus sign, but eq.(15) in the arXiv version prints \(+\hat\omega_{op}\xi_k\), most likely a typo. If you implement it, follow (17)/(22).</p>
+        </div>
+
+        <div class="dstep">
+          <span class="dno mono">STEP 6 · AFFINE DYNAMICS (eq. 25–26)</span>
+          <p data-lang="zh">新的狀態把 9 維的 \(R\) 換成 3 維的 \(\xi\),狀態與輸入都是 12 維:</p>
+          <p data-lang="en">The new state swaps the 9-D \(R\) for the 3-D \(\xi\); state and input are both 12-D:</p>
+          <div class="eq">$$x_k:=[\,p_k^\top\ \ \dot p_k^\top\ \ \xi_k^\top\ \ {}^B\omega_k^\top\,]^\top\in\mathbb{R}^{12},\qquad \delta u_k:=[\,\delta u_{1,k}^\top\ \cdots\ \delta u_{4,k}^\top\,]^\top\in\mathbb{R}^{12}$$
+          $$x_{t+k+1|t}=A|_{op}\,x_{t+k|t}+B|_{op}\,\delta u_{t+k|t}+d|_{op}$$</div>
+          <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(A|_{op},B|_{op},d|_{op}\) 只由<b>當前量測</b>建構,在整個預測時域內是常數(作者稱為 scheme 2,LTI)。另一個選擇是沿參考軌跡逐步線性化(scheme 1,LTV),兩者的比較見 Results。</p>
+          <p data-lang="en" style="font-size:14px;color:var(--muted)">\(A|_{op},B|_{op},d|_{op}\) are built only from the <b>current measurement</b> and stay constant over the horizon (the authors&#39; scheme 2, LTI). The alternative is to linearize along the reference trajectory (scheme 1, LTV); see Results for the comparison.</p>
+        </div>
+
+        <div class="dstep">
+          <span class="dno mono">STEP 7 · COST WITH AN AFFINE ATTITUDE ERROR (eq. 27–34)</span>
+          <p data-lang="zh">Stage cost 是標準的追蹤二次式,可拆成四種誤差:</p>
+          <p data-lang="en">The stage cost is a standard quadratic tracking cost, split into four error terms:</p>
+          <div class="eq">$$\ell(x_k,u_k)=\|x_k-x_{d,k}\|^2_{Q_x}+\|u_k-u_{d,k}\|^2_{R_u},\qquad \|x_k-x_{d,k}\|^2_{Q}=\|e_{p_k}\|^2_{Q_p}+\|e_{\dot p_k}\|^2_{Q_{\dot p}}+\|e_{R_k}\|^2_{Q_R}+\|e_{\omega_k}\|^2_{Q_\omega}$$
+          $$e_{R_k}=\log(R_{d,k}^\top R_k)^\vee,\qquad e_{\omega_k}=\omega_k-R_k^\top R_{d,k}\,\omega_{d,k}$$</div>
+          <p data-lang="zh">\(e_{R}\) 含矩陣對數,對 \(\xi\) 非線性。作者再用一次 STEP 2 的近似:</p>
+          <p data-lang="en">\(e_R\) contains the matrix logarithm and is nonlinear in \(\xi\). The authors reuse the STEP 2 approximation:</p>
+          <div class="eq">$$\exp(\hat e_{R_k})=R_{d,k}^\top R_k\approx R_{d,k}^\top R_{op}\exp(\hat\xi_k)\quad\Longrightarrow\quad e_{R_k}\approx\log(R_{d,k}^\top R_{op})^\vee+\xi_k$$
+          $$\Psi(\xi_k)=e_{R_k}^\top Q_R\,e_{R_k}\qquad(\text{quadratic in }\xi_k,\ \text{PD since }Q_R\succ0)$$</div>
+          <p data-lang="zh" style="font-size:14px;color:var(--muted)">幾何意義:<mark class="m-method" data-t="METHOD/IDEA">誤差 = 「\(R_{op}\) 到 \(R_{d,k}\) 的測地線」+「切空間中的 \(\xi_k\)」</mark>。前者是已知常數,所以整體對 \(\xi_k\) 是仿射。控制 cost 寫成 \(\|u_{op}+\delta u_k-u_{d,k}\|^2_{R_u}\)。<span class="add">[導讀補充]</span> 嚴格來說,\(\log(A\exp(\hat\xi))^\vee\approx\log(A)^\vee+J_r^{-1}(\log(A)^\vee)\,\xi\),其中有一個右 Jacobian 的逆;本文等於把它取成單位矩陣。當 \(R_{op}\) 離 \(R_{d,k}\) 很遠(例如被推離參考時),這是另一層近似。</p>
+          <p data-lang="en" style="font-size:14px;color:var(--muted)">Geometric meaning: <mark class="m-method" data-t="METHOD/IDEA">error = the geodesic from \(R_{op}\) to \(R_{d,k}\) + the tangent vector \(\xi_k\)</mark>. The former is a known constant, so the whole thing is affine in \(\xi_k\). The control cost is \(\|u_{op}+\delta u_k-u_{d,k}\|^2_{R_u}\). <span class="add">[guide note]</span> Strictly, \(\log(A\exp(\hat\xi))^\vee\approx\log(A)^\vee+J_r^{-1}(\log(A)^\vee)\,\xi\) with an inverse right Jacobian; the paper effectively sets it to the identity. When \(R_{op}\) is far from \(R_{d,k}\) (e.g. after a push), this is one more layer of approximation.</p>
+        </div>
+
+        <div class="dstep">
+          <span class="dno mono">STEP 8 · FRICTION PYRAMID (eq. 35–36)</span>
+          <p data-lang="zh">真正的摩擦錐是二階錐約束,QP 吃不下,所以換成保守的<mark class="m-assume" data-t="ASSUMPTION/CLAIM">摩擦金字塔</mark>,並加上法向力上下界(避免超過馬達扭矩):</p>
+          <p data-lang="en">The true friction cone is a second-order-cone constraint a QP cannot take, so it is replaced by the conservative <mark class="m-assume" data-t="ASSUMPTION/CLAIM">friction pyramid</mark>, plus normal-force bounds (to respect actuator torque limits):</p>
+          <div class="eq">$$\{u_i\mid u_i^n\ge0,\ \|u_i^t\|_2\le\mu|u_i^n|\}\ \ \leadsto\ \ \mathcal{U}_i:=\Big\{\delta u_i\ \Big|\ |u^{x/y}_{i,op}+\delta u^{x/y}_{i,k}|\le\mu\,|u^{z}_{i,op}+\delta u^{z}_{i,k}|,\ \ u^{z,\min}_{i,k}\le u^{z}_{i,op}+\delta u^{z}_{i,k}\le u^{z,\max}_{i,k},\ \ u^{z,\min}_{i,k}\ge0\Big\}$$</div>
+          <p data-lang="zh" style="font-size:14px;color:var(--muted)">擺動腿的上下界都設成 0(力必為 0),交給 swing leg controller。接觸時序由有限狀態機(FSM)提供,<b>預測時域可以跨越接觸切換</b>,所以 MPC 能預先為下一個騰空期準備。</p>
+          <p data-lang="en" style="font-size:14px;color:var(--muted)">For a swing leg both bounds are set to 0 (zero force) and the swing-leg controller takes over. The contact schedule comes from a finite state machine (FSM), and <b>the horizon can span contact switches</b>, so MPC can prepare ahead for an upcoming flight phase.</p>
+        </div>
+
+        <div class="dstep">
+          <span class="dno mono">STEP 9 · THE QP (eq. 37–39)</span>
+          <div class="eq">$$\min\ \ \gamma^N\ell_T(x_{t+N|t})+\sum_{k=0}^{N-1}\gamma^k\,\ell(x_{t+k|t},\delta u_{t+k|t})\quad\text{s.t.}\quad x_{t+k+1|t}=Ax_{t+k|t}+B\delta u_{t+k|t}+d,\ \ \delta u_{t+k|t}\in\mathcal{U}_k,\ \ x_{t|t}=x_{op}$$
+          $$z=[\,\delta u_0^\top,\ x_1^\top,\ \dots,\ \delta u_{N-1}^\top,\ x_N^\top\,]^\top\in\mathbb{R}^{24N}:\qquad \min_z\ \tfrac12 z^\top Pz+c^\top z\ \ \text{s.t.}\ \ A_{ineq}z\le b_{ineq},\ \ A_{eq}z=b_{eq}$$</div>
+          <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(\gamma\in(0,1]\) 是衰減因子,讓越遠(模型越不準)的步驟權重越小。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">狀態約束全部拿掉</mark>,只靠 cost 調節。採用 Wang &amp; Boyd [52] 的稀疏寫法(狀態與輸入都是變數)。\(N=6\) 時,QP 有 <b>144 個變數、72 條不等式、72 條等式</b>。</p>
+          <p data-lang="en" style="font-size:14px;color:var(--muted)">\(\gamma\in(0,1]\) is a decay factor that down-weights distant steps where the model is less accurate. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">All state constraints are dropped</mark>; states are regulated by the cost only. The sparse formulation of Wang &amp; Boyd [52] is used (states and inputs are both variables). With \(N=6\) the QP has <b>144 variables, 72 inequality and 72 equality constraints</b>.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">系統架構:MPC 在整個控制迴路中的位置</span><span data-lang="en">System architecture: where MPC sits in the loop</span></h3>
+        <figure class="fig"><img src="figs/Ding2021/fig8_control_system.png" alt="Figure 8 control system overview">
+          <figcaption data-lang="zh"><b>Fig.8</b> 整體控制系統。藍框是機上電腦:FSM 排步態並給 MPC 參考軌跡 \(X_d,U_d\);MPC 組出 QP,由 qpSWIFT 解出 \(u_{op}\);swing controller 給擺動腿的力 \(u_{sw}\)。綠框是關節控制器(把腳端力轉成關節扭矩並補償摩擦)與狀態估測。<b>注意 \(u^-_{op}\) 這條回饋線</b>:上一拍的 QP 解被當成下一拍的 operating-point 控制量,這就是 \(\delta u\) 的基準。另外,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">這裡沒有全身控制(WBC)層</mark>,MPC 的 GRF 直接交給關節控制器。</figcaption>
+          <figcaption data-lang="en"><b>Fig.8</b> Overall control system. Blue: on-board computer. The FSM schedules the gait and sends reference trajectories \(X_d,U_d\) to the MPC, which builds a QP that qpSWIFT solves for \(u_{op}\); the swing controller supplies swing-leg forces \(u_{sw}\). Green: the joint controller (maps foot forces to joint torques, compensates friction) and the state estimator. <b>Note the \(u^-_{op}\) feedback line</b>: the previous QP solution serves as the operating-point control for the next tick, the baseline for \(\delta u\). Also, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">there is no whole-body-control (WBC) layer</mark>; MPC forces go straight to the joint controller.</figcaption></figure>
+        <div class="tscroll"><table>
+          <tr><th><span data-lang="zh">元件</span><span data-lang="en">Component</span></th><th><span data-lang="zh">做法 / 頻率</span><span data-lang="en">How / rate</span></th></tr>
+          <tr><td><b>MPC + qpSWIFT</b></td><td><span data-lang="zh">Simulink Real-Time,PC104(Intel i7-3517UE 1.70 GHz);依問題大小 160–250 Hz。qpSWIFT 是作者自寫、無外部依賴的 ANSI C 稀疏 QP solver [58]。</span><span data-lang="en">Simulink Real-Time on a PC104 (Intel i7-3517UE 1.70 GHz); 160–250 Hz depending on problem size. qpSWIFT is the authors&#39; library-free ANSI C sparse QP solver [58].</span></td></tr>
+          <tr><td><b><span data-lang="zh">感測 / 估測</span><span data-lang="en">Sensing / estimation</span></b></td><td><span data-lang="zh">編碼器與低階運動學 4 kHz;IMU 與狀態估測 1 kHz;互補濾波器融合腿運動學速度與加速度計。</span><span data-lang="en">Encoders and low-level kinematics at 4 kHz; IMU and state estimation at 1 kHz; complementary filters fuse leg-kinematic velocity with the accelerometer.</span></td></tr>
+          <tr><td><b><span data-lang="zh">擺動腿</span><span data-lang="en">Swing leg</span></b></td><td><span data-lang="zh">3 連桿操作空間逆動力學前饋 + PD 回饋;落腳點 = 速度前饋 + capture-point 回饋。</span><span data-lang="en">3-link workspace inverse-dynamics feed-forward + PD feedback; foothold = velocity feed-forward + capture-point feedback.</span></td></tr>
+          <tr><td><b><span data-lang="zh">接觸偵測</span><span data-lang="en">Contact detection</span></b></td><td><span data-lang="zh">只看膝關節的 generalized-momentum 擾動觀測器,殘差超過門檻即判定觸地。</span><span data-lang="en">Generalized-momentum disturbance observer on the knee joints only; touchdown when the residual exceeds a threshold.</span></td></tr>
+          <tr><td><b><span data-lang="zh">系統辨識</span><span data-lang="en">System ID</span></b></td><td><span data-lang="zh">23.36:1 行星減速 → 需摩擦補償;CoM 用吊線 + 加速度計最小平方求得;慣量用雙線扭擺量測(CAD 對小機器人不準)。</span><span data-lang="en">23.36:1 planetary gearing → friction compensation; CoM from string suspension + accelerometer least squares; inertia from a bifilar torsional pendulum (CAD is inaccurate for a small robot).</span></td></tr>
+        </table></div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(p,\ \dot p\)</td><td><span data-lang="zh">CoM 位置與速度(慣性座標 \(\{S\}\))。</span><span data-lang="en">CoM position and velocity (inertial frame \(\{S\}\)).</span></td></tr>
+          <tr><td>\(R\in\mathrm{SO}(3)\)</td><td><span data-lang="zh">機身座標 \(\{B\}\) 相對 \(\{S\}\) 的旋轉矩陣:姿態的全域表示。</span><span data-lang="en">Rotation of body frame \(\{B\}\) in \(\{S\}\): the global attitude representation.</span></td></tr>
+          <tr><td>\({}^B\omega\)</td><td><span data-lang="zh">機身座標下的角速度。</span><span data-lang="en">Angular velocity expressed in the body frame.</span></td></tr>
+          <tr><td>\(u_i,\ r_i\)</td><td><span data-lang="zh">第 \(i\) 腳的 GRF,以及 CoM 到該腳的力臂。</span><span data-lang="en">GRF of leg \(i\), and the lever arm from CoM to that foot.</span></td></tr>
+          <tr><td>\(\hat{(\cdot)},\ (\cdot)^\vee\)</td><td><span data-lang="zh">hat map:3 維向量 → 斜對稱矩陣(代表叉積);vee map 是其逆。</span><span data-lang="en">Hat map: 3-vector → skew-symmetric matrix (the cross product); vee is its inverse.</span></td></tr>
+          <tr><td>\((\cdot)_{op}\)</td><td><span data-lang="zh">operating point:當前量測的狀態 \(x_{op}\) 與上一拍解出的控制 \(u_{op}\)。</span><span data-lang="en">Operating point: the current measured state \(x_{op}\) and the previous tick&#39;s control \(u_{op}\).</span></td></tr>
+          <tr><td>\(\xi_k,\ \delta R_k=\hat\xi_k\)</td><td><span data-lang="zh">第 \(k\) 步預測姿態相對 \(R_{op}\) 的小偏差,位在 \(R_{op}\) 的切空間;進 QP 的姿態變數。</span><span data-lang="en">Small attitude offset of step \(k\) from \(R_{op}\), living in the tangent space at \(R_{op}\); the attitude variable in the QP.</span></td></tr>
+          <tr><td>\(\delta\omega_k,\ \delta u_k\)</td><td><span data-lang="zh">角速度(經 transport 後)與 GRF 相對 operating point 的變化。</span><span data-lang="en">Variations of angular velocity (after transport) and GRF from the operating point.</span></td></tr>
+          <tr><td>\(N,\ N^{*},\ \otimes\)</td><td><span data-lang="zh">\(N\):把 \(v\) 映到 \(\mathrm{vec}(\hat v)\) 的 \(9\times3\) 常數矩陣;\(N^{*}\):其左偽逆;\(\otimes\):Kronecker 積。</span><span data-lang="en">\(N\): the \(9\times3\) constant matrix mapping \(v\) to \(\mathrm{vec}(\hat v)\); \(N^{*}\): its left pseudo-inverse; \(\otimes\): Kronecker product.</span></td></tr>
+          <tr><td>\(e_R,\ e_\omega\)</td><td><span data-lang="zh">姿態與角速度的追蹤誤差(Bullo &amp; Lewis [32] 的定義);\(e_R\) 被近似成 \(\xi\) 的仿射函數。</span><span data-lang="en">Attitude and angular-velocity tracking errors (Bullo &amp; Lewis [32]); \(e_R\) is approximated as affine in \(\xi\).</span></td></tr>
+          <tr><td>\(\gamma,\ N\)</td><td><span data-lang="zh">cost 的時間衰減因子;預測步數(實驗中 6 或 7)。</span><span data-lang="en">Temporal decay factor of the cost; number of prediction steps (6 or 7 in experiments).</span></td></tr>
+          <tr><td>\(\mu\)</td><td><span data-lang="zh">摩擦係數,用於摩擦金字塔。</span><span data-lang="en">Friction coefficient, used in the friction pyramid.</span></td></tr>
+          <tr><td>\(\kappa^{-1}(\mathcal{T}_\Theta)\)</td><td><span data-lang="zh">Euler 角映射矩陣條件數的倒數:\(1\) = 遠離奇異,\(\to0\) = 逼近 gimbal lock。只拿來<b>診斷</b>,RF-MPC 本身不用它。</span><span data-lang="en">Inverse condition number of the Euler-rate matrix: \(1\) = far from singular, \(\to0\) = gimbal lock. Used only for <b>diagnosis</b>; RF-MPC itself never uses it.</span></td></tr>
+          <tr><td>\(\Phi(t)\)</td><td><span data-lang="zh">旋轉矩陣預測品質:\(\sum_k\|\tilde R_k-\bar R_k\|_F+\|\log(R_{op,t+k}^\top\tilde R_k)^\vee\|\),衡量預測多偏離 \(\mathrm{SO}(3)\) 與真實軌跡。</span><span data-lang="en">Rotation prediction quality: \(\sum_k\|\tilde R_k-\bar R_k\|_F+\|\log(R_{op,t+k}^\top\tilde R_k)^\vee\|\), measuring how far predictions drift off \(\mathrm{SO}(3)\) and off the true trajectory.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">每一拍都問:「從<b>現在這個姿態</b>出發,小小轉一下 \(\xi\) 會怎樣?」答案是線性的,所以能用 QP 一次算完六步;下一拍再以新的姿態為中心重問一次。全域的 \(R\) 只負責記住「現在在哪」,從來不需要被拆成角度。</span>
+        <span data-lang="en">Every tick asks: starting from <b>the attitude I am in now</b>, what happens if I rotate a little by \(\xi\)? The answer is linear, so a QP solves six steps at once; next tick, re-ask around the new attitude. The global \(R\) only remembers where we are and never needs to be broken into angles.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">和 convex MPC 的差別</span><span data-lang="en">vs. convex MPC</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> Di Carlo 2018 的 convex MPC 以 Euler 角為狀態,並在小 roll/pitch 下簡化角動力學,得到沿參考軌跡的時變線性模型;RF-MPC 則以當前姿態為展開點、預測時域內模型固定,並把 GRF 寫成相對 \(u_{op}\) 的增量 \(\delta u\)。兩者都是「單剛體 + QP」,差在<b>姿態怎麼表示、在哪裡線性化</b>。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> Di Carlo 2018&#39;s convex MPC uses Euler angles in the state and simplifies the angular dynamics under small roll/pitch, giving a time-varying linear model along the reference. RF-MPC expands at the current attitude, freezes the model over the horizon, and writes GRFs as increments \(\delta u\) from \(u_{op}\). Both are single rigid body + QP; they differ in <b>how attitude is represented and where the linearization happens</b>.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">預測出的 \(R_k=R_{op}(I+\hat\xi_k)\) <mark class="m-limit" data-t="LIMITATION/FUTURE">不是正交矩陣</mark>。只要 \(\|\xi\|\) 變大(長時域、高角速度),預測就偏離 \(\mathrm{SO}(3)\)。作者用短時域與衰減 \(\gamma\) 來壓這個誤差,而不是根除它。</span>
+        <span data-lang="en">The predicted \(R_k=R_{op}(I+\hat\xi_k)\) <mark class="m-limit" data-t="LIMITATION/FUTURE">is not orthogonal</mark>. As \(\|\xi\|\) grows (long horizon, high angular rate), predictions drift off \(\mathrm{SO}(3)\). The authors contain this with short horizons and the decay \(\gamma\) rather than eliminating it.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">一階近似撐多遠</span><span data-lang="en">how far does 1st-order go</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">計算時間</span><span data-lang="en">compute time</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果總表(模擬 + 實機)</span><span data-lang="en">Main results at a glance (simulation + hardware)</span></h3>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">這篇沒有標準 benchmark,證據是一系列<b>情境示範</b>。模擬用 MATLAB(quadprog 解 QP、ode45 積分原始非線性 SRB 模型);實機在 Panther 上,QP 由 qpSWIFT 解。綠色 = RF-MPC 的關鍵勝出或成就。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">There is no standard benchmark; the evidence is a series of <b>scenario demonstrations</b>. Simulation runs in MATLAB (quadprog for the QP, ode45 integrating the original nonlinear SRB model); hardware runs on Panther with qpSWIFT. Green = key RF-MPC wins or achievements.</p>
+        <div class="tscroll"><table>
+          <tr><th><span data-lang="zh">情境</span><span data-lang="en">Scenario</span></th><th><span data-lang="zh">平台</span><span data-lang="en">Where</span></th><th><span data-lang="zh">設定</span><span data-lang="en">Setup</span></th><th><span data-lang="zh">關鍵結果</span><span data-lang="en">Key result</span></th></tr>
+          <tr><td><b><span data-lang="zh">奇異點附近的姿態控制</span><span data-lang="en">Pose control near singularity</span></b><br><small>Fig.3</small></td><td><span data-lang="zh">模擬</span><span data-lang="en">Sim</span></td><td><span data-lang="zh">目標姿態從奇異姿態掃到繞 \(+y\) 轉 1 rad,每點模擬 0.5 s;四腳固定、無力約束</span><span data-lang="en">Target swept from the singular pose to 1 rad about \(+y\); 0.5 s per point; feet fixed, no force constraints</span></td><td class="win"><span data-lang="zh">EA-MPC 在 \(\lt0.3\) rad(\(\kappa^{-1}\lt0.15\))明顯失穩;RF-MPC 全範圍穩定</span><span data-lang="en">EA-MPC degrades below \(0.3\) rad (\(\kappa^{-1}\lt0.15\)); RF-MPC stable throughout</span></td></tr>
+          <tr><td><b>Walking trot</b><br><small>Fig.4</small></td><td><span data-lang="zh">模擬</span><span data-lang="en">Sim</span></td><td><span data-lang="zh">靜止起步,加速到 0.5 m/s</span><span data-lang="en">From rest, accelerate to 0.5 m/s</span></td><td><span data-lang="zh">速度偏差 \(\pm0.1\) m/s 內;姿態偏差 \(\pm0.02\) rad 內</span><span data-lang="en">Velocity deviation within \(\pm0.1\) m/s; attitude within \(\pm0.02\) rad</span></td></tr>
+          <tr><td><b>Bounding</b><br><small>Fig.5</small></td><td><span data-lang="zh">模擬</span><span data-lang="en">Sim</span></td><td><span data-lang="zh">以 \(1.0\ \text{m/s}^2\) 加速;參考用 impulse-scaling 生成</span><span data-lang="en">Accelerate at \(1.0\ \text{m/s}^2\); reference from impulse scaling</span></td><td><span data-lang="zh">穩定到 <b>2.5 m/s</b>,pitch 相圖收斂到週期軌道</span><span data-lang="en">Stable up to <b>2.5 m/s</b>; pitch phase portrait converges to a periodic orbit</span></td></tr>
+          <tr><td><b><span data-lang="zh">斜坡扭轉後空翻</span><span data-lang="en">Twist backflip off a slope</span></b><br><small>Fig.6</small></td><td><span data-lang="zh">模擬</span><span data-lang="en">Sim</span></td><td><span data-lang="zh">參考由 45° 斜坡的離線 TO 產生;測試時斜坡改成 <b>53.6°</b>(初始姿態也被擾動)</span><span data-lang="en">Reference from offline TO on a 45° slope; tested on a <b>53.6°</b> slope (initial attitude perturbed too)</span></td><td class="win"><span data-lang="zh">EA-MPC 接近奇異時出巨大垂直力、發散;open-loop 偏離;<b>RF-MPC 穩定追蹤</b></span><span data-lang="en">EA-MPC exerts huge vertical force near singularity and diverges; open-loop drifts; <b>RF-MPC tracks</b></span></td></tr>
+          <tr><td><b><span data-lang="zh">線性化方案比較</span><span data-lang="en">Linearization schemes</span></b><br><small>Fig.7</small></td><td><span data-lang="zh">模擬</span><span data-lang="en">Sim</span></td><td><span data-lang="zh">1.0 m/s bounding,FR 肩部受 \(+y\) 側向擾動,峰值 27 N</span><span data-lang="en">1.0 m/s bounding; lateral \(+y\) push at the FR shoulder, peak 27 N</span></td><td class="win"><span data-lang="zh">scheme 1(沿參考)在 1.5 s 失敗;<b>scheme 2(當前狀態)恢復</b></span><span data-lang="en">Scheme 1 (along reference) fails at 1.5 s; <b>scheme 2 (current state) recovers</b></span></td></tr>
+          <tr><td><b><span data-lang="zh">Pose / 平衡控制</span><span data-lang="en">Pose / balance</span></b><br><small>Fig.11–12</small></td><td><span data-lang="zh">實機</span><span data-lang="en">HW</span></td><td><span data-lang="zh">搖桿給高度與 y/z 姿態;站在球鉸平台上被人推</span><span data-lang="en">Joystick height and y/z attitude; standing on a ball-pivoted platform perturbed by hand</span></td><td><span data-lang="zh">緊貼參考;機身 \(\{B\}\) 的晃動明顯小於平台 \(\{P\}\)(250 Hz)</span><span data-lang="en">Close tracking; body \(\{B\}\) moves far less than platform \(\{P\}\) (250 Hz)</span></td></tr>
+          <tr><td><b>Walking trot</b><br><small>Fig.13</small></td><td><span data-lang="zh">實機</span><span data-lang="en">HW</span></td><td><span data-lang="zh">任意平面方向行走、保持姿態</span><span data-lang="en">Omnidirectional walking, holding attitude</span></td><td><span data-lang="zh">姿態偏差 \(\pm0.06\) rad 內(250 Hz)</span><span data-lang="en">Attitude deviation within \(\pm0.06\) rad (250 Hz)</span></td></tr>
+          <tr><td><b>Running trot</b><br><small>Fig.14</small></td><td><span data-lang="zh">實機</span><span data-lang="en">HW</span></td><td><span data-lang="zh">有完整騰空期</span><span data-lang="en">With full flight phases</span></td><td><span data-lang="zh">每步約 40 ms 自由落體;垂直 GRF 達 60 N、膝扭矩 6.3 Nm;GRF 隨接觸切換陡變</span><span data-lang="en">~40 ms free fall per step; vertical GRF up to 60 N, knee torque 6.3 Nm; GRF switches sharply with contact</span></td></tr>
+          <tr><td><b>Bounding</b><br><small>Fig.15</small></td><td><span data-lang="zh">實機</span><span data-lang="en">HW</span></td><td><span data-lang="zh">大幅 pitch 振盪;觸地由接觸偵測觸發</span><span data-lang="en">Large pitch oscillation; touchdown triggered by contact detection</span></td><td><span data-lang="zh">追上參考 pitch 與 \(\omega_y\)(起步有初始偏移)(160 Hz)</span><span data-lang="en">Tracks reference pitch and \(\omega_y\) (initial offset from rest) (160 Hz)</span></td></tr>
+          <tr><td><b><span data-lang="zh">受控後空翻</span><span data-lang="en">Controlled backflip</span></b><br><small>Fig.16–17</small></td><td><span data-lang="zh">實機</span><span data-lang="en">HW</span></td><td><span data-lang="zh">前腳站 80 mm 平台;10 次試驗;另一次把平台加高到 130 mm 當擾動</span><span data-lang="en">Front legs on an 80 mm stage; 10 trials; one extra trial with the stage raised to 130 mm as a perturbation</span></td><td class="win"><span data-lang="zh">\(\kappa^{-1}(\mathcal{T}_\Theta)\) 降到 \(10^{-1}\) 以下(真的經過奇異);擾動下仍安全落地(200 Hz)</span><span data-lang="en">\(\kappa^{-1}(\mathcal{T}_\Theta)\) drops below \(10^{-1}\) (truly singular); still lands safely when perturbed (200 Hz)</span></td></tr>
+        </table></div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">核心對照:EA-MPC vs RF-MPC 的扭轉後空翻</span><span data-lang="en">The headline comparison: EA-MPC vs RF-MPC on a twist backflip</span></h3>
+        <figure class="fig"><img src="figs/Ding2021/fig6_twistjump.png" alt="Figure 6 twist jump comparison">
+          <figcaption data-lang="zh"><b>Fig.6</b> 從 53.6° 斜坡做「後空翻 + 扭轉」(模擬)。深色底 = 四腳著地(0–0.1 s),淺色底 = 只有後腳著地(0.1–0.2 s),白底 = 騰空。(a) EA-MPC:接近奇異時失穩,紅色機身(實際)甩離藍色參考;(b) RF-MPC:實際與參考幾乎重合。<b>看 (e) 與 (c)(d) 的對應</b>:\(\kappa^{-1}\) 在約 0.12–0.13 s 跌到 \(10^{-2}\) 附近,EA-MPC 的姿態與位置偏差正是從這時起爆衝;RF-MPC 的位置偏差全程貼近 0。open-loop(黃)則因初始條件擾動而持續偏離,說明確實需要回饋。</figcaption>
+          <figcaption data-lang="en"><b>Fig.6</b> A backflip-with-twist off a 53.6° slope (simulation). Dark band = four feet in contact (0–0.1 s), light band = hind feet only (0.1–0.2 s), white = flight. (a) EA-MPC goes unstable near the singular pose: the red (actual) body swings away from the blue reference. (b) RF-MPC: actual and reference nearly coincide. <b>Match (e) against (c)(d)</b>: \(\kappa^{-1}\) dips toward \(10^{-2}\) around 0.12–0.13 s, exactly when EA-MPC&#39;s attitude and position errors explode, while RF-MPC&#39;s position error stays near 0 throughout. Open-loop (yellow) keeps drifting due to the perturbed initial condition, showing feedback is needed.</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">讀法提醒:參考軌跡與前饋 GRF 來自 45° 斜坡的<b>離線 single-shooting TO</b>(24 個變數、fmincon),所以 RF-MPC 在這裡扮演的是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「追蹤 + 修正」的回饋控制器</mark>,不是規劃出這個動作的人。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Reading note: the reference trajectory and feed-forward GRFs come from an <b>offline single-shooting TO</b> on a 45° slope (24 variables, fmincon), so RF-MPC acts here as a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">tracking-and-correcting feedback controller</mark>, not as the planner that invented the motion.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融怎麼讀:線性化點選在哪裡</span><span data-lang="en">Reading the ablation: where to linearize</span></h3>
+        <p data-lang="zh">本文唯一接近 ablation 的實驗,是固定所有其他設定(參考、增益、步態時序、擾動),只換線性化方案:</p>
+        <p data-lang="en">The paper&#39;s only ablation-like study fixes everything else (reference, gains, gait timing, disturbance) and swaps only the linearization scheme:</p>
+        <div class="tscroll"><table>
+          <tr><th><span data-lang="zh">方案</span><span data-lang="en">Scheme</span></th><th><span data-lang="zh">展開點 / 模型</span><span data-lang="en">Expansion point / model</span></th><th><span data-lang="zh">結果</span><span data-lang="en">Outcome</span></th><th><span data-lang="zh">說明了什麼</span><span data-lang="en">What it shows</span></th></tr>
+          <tr><td><b>Scheme 1</b></td><td><span data-lang="zh">沿參考 \(\{x^d,u^d\}\) 逐步線性化 → LTV \(A_k,B_k\)</span><span data-lang="en">Along the reference \(\{x^d,u^d\}\) → LTV \(A_k,B_k\)</span></td><td class="bad"><span data-lang="zh">1.5 s 失敗,速度與姿態發散;\(R\) 預測誤差暴衝</span><span data-lang="en">Fails at 1.5 s; velocity and attitude diverge; \(R\) prediction error spikes</span></td><td rowspan="2"><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">被推離參考時,在當前狀態展開的模型比較貼近真實</mark>;資訊多不等於模型準。作者的解釋是猜想(conjecture),並非證明。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">When pushed off the reference, a model expanded at the current state stays closer to reality</mark>; more information does not mean a better model. The authors&#39; explanation is a conjecture, not a proof.</span></td></tr>
+          <tr><td class="win">Scheme 2</td><td><span data-lang="zh">在 operating point \((x_{op},u_{op})\) 線性化 → 時域內 LTI</span><span data-lang="en">At the operating point \((x_{op},u_{op})\) → LTI over the horizon</span></td><td class="ok"><span data-lang="zh">擾動後恢復並重新追上參考</span><span data-lang="en">Recovers and re-tracks the reference</span></td></tr>
+        </table></div>
+        <figure class="fig"><img src="figs/Ding2021/fig7_linearization.png" alt="Figure 7 linearization schemes">
+          <figcaption data-lang="zh"><b>Fig.7</b> 兩種線性化方案在側向擾動下的比較。(a) scheme 2 的快照:紅線是 GRF,青色是擾動力(\(t=1.0\)、\(1.5\) s 可見),半透明方塊是參考姿態。(b) 擾動力:約 0.5–1.3 s 的半正弦,峰值 27 N。<b>重點在 (c)(d)(e)</b>:擾動結束後,scheme 1(橘)的 \(y\) 速度與 \(z\) 軸姿態偏差在約 1.5 s 後崩潰,同時 (e) 的旋轉矩陣預測誤差 \(\Phi\) 衝到約 6;scheme 2(藍)的 \(\Phi\) 一直維持在約 1 以下,偏差逐漸回到 0。</figcaption>
+          <figcaption data-lang="en"><b>Fig.7</b> The two linearization schemes under a lateral push. (a) Snapshots for scheme 2: red = GRFs, cyan = disturbance (visible at \(t=1.0\), \(1.5\) s), translucent box = reference pose. (b) Disturbance: a half-sine from about 0.5–1.3 s, peak 27 N. <b>Focus on (c)(d)(e)</b>: after the push, scheme 1 (orange) collapses in \(y\)-velocity and \(z\)-axis attitude after about 1.5 s, while its rotation-prediction error \(\Phi\) in (e) spikes to about 6; scheme 2 (blue) keeps \(\Phi\) at about 1 or below and its deviations decay back to 0.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">計算設定:頻率與預測時域(Table II)</span><span data-lang="en">Compute settings: rate and horizon (Table II)</span></h3>
+        <div class="tscroll"><table>
+          <tr><th><span data-lang="zh">實機實驗</span><span data-lang="en">HW experiment</span></th><th>\(N_{hor}\)</th><th>\(T_{pred}\) (s)</th><th><span data-lang="zh">時域長度</span><span data-lang="en">Horizon</span> <span class="add" style="margin-left:0">[導讀補充]</span></th><th>\(\gamma\)</th><th>\(f_{MPC}\) (Hz)</th></tr>
+          <tr><td>Pose / Balance</td><td>6</td><td>0.02</td><td>0.12 s</td><td>1.0</td><td>250</td></tr>
+          <tr><td>Trot walk</td><td>6</td><td>0.08</td><td>0.48 s</td><td>1.0</td><td>250</td></tr>
+          <tr><td>Trot run</td><td>6</td><td>0.05</td><td>0.30 s</td><td>1.0</td><td>250</td></tr>
+          <tr><td>Bound</td><td>7</td><td>0.01</td><td class="bad">0.07 s</td><td>0.8</td><td>160</td></tr>
+          <tr><td>Backflip</td><td>6</td><td>0.02</td><td>0.12 s</td><td>0.8</td><td>200</td></tr>
+        </table></div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">時域長度 = \(N_{hor}\times T_{pred}\),是導讀者依 Table II 計算。<mark class="m-limit" data-t="LIMITATION/FUTURE">越動態的動作,時域反而越短</mark>:bounding 只看 0.07 s,比它的單次 stance(\(T_{st}=0.1\) s)還短;後空翻只看 0.12 s。這和作者「時域太長則旋轉動力學不準」的自述一致,也意味著這些動作的「預測」很近視,穩定性很大程度仰賴離線參考軌跡。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Horizon = \(N_{hor}\times T_{pred}\), computed by the guide author from Table II. <mark class="m-limit" data-t="LIMITATION/FUTURE">The more dynamic the motion, the shorter the horizon</mark>: bounding looks only 0.07 s ahead, shorter than one stance (\(T_{st}=0.1\) s); the backflip looks 0.12 s ahead. That matches the authors&#39; own remark that long horizons make the rotational dynamics inaccurate, and it means prediction is myopic for these motions, with much of the stability resting on the offline reference.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實機後空翻的數據細節(Fig.17)</span><span data-lang="en">Hardware backflip details (Fig.17)</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.85">
+          <li data-lang="zh">三個階段:四腳著地 → 只有後腳著地 → 落地。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">RF-MPC 只在前兩階段啟用,落地改用 impedance control</mark>。</li>
+          <li data-lang="en">Three phases: four feet down → hind feet only → landing. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">RF-MPC is active only in the first two phases; landing uses impedance control</mark>.</li>
+          <li data-lang="zh">參考軌跡由 OptimTraj 直接配點法在 <b>2D 單剛體模型</b>上離線生成(27 個時間點、272 個變數、366 條約束,fmincon);但 RF-MPC 在實機上控制的是 3D 機器人,<b>沒有把矢狀面與面外運動拆開</b>。</li>
+          <li data-lang="en">The reference comes from OptimTraj direct collocation on a <b>2D single-rigid-body model</b>, solved offline (27 knots, 272 variables, 366 constraints, fmincon); yet RF-MPC controls the 3D robot on hardware <b>without splitting sagittal and out-of-plane motion</b>.</li>
+          <li data-lang="zh">10 次試驗的平均 ± 1 標準差:\(\kappa^{-1}(\mathcal{T}_\Theta)\) 在約 0.3 s 降到 \(10^{-1}\) 以下;<mark class="m-result" data-t="RESULT/EVIDENCE">\(\log(R)^\vee_y\) 單調下降到約 \(-\pi\),而 Euler pitch \(\theta\) 先降到 \(-\pi/2\) 再折返回 0</mark>,這正是 Euler 角在奇異點附近失去單調性的實機證據。</li>
+          <li data-lang="en">Mean ± 1 std over 10 trials: \(\kappa^{-1}(\mathcal{T}_\Theta)\) dips below \(10^{-1}\) around 0.3 s; <mark class="m-result" data-t="RESULT/EVIDENCE">\(\log(R)^\vee_y\) decreases monotonically to about \(-\pi\), while the Euler pitch \(\theta\) falls to \(-\pi/2\) and then turns back to 0</mark>, hardware evidence of Euler angles losing monotonicity at the singularity.</li>
+          <li data-lang="zh">擾動試驗:前腳平台從 80 mm 加高到 130 mm,軌跡偏離平均超過 1 個標準差,<mark class="m-result" data-t="RESULT/EVIDENCE">仍穩定並安全落地</mark>(只有 1 次)。</li>
+          <li data-lang="en">Perturbation trial: the front stage raised from 80 mm to 130 mm; the trajectory leaves the 1-std tube, yet the robot <mark class="m-result" data-t="RESULT/EVIDENCE">stays stable and lands safely</mark> (a single trial).</li>
+        </ul>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">模擬證明「EA-MPC 在奇異點附近會壞、RF-MPC 不會」;實機證明「RF-MPC 能即時跑、能做常見步態,而且真的帶著機器人穿過奇異姿態」。<b>兩件事分別被證明,但沒有在實機上直接對照。</b></span>
+        <span data-lang="en">Simulation shows EA-MPC breaks near the singularity and RF-MPC does not; hardware shows RF-MPC runs in real time, handles common gaits, and really carries the robot through a singular pose. <b>Each claim is shown separately; they are never compared head-to-head on hardware.</b></span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">實驗能證明 / 不能證明的</span><span data-lang="en">What the experiments do and don&#39;t prove</span></div>
+        <span data-lang="zh"><b>能:</b>旋轉矩陣 + 流形線性化的 QP-MPC 在小型實機上可行,且不受 Euler 奇異影響。<b>不能:</b><mark class="m-limit" data-t="LIMITATION/FUTURE">實機上比 EA-MPC 或四元數 MPC 好多少</mark>(沒有實機 baseline);<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有 RMSE、成功率等量化指標</mark>(只有曲線,後空翻有 10 次平均);速度來自狀態估測而非動補系統。</span>
+        <span data-lang="en"><b>Do:</b> a rotation-matrix, manifold-linearized QP-MPC is feasible on a small real robot and immune to the Euler singularity. <b>Don&#39;t:</b> <mark class="m-limit" data-t="LIMITATION/FUTURE">how much better it is than EA-MPC or quaternion MPC on hardware</mark> (no hardware baseline); <mark class="m-limit" data-t="LIMITATION/FUTURE">no quantitative metrics like RMSE or success rate</mark> (just curves, plus a 10-trial mean for the backflip); velocities come from state estimation, not motion capture.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">baseline 公平性</span><span data-lang="en">baseline fairness</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">功勞歸誰</span><span data-lang="en">who gets the credit</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>證據分家:對照只在模擬,實機只有自己</b>。所有 EA-MPC vs RF-MPC 的比較(Fig.3、Fig.6)都在 MATLAB,且模擬器積分的正是<mark class="m-limit" data-t="LIMITATION/FUTURE">控制器自己用的 SRB 模型</mark>(沒有腿動力學、致動器頻寬、接觸衝擊);Fig.3 甚至拿掉了力約束。這種設定很適合隔離「表示法」的影響,但無法回答實機上差距有多大。</li>
+          <li data-lang="en"><b>Split evidence: comparisons only in simulation, hardware only alone</b>. Every EA-MPC vs RF-MPC comparison (Fig.3, Fig.6) is in MATLAB, and the simulator integrates <mark class="m-limit" data-t="LIMITATION/FUTURE">the same SRB model the controller uses</mark> (no leg dynamics, actuator bandwidth, or impacts); Fig.3 even lifts the force constraints. That isolates the representation effect nicely, but says nothing about the size of the gap on hardware.</li>
+          <li data-lang="zh"><b>Baseline 的公平性</b>。EA-MPC 只被描述為「基於 MIT Mini Cheetah 的 convex MPC [55],參數取自 [56]」,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">它的 Euler 角線性化細節沒有交代</mark>。而且作者自己承認其他表示可以為特定動作重新對齊:後空翻是<b>矢狀面</b>動作,若 EA-MPC 換一個讓奇異點落在面外的 Euler 順序,很可能也能完成。真正的優勢(任意 3D 姿態一套控制器)需要真正 3D 的實機動作來支撐,而<mark class="m-limit" data-t="LIMITATION/FUTURE">唯一的 3D 雜技(扭轉後空翻)只有模擬</mark>。四元數 MPC 完全沒有被比較。</li>
+          <li data-lang="en"><b>Baseline fairness</b>. EA-MPC is described only as &quot;based on the convex MPC [55] used on MIT Mini Cheetah, with parameters from [56]&quot;; <mark class="m-assume" data-t="ASSUMPTION/CLAIM">its Euler-angle linearization details are not given</mark>. And the authors concede other representations can be re-aligned per motion: the hardware backflip is a <b>sagittal-plane</b> motion, so an EA-MPC with an Euler sequence whose singularity lies out of plane might well complete it. The real advantage (one controller for any 3D attitude) needs a truly 3D hardware maneuver, yet <mark class="m-limit" data-t="LIMITATION/FUTURE">the only 3D acrobatic motion (the twist flip) is simulation-only</mark>. Quaternion MPC is never compared.</li>
+          <li data-lang="zh"><b>計算時間的說法</b>。摘要寫「250 Hz」,但這是最佳情況;bounding 只有 160 Hz、後空翻 200 Hz。論文<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有給出每次 QP 的求解時間分布、與時域長度的關係,也沒有和 convex MPC 在同硬體上比較算力</mark>。稀疏寫法的變數是 \(24N\)(狀態也是變數),比濃縮(condensed)寫法大一倍,好處在稀疏結構,但這個取捨沒有被量化。</li>
+          <li data-lang="en"><b>The computation-time claim</b>. The abstract says 250 Hz, but that is the best case; bounding runs at 160 Hz and the backflip at 200 Hz. The paper <mark class="m-limit" data-t="LIMITATION/FUTURE">gives no per-QP solve-time distribution, no scaling with horizon, and no same-hardware comparison with convex MPC</mark>. The sparse formulation has \(24N\) variables (states included), twice a condensed one; it pays off through sparsity, but the trade-off is not quantified.</li>
+          <li data-lang="zh"><b>還有哪些地方仍仰賴線性化</b>。(i) \(\exp(\hat\xi)\approx I+\hat\xi\),預測的 \(R_k\) 不在 \(\mathrm{SO}(3)\);(ii) 姿態誤差 \(\log(R_d^\top R_{op})^\vee+\xi\) <span class="add">[導讀補充]</span> 忽略了右 Jacobian;(iii) forward Euler 離散化;(iv) 時域內 \(A,B\) 凍結在當前狀態(LTI),高角速度時更易失準;(v) \(\delta\tau\) 對力臂與力的一階展開;(vi) 摩擦金字塔是錐的保守內近似;(vii) SRB 假設(腿 \(\lt10\%\) 質量)。<mark class="m-limit" data-t="LIMITATION/FUTURE">「表示」雖然全域,「預測」仍然是局部的</mark>。</li>
+          <li data-lang="en"><b>What still rests on linearization</b>. (i) \(\exp(\hat\xi)\approx I+\hat\xi\), so predicted \(R_k\) leave \(\mathrm{SO}(3)\); (ii) the attitude error \(\log(R_d^\top R_{op})^\vee+\xi\) <span class="add">[guide note]</span> drops the right Jacobian; (iii) forward-Euler discretization; (iv) \(A,B\) frozen at the current state over the horizon (LTI), riskier at high angular rates; (v) first-order expansion of \(\delta\tau\) in lever arm and force; (vi) the friction pyramid is a conservative inner approximation of the cone; (vii) the SRB assumption (legs \(\lt10\%\) of mass). <mark class="m-limit" data-t="LIMITATION/FUTURE">The representation is global, but the prediction is still local</mark>.</li>
+          <li data-lang="zh"><b>功勞如何分配</b>。後空翻的動作本身來自<b>離線 TO 的參考軌跡與前饋力</b>,落地交給 impedance control,MPC 時域只有 0.12 s。實機成功有多少來自 RF-MPC 的回饋,多少來自好的參考軌跡、接觸偵測與 swing 控制,論文沒有拆解(沒有「只用前饋 + PD」的實機對照)。</li>
+          <li data-lang="en"><b>Credit assignment</b>. The backflip motion itself comes from an <b>offline TO reference with feed-forward forces</b>, landing is handled by impedance control, and the MPC horizon is just 0.12 s. How much of the hardware success is RF-MPC&#39;s feedback versus a good reference, contact detection and swing control is not disentangled (no hardware feed-forward + PD-only control run).</li>
+          <li data-lang="zh"><b>線性化方案的結論只有一個情境</b>。scheme 1 vs 2 的比較是單一擾動、單一步態、定性比較;作者也明說原因是「猜想」。沒有探討折衷做法(例如沿上一拍的<b>預測軌跡</b>重新線性化,即 SQP/RTI 式 NMPC)。</li>
+          <li data-lang="en"><b>The linearization finding rests on one scenario</b>. Scheme 1 vs 2 is one disturbance, one gait, qualitative; the authors call their explanation a conjecture. Middle grounds (e.g. re-linearizing along the previous tick&#39;s <b>predicted</b> trajectory, i.e. SQP/RTI-style NMPC) are not explored.</li>
+          <li data-lang="zh"><b>小瑕疵</b>:arXiv 版 eq.(15) 的符號與 eq.(17)(22) 不一致 <span class="add">[導讀補充]</span>;另外「representation-free」這個名稱容易讓人誤以為完全沒有座標,實際上 \(\xi\) 就是局部指數座標。</li>
+          <li data-lang="en"><b>Minor issues</b>: the sign in arXiv eq.(15) disagrees with eqs.(17)(22) <span class="add">[guide note]</span>; and the name &quot;representation-free&quot; invites the misreading that no coordinates are used, when \(\xi\) is in fact a local exponential coordinate.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>重新對齊的 Euler 角</b>:若 EA-MPC 改用讓奇異點落在 roll 或 yaw 方向的 Euler 順序,實機矢狀面後空翻還能區分兩者嗎?RF-MPC 有沒有一個<b>非它不可</b>的實機 3D 動作?</li>
+          <li data-lang="en"><b>Re-aligned Euler angles</b>: if EA-MPC used a sequence whose singularity lies along roll or yaw, would the sagittal hardware backflip still separate the two? Is there a hardware 3D motion that <b>only</b> RF-MPC can do?</li>
+          <li data-lang="zh"><b>一階近似撐多遠</b>:預測誤差 \(\Phi\) 如何隨「時域 \(\times\) 角速度」成長?後空翻時角速度數 rad/s,0.12 s 內的旋轉是否已超出 \(I+\hat\xi\) 的準確範圍?若在預測中把 \(R_k\) 投影回 \(\mathrm{SO}(3)\) 會改善嗎?</li>
+          <li data-lang="en"><b>How far does first order go</b>: how does the prediction error \(\Phi\) grow with horizon \(\times\) angular rate? During the backflip the body rotates at several rad/s; is the rotation within 0.12 s already beyond where \(I+\hat\xi\) is accurate? Would projecting predicted \(R_k\) back onto \(\mathrm{SO}(3)\) help?</li>
+          <li data-lang="zh"><b>為何不用 NMPC</b>:沿預測軌跡重新線性化(SQP/RTI、或在流形上的 iLQR/DDP)理論上同時解決 scheme 1 與 scheme 2 的問題。在同一台 i7 上,它的算力代價是多少?RF-MPC 的勝出是「方法更好」還是「在算力預算內最好」?</li>
+          <li data-lang="en"><b>Why not NMPC</b>: re-linearizing along the predicted trajectory (SQP/RTI, or iLQR/DDP on the manifold) in principle fixes both scheme 1 and scheme 2. What would it cost on the same i7? Is RF-MPC better as a method, or best within the compute budget?</li>
+          <li data-lang="zh"><b>功勞歸誰</b>:拿掉 MPC、只用離線參考的前饋力 + 關節 PD,實機後空翻成功率多少?MPC 的貢獻能否以成功率或落地誤差量化?</li>
+          <li data-lang="en"><b>Who gets the credit</b>: without MPC, using only the offline reference&#39;s feed-forward forces + joint PD, what is the hardware backflip success rate? Can MPC&#39;s contribution be quantified as success rate or landing error?</li>
+          <li data-lang="zh"><b>計算時間</b>:QP 求解時間的分布(平均、最壞)是多少?160–250 Hz 的差異來自時域長度還是接觸腿數(不等式約束數)?和 condensed convex MPC 相比如何?</li>
+          <li data-lang="en"><b>Compute time</b>: what is the QP solve-time distribution (mean, worst case)? Does the 160–250 Hz spread come from horizon length or the number of stance legs (inequality count)? How does it compare with condensed convex MPC?</li>
+          <li data-lang="zh"><b>放大到大機器人</b>:Panther 只有 5.5 kg、腿很輕;在腿質量占比較高、或需要全身控制的機器人上,SRB + 直接把 GRF 給關節控制器的做法還成立嗎?需要像 Kim 2019 那樣補一層 WBC 嗎?</li>
+          <li data-lang="en"><b>Scaling up</b>: Panther is 5.5 kg with very light legs. On robots with heavier legs or that need whole-body control, does SRB + sending GRFs straight to joint controllers still hold, or is a WBC layer like Kim 2019&#39;s needed?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">「受控後空翻」<b>不是</b>一個全程由 MPC 控制的 360° 空翻。實際是:前腳站 80 mm 平台、後腳推地,機身繞 \(y\) 軸轉到<b>約 180°</b>(\(\log(R)^\vee_y\to-\pi\))後倒立姿態落地;<mark class="m-assume" data-t="ASSUMPTION/CLAIM">MPC 只在著地的前兩階段啟用</mark>,穿越奇異點(約 300 ms)時後腳仍著地,騰空與落地交給 impedance control。它證明的是「MPC 能在奇異姿態下持續出力控制」,而不是「MPC 規劃了一個空翻」。</span>
+        <span data-lang="en">The &quot;controlled backflip&quot; is <b>not</b> a 360° flip under MPC from start to finish. What actually happens: front legs on an 80 mm stage, hind legs push, the body rotates <b>about 180°</b> around \(y\) (\(\log(R)^\vee_y\to-\pi\)) and lands upside-down; <mark class="m-assume" data-t="ASSUMPTION/CLAIM">MPC runs only in the two stance phases</mark>, the hind legs are still on the ground when the singularity is crossed (around 300 ms), and flight and landing are handed to impedance control. It shows that MPC can keep commanding forces through a singular pose, not that MPC planned a flip.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">推導寫得完整,實作細節(狀態估測、接觸偵測、摩擦補償、CoM 與慣量辨識、全部增益表)給得非常足,可重現性在同類論文中算高。限制也寫得坦白:預測不在 \(\mathrm{SO}(3)\) 上、時域取捨、估測誤差可能影響追蹤。</span>
+        <span data-lang="en">The derivation is complete, and the implementation details (state estimation, contact detection, friction compensation, CoM and inertia identification, the full gain table) are unusually thorough, so reproducibility is high for this genre. Limitations are stated candidly: predictions off \(\mathrm{SO}(3)\), the horizon trade-off, estimation errors affecting tracking.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">作者自述的未來方向</span><span data-lang="en">Authors&#39; future work</span></span>
+        <span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">階層式多速率 MPC</mark>:低頻、長時域、簡單模型的 MPC 在上,高頻、短時域的 RF-MPC 在下;特殊末端(爪、磁吸)以爬垂直面或天花板;把同樣的 variation 方法用在 UAV 雜技。</span>
+        <span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">Hierarchical multi-rate MPC</mark>: a slow, long-horizon, simple-model MPC on top of a fast, short-horizon RF-MPC; special end-effectors (claws, magnets) for vertical walls or ceilings; applying the same variation-based method to acrobatic UAVs.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>先檢查你的姿態座標</b>:只要任務可能出現大角度旋轉(跌倒恢復、翻轉、爬坡、跳躍落地),Euler 角就是一顆定時炸彈。用 \(\mathrm{SO}(3)\) 上的 error-state(全域 \(R\) + 局部 \(\xi\))是成本很低的保險。</li>
+          <li data-lang="en"><b>Audit your attitude coordinates first</b>: whenever a task may involve large rotations (fall recovery, flips, climbing, jump landings), Euler angles are a time bomb. An error-state on \(\mathrm{SO}(3)\) (global \(R\) + local \(\xi\)) is cheap insurance.</li>
+          <li data-lang="zh"><b>「在哪裡線性化」本身就是設計變數</b>:沿參考線性化看似資訊更多,但一旦被推離參考就會在錯的地方展開。做 MPC 或 iLQR 時,值得把「當前狀態 vs 參考 vs 上一拍預測」當成一個要實驗的選項。</li>
+          <li data-lang="en"><b>Where you linearize is itself a design variable</b>: linearizing along the reference seems more informed, but once pushed off it you are expanding at the wrong place. For MPC or iLQR, treat current state vs reference vs previous prediction as a choice worth testing.</li>
+          <li data-lang="zh"><b>把矩陣變數塞進 QP 的通用技巧</b>:\(\mathrm{vec}(AXB)=(B^\top\otimes A)\mathrm{vec}(X)\) 加上 \(\mathrm{vec}(\hat v)=Nv\),可以套用到任何 \(\mathrm{SO}(3)\) 或 \(\mathrm{SE}(3)\) 上的最佳化問題。</li>
+          <li data-lang="en"><b>A general trick for matrix variables in QPs</b>: \(\mathrm{vec}(AXB)=(B^\top\otimes A)\mathrm{vec}(X)\) together with \(\mathrm{vec}(\hat v)=Nv\) carries over to any optimization on \(\mathrm{SO}(3)\) or \(\mathrm{SE}(3)\).</li>
+          <li data-lang="zh"><span class="add">[導讀補充]</span> <b>對學習派也適用</b>:RL 或模仿學習的策略若以 Euler 角當觀測或動作,同樣會在奇異點附近出現不連續;改用旋轉矩陣的欄向量或連續的旋轉表示,是同一個教訓的另一個版本。</li>
+          <li data-lang="en"><span class="add">[guide note]</span> <b>It applies to learning too</b>: RL or imitation policies that observe or output Euler angles suffer the same discontinuity near the singularity; using rotation-matrix columns or other continuous rotation representations is the same lesson in another form.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What&#39;s worth citing</span></h3>
+        <div class="tscroll"><table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「Euler 角 MPC 在大角度動作下會失效」</span><span data-lang="en">&quot;Euler-angle MPC fails for large-rotation motions&quot;</span></td><td><span data-lang="zh">Fig.3、Fig.6 的模擬對照,以及 \(\kappa^{-1}(\mathcal{T}_\Theta)\) 這個奇異度量。</span><span data-lang="en">The simulation comparisons in Fig.3 and Fig.6, and the \(\kappa^{-1}(\mathcal{T}_\Theta)\) singularity measure.</span></td></tr>
+          <tr><td><span data-lang="zh">「單剛體 MPC 可以直接在 \(\mathrm{SO}(3)\) 上寫成 QP」</span><span data-lang="en">&quot;SRB MPC can be posed as a QP directly on \(\mathrm{SO}(3)\)&quot;</span></td><td><span data-lang="zh">variation-based 線性化 + 向量化 + 仿射姿態誤差的完整推導(Sec. II)。</span><span data-lang="en">The full derivation: variation-based linearization + vectorization + affine attitude error (Sec. II).</span></td></tr>
+          <tr><td><span data-lang="zh">「MPC 已能在實機上控制穿越奇異姿態的雜技動作」</span><span data-lang="en">&quot;MPC has controlled acrobatic motions through singular poses on hardware&quot;</span></td><td><span data-lang="zh">Panther 受控後空翻(作者自稱首例);引用時請註明 MPC 只在著地階段啟用。</span><span data-lang="en">Panther&#39;s controlled backflip (claimed first); when citing, note MPC runs only in the stance phases.</span></td></tr>
+          <tr><td><span data-lang="zh">「在當前狀態線性化比沿參考更穩」</span><span data-lang="en">&quot;Linearizing at the current state is more robust than along the reference&quot;</span></td><td><span data-lang="zh">Fig.7 的擾動案例;記得它是單一情境的經驗結果。</span><span data-lang="en">The Fig.7 push study; remember it is an empirical result from one scenario.</span></td></tr>
+        </table></div>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">RF-MPC 把四足 MPC 的姿態從「三個會卡死的角度」換成「全域的旋轉矩陣 + 每拍重新置中的切空間偏差」,卻仍保留一個能以 160–250 Hz 求解的 QP,讓 MPC 第一次在實機上帶著機器人穿過 Euler 奇異姿態。它解決的是<b>表示</b>的問題;<b>預測</b>仍是局部線性的,時域短、證據也以模擬對照與單一實機示範為主。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">RF-MPC swaps quadruped MPC&#39;s attitude from three angles that can lock up to a global rotation matrix plus a tangent-space deviation re-centered every tick, while keeping a QP solvable at 160–250 Hz, so that MPC carries a real robot through the Euler singular pose for the first time. It fixes the <b>representation</b> problem; the <b>prediction</b> is still locally linear with short horizons, and the evidence leans on simulation comparisons plus solo hardware demonstrations.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Di Carlo 2018 (Convex MPC)</span>
+          <span class="chip">Kim 2019 (WBIC + MPC)</span>
+          <span class="chip">Wensing 2022 (Optimization-based control survey)</span>
+          <span class="chip">Wu &amp; Sreenath 2015 (Variation-based linearization)</span>
+          <span class="chip">Lee, Leok, McClamroch 2010 (Geometric SE(3) control)</span>
+          <span class="chip">Chignoli &amp; Wensing 2020 (Variational balancing)</span>
+          <span class="chip">Pandala 2019 (qpSWIFT)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">與本庫其他導讀的關係</span><span data-lang="en">Links to this library</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 和 <a href="Kim2019_WBIC.html">Kim 2019 WBIC+MPC</a> 對照讀:兩者都從 Di Carlo 的 convex MPC 出發,Kim 往下加一層 500 Hz 全身控制補「看得細」,Ding 則把 MPC 本身的姿態模型改成全域正確以補「轉得大」。<a href="Wensing2022_OptControlSurvey.html">Wensing 2022 綜述</a>提供整個框架:RF-MPC 屬於「簡化模型(SRB)+ 數值轉錄成凸 QP」這一支,處理的是其中「姿態參數化」這個環節。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> Read alongside <a href="Kim2019_WBIC.html">Kim 2019 WBIC+MPC</a>: both start from Di Carlo&#39;s convex MPC; Kim adds a 500 Hz whole-body layer below it to see finer, while Ding makes the MPC&#39;s own attitude model globally correct to rotate further. The <a href="Wensing2022_OptControlSurvey.html">Wensing 2022 survey</a> supplies the frame: RF-MPC belongs to the simplified-model (SRB) + transcription-to-convex-QP branch and addresses its attitude-parametrization piece.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論或計算,其餘事實與數據均出自原論文(arXiv:2012.10002v1)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences or calculations; all other facts and figures come from the original paper (arXiv:2012.10002v1).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Ding et al. 2021 (RF-MPC, IEEE T-RO) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'RF-MPC reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

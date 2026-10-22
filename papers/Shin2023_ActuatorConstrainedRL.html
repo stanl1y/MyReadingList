@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Actuator-Constrained RL (KAIST Hound) — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Actuator-Constrained Reinforcement Learning for High-Speed Quadrupedal Locomotion","authors":"Young-Ha Shin, Tae-Gyu Song, Gwanghyeon Ji, Hae-Won Park","year":"2023","venue":"arXiv (cs.RO)","tags":["Legged Robotics","Reinforcement Learning","Actuator Modeling","Quadruped","Sim-to-Real","High-Speed Locomotion"],"tldr":"把馬達的扭矩-轉速可行區(由反電動勢對匯流排電壓、加上峰值扭矩構成的六邊形 MOR)寫成線性不等式,在 RaiSim 訓練時把超出可行區的扭矩指令裁切到邊界;再配上讓四腿均分扭矩的步態獎勵與輕量化足端,45 kg 的 KAIST Hound 在跑步機上跑到 6.5 m/s(不加 MOR 只有 4.5 m/s)。","tldr_en":"Writes the motor torque-speed feasible region (a hexagon set by back-EMF versus bus voltage plus a peak-torque cap) as linear inequalities and clips infeasible torque commands onto it during RL training; with a load-balancing gait reward and a lighter foot, the 45 kg KAIST Hound runs 6.5 m/s on a treadmill (4.5 m/s without the constraint)."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:120px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">高速奔跑時馬達會被用到<b>能力的邊緣</b>,但模擬器(URDF)只給每個關節一個<b>矩形</b>的扭矩/速度上限,真正的馬達卻是<mark class="m-problem" data-t="PROBLEM/GAP">「轉得越快、能出的扭矩越少」</mark>的斜邊六邊形。本文把這個 <mark class="m-method" data-t="METHOD/IDEA">Motor Operating Region(MOR)</mark>寫成幾條<b>線性不等式</b>,在 RL 訓練時把超出區域的扭矩指令<b>裁切到邊界</b>,再加上讓四腿均分扭矩的步態獎勵與輕量化足端。結果:45 kg 的 KAIST Hound 在跑步機上跑到 <mark class="m-result" data-t="RESULT/EVIDENCE">6.5 m/s</mark>(拿掉 MOR 只有 4.5 m/s),作者稱為電動馬達四足機器人的最快紀錄。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">High-speed running drives the motors to <b>the edge of their capability</b>, yet the simulator (URDF) gives each joint only a <b>rectangular</b> torque/velocity limit, while a real motor lives in a slanted hexagon where <mark class="m-problem" data-t="PROBLEM/GAP">"the faster it spins, the less torque it can make."</mark> This paper writes that <mark class="m-method" data-t="METHOD/IDEA">Motor Operating Region (MOR)</mark> as a few <b>linear inequalities</b> and, during RL training, <b>clips</b> torque commands that leave the region back onto its boundary — plus a gait reward that spreads torque across all four legs and a lighter foot. Result: the 45 kg KAIST Hound runs <mark class="m-result" data-t="RESULT/EVIDENCE">6.5 m/s</mark> on a treadmill (only 4.5 m/s without the MOR), which the authors call the fastest electric-motor quadruped.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 模擬中的關節限制是<mark class="m-problem" data-t="PROBLEM/GAP">與速度無關的常數框</mark>,允許「高速 + 大扭矩」這種真實馬達做不到的狀態轉移;策略在模擬裡學會依賴它,上實機在高速時就崩(本文的無 MOR 版本在 5 m/s 跌倒)。</li>
+          <li data-lang="en"><b>Problem</b> — Simulated joint limits are a <mark class="m-problem" data-t="PROBLEM/GAP">speed-independent constant box</mark>, permitting "high speed + high torque" transitions a real motor cannot produce; the policy learns to rely on them and collapses at speed on hardware (the no-MOR variant here falls at 5 m/s).</li>
+          <li data-lang="zh"><b>方法</b> — 由準靜態 DC 馬達方程導出<mark class="m-method" data-t="METHOD/IDEA">\(|\tfrac{R}{K_t}\tau+\tfrac{1}{K_v}\omega|\le V_{\text{bus}}\)、\(|\tau|\le\tau_{\text{peak}}\)</mark>;把 PD 產生的關節扭矩經齒輪矩陣轉到<b>馬達空間</b>、依當下轉速裁切、再轉回關節空間施加;實機端補償鐵芯飽和造成的非線性 \(\tau\)–\(i\) 關係。</li>
+          <li data-lang="en"><b>Method</b> — From quasi-static DC-motor equations derive <mark class="m-method" data-t="METHOD/IDEA">\(|\tfrac{R}{K_t}\tau+\tfrac{1}{K_v}\omega|\le V_{\text{bus}}\) and \(|\tau|\le\tau_{\text{peak}}\)</mark>; map the PD-generated joint torque through the gearbox matrix into <b>motor space</b>, clip it at the current speed, map back and apply; on hardware, compensate the nonlinear \(\tau\)–\(i\) curve caused by core saturation.</li>
+          <li data-lang="zh"><b>結果</b> — 實機消融:完整方法 <mark class="m-result" data-t="RESULT/EVIDENCE">6.5 m/s</mark>;去掉步態獎勵 6.0、換回原足端 5.5、去掉 MOR <b>4.5</b>。訓練中違反 MOR 的指令比例最終較低;6.5 m/s 時實測 \(\tau\)–\(\omega\) 軌跡貼著模擬、並沿著第二象限的再生邊界走。</li>
+          <li data-lang="en"><b>Results</b> — Hardware ablation: full method <mark class="m-result" data-t="RESULT/EVIDENCE">6.5 m/s</mark>; without gait reward 6.0, original foot 5.5, without MOR <b>4.5</b>. The share of MOR-violating commands ends lower during training; at 6.5 m/s measured \(\tau\)–\(\omega\) traces match simulation and ride the regenerative boundary in quadrant II.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">RL 四足控制的主流是「在模擬裡大量試錯,再 zero-shot 上實機」。縮小 sim-to-real gap 的常見手段有:<mark class="m-method" data-t="METHOD/IDEA">domain randomization</mark>(地形、質量、扭矩常數加雜訊,如 RMA、Rapid Locomotion)與 Hwangbo et al. 2019 的 <mark class="m-method" data-t="METHOD/IDEA">actuator network</mark>(用神經網路學 SEA 的指令→實際扭矩映射)。但這些多半針對「穩健行走」,馬達並沒被逼到極限。</p>
+        <p data-lang="en">Mainstream RL quadruped control is "trial-and-error at scale in simulation, then zero-shot to hardware." Common sim-to-real fixes include <mark class="m-method" data-t="METHOD/IDEA">domain randomization</mark> (terrain, mass, noisy torque constants, as in RMA and Rapid Locomotion) and Hwangbo et al. 2019's <mark class="m-method" data-t="METHOD/IDEA">actuator network</mark> (a neural net that learns an SEA's command-to-torque map). But these mostly target robust walking, where motors are not pushed to their limits.</p>
+        <p data-lang="zh">高速奔跑不同:馬達輸出<mark class="m-problem" data-t="PROBLEM/GAP">貼著能力邊界運作</mark>。模型式控制早就意識到這點——MIT humanoid 的 MPC 每步計算由實測 \(\tau\)–\(\omega\) 曲線得到的致動器約束,但<mark class="m-limit" data-t="LIMITATION/FUTURE">只考慮第一象限</mark>,忽略了對動態動作很重要的減速/再生區。RL 側先前最快的四足約 5 m/s(Jin et al. 2022),整體電動四足紀錄是 MIT Cheetah 2 的 6.4 m/s。</p>
+        <p data-lang="en">High-speed running is different: motor output <mark class="m-problem" data-t="PROBLEM/GAP">operates right at the capability boundary</mark>. Model-based control already knew this — the MIT humanoid MPC computes actuator constraints from measured \(\tau\)–\(\omega\) curves at every step, but <mark class="m-limit" data-t="LIMITATION/FUTURE">only for the first quadrant</mark>, ignoring the deceleration / regeneration regions that matter for dynamic motion. On the RL side the fastest prior quadruped was about 5 m/s (Jin et al. 2022); the overall electric-quadruped record was MIT Cheetah 2 at 6.4 m/s.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這是一篇<b>「硬體 + 物理先驗 + RL」</b>的工程論文:機器人 KAIST Hound 本身就是同一團隊(第一作者相同)為高速奔跑以 MINLP 最佳化齒輪比設計的。本文的貢獻不是新的 RL 演算法,而是<b>把馬達規格書上的那張 \(\tau\)–\(\omega\) 圖正確地搬進模擬器</b>——便宜、可解釋,卻剛好修掉高速時最致命的 sim-to-real 落差。</p>
+          <p data-lang="en" style="margin-top:6px">This is a <b>"hardware + physics prior + RL"</b> engineering paper: KAIST Hound itself was designed by the same group (same first author) for high-speed running, with MINLP-optimized gear ratios. The contribution is not a new RL algorithm but <b>moving the spec-sheet \(\tau\)–\(\omega\) diagram faithfully into the simulator</b> — cheap and interpretable, yet it fixes exactly the sim-to-real mismatch that is most lethal at speed.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">入門補充:為什麼馬達轉越快、能給的扭矩越少?</span><span data-lang="en">Primer: why does a motor's available torque shrink with speed?</span> <span class="add"><span data-lang="zh">[導讀補充]</span><span data-lang="en">[guide note]</span></span></h3>
+        <p data-lang="zh">把 DC(或以 FOC 驅動、可近似成 DC 的 BLDC)馬達看成一個電路:驅動器施加電壓 \(V\),一部分消耗在繞組電阻 \(R\) 上,一部分消耗在電感 \(L\) 上,剩下被<mark class="m-method" data-t="METHOD/IDEA">反電動勢(back-EMF)</mark>抵消——轉子轉得越快,反電動勢越大:</p>
+        <p data-lang="en">Treat a DC motor (or a FOC-driven BLDC, which can be approximated as DC) as a circuit: the drive applies voltage \(V\); part drops across the winding resistance \(R\), part across the inductance \(L\), and the rest is cancelled by the <mark class="m-method" data-t="METHOD/IDEA">back-EMF</mark> — which grows with rotor speed:</p>
+        <div class="eq">$$V = iR + L\frac{di}{dt} + K_e\,\omega,\qquad \tau = K_t\, i$$</div>
+        <p data-lang="zh">忽略電感項(準靜態,正是本文 Eq.(1) 的假設),並把 \(i=\tau/K_t\) 代入,在驅動器最多只能給到匯流排電壓 \(V_{\text{bus}}\) 的前提下:</p>
+        <p data-lang="en">Dropping the inductive term (quasi-static — exactly the paper's Eq. (1) assumption), substituting \(i=\tau/K_t\), and noting the drive can supply at most the bus voltage \(V_{\text{bus}}\):</p>
+        <div class="eq">$$\tau_{\max}(\omega)=\frac{K_t}{R}\big(V_{\text{bus}}-K_e\,\omega\big),\qquad \tau_{\text{stall}}=\frac{K_tV_{\text{bus}}}{R},\qquad \omega_0=\frac{V_{\text{bus}}}{K_e}$$</div>
+        <p data-lang="zh">直覺:<b>轉速越高,反電動勢吃掉越多電壓,留給「推電流」的電壓餘裕越少,電流(=扭矩)就越小</b>;到無載轉速 \(\omega_0\) 時反電動勢等於 \(V_{\text{bus}}\),扭矩歸零。再疊上由<b>鐵芯磁飽和 / 繞組發熱</b>決定的峰值扭矩 \(\tau_{\text{peak}}\),可用扭矩就是:</p>
+        <p data-lang="en">Intuition: <b>the faster it spins, the more voltage the back-EMF eats, the less headroom is left to push current, so current (= torque) shrinks</b>; at the no-load speed \(\omega_0\) the back-EMF equals \(V_{\text{bus}}\) and torque hits zero. Layer on the peak torque \(\tau_{\text{peak}}\) set by <b>core saturation / winding heating</b>, and the available torque is:</p>
+        <div class="eq">$$\tau_{\text{avail}}(\omega)=\min\Big\{\tau_{\text{peak}},\ \tfrac{K_t}{R}\big(V_{\text{bus}}-K_e\omega\big)\Big\},\qquad \omega_c=\frac{V_{\text{bus}}-R\,\tau_{\text{peak}}/K_t}{K_e}$$</div>
+        <p data-lang="zh">低於「轉角速度」\(\omega_c\) 時受 \(\tau_{\text{peak}}\) 限制(水平紅線),高於 \(\omega_c\) 後沿斜線(藍線)線性下降——這就是 Fig.3(a) 第一象限的梯形。本文的 \(1/K_v\) 就是這裡的 \(K_e\)(理想 SI 單位下 \(K_e=K_t\))。</p>
+        <p data-lang="en">Below the corner speed \(\omega_c\) the cap is \(\tau_{\text{peak}}\) (horizontal red line); above it torque falls linearly along the slanted (blue) line — the first-quadrant trapezoid in Fig. 3(a). The paper's \(1/K_v\) is this \(K_e\) (in ideal SI units \(K_e=K_t\)).</p>
+        <p data-lang="zh"><b>為何第二、四象限比較寬?</b>當 \(\tau\omega\lt 0\)(馬達在<mark class="m-method" data-t="METHOD/IDEA">煞車 / 再生</mark>),反電動勢本身就在推煞車方向的電流,驅動器只需很小的電壓、甚至把能量回灌電池。代入 Eq.(2) 可見:前進煞車時,完整的 \(-\tau_{\text{peak}}\) 一直可用到 \(\omega=K_v(V_{\text{bus}}+R\tau_{\text{peak}}/K_t)\),遠超過 \(\omega_c\);甚至超過 \(\omega_0\) 也還能存在,只要煞得夠用力。所以<b>「減速能力」比「加速能力」大</b>,高速著地的瞬間正好用得到。</p>
+        <p data-lang="en"><b>Why are quadrants II and IV wider?</b> When \(\tau\omega\lt 0\) (the motor is <mark class="m-method" data-t="METHOD/IDEA">braking / regenerating</mark>), the back-EMF itself pushes current in the braking direction; the drive needs little voltage and may even return energy to the battery. Plugging into Eq. (2): while braking forward, the full \(-\tau_{\text{peak}}\) stays available up to \(\omega=K_v(V_{\text{bus}}+R\tau_{\text{peak}}/K_t)\), far beyond \(\omega_c\); you can even exceed \(\omega_0\), as long as you brake hard enough. So <b>deceleration capability exceeds acceleration capability</b> — exactly what touchdown at speed needs.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><b>齒輪比</b>:減速比 \(G\) 下 \(\tau_j=G\tau_m\)、\(\omega_j=\omega_m/G\),關節空間的斜線斜率被放大 \(G^2\) 倍——\(G\) 大則關節扭矩大但極速低。這正是 Hound 設計論文用 MINLP 最佳化齒輪比要權衡的東西;本文則是把這個權衡的「後果」帶進 RL。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><b>Gear ratio</b>: with reduction \(G\), \(\tau_j=G\tau_m\) and \(\omega_j=\omega_m/G\), so the joint-space slope scales by \(G^2\) — large \(G\) means big joint torque but low top speed. This is precisely the trade-off the Hound design paper optimizes with MINLP; this paper carries the consequences of that trade-off into RL.</p>
+        <figure class="fig"><img src="figs/Shin2023/fig3_mor.png" alt="Figure 3 motor operating region">
+          <figcaption data-lang="zh"><b>Fig.3</b> (a) 真實馬達在 \(\tau\)–\(\omega\) 平面的可行區(灰):紅線 = \(\pm\tau_{\text{peak}}\),藍線 = \(\pm V_{\text{bus}}\) 電壓限制。注意<b>虛線</b>是「把第一象限斜線鏡射過去」的對稱假設——虛線與藍線之間那兩塊就是再生模式多出來的可用區。(b) URDF 只給一個矩形:它會<b>高估</b>高速區的扭矩、<b>低估</b>再生區。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> (a) A real motor's feasible region in the \(\tau\)–\(\omega\) plane (grey): red = \(\pm\tau_{\text{peak}}\), blue = the \(\pm V_{\text{bus}}\) voltage limit. Note the <b>dashed</b> lines — the symmetric assumption obtained by mirroring the first-quadrant slope; the two slivers between dashed and blue lines are the extra room regeneration buys. (b) URDF provides only a rectangle: it <b>overestimates</b> torque at high speed and <b>underestimates</b> the regenerative region.</figcaption></figure>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是「6.5 m/s」這個數字,而是以下幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What is worth taking away is not the number "6.5 m/s" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-problem)">矩形關節限制是高速 sim-to-real 的隱形殺手。</b> 低速時策略用的扭矩都在 MOR 內,看不出差異;<mark class="m-result" data-t="RESULT/EVIDENCE">約 3.5–4 m/s 以上</mark>才開始違反 MOR,落差隨速度放大。</li>
+          <li data-lang="en"><b style="color:var(--c-problem)">Rectangular joint limits are a hidden killer of high-speed sim-to-real.</b> At low speed every torque the policy uses lies inside the MOR, so nothing looks wrong; violations start <mark class="m-result" data-t="RESULT/EVIDENCE">above roughly 3.5–4 m/s</mark> and the gap grows with speed.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">致動器物理可以「零學習」地放進模擬。</b> 不需要像 actuator network 那樣蒐集資料訓練網路——規格書上的 \(R,K_t,K_v,V_{\text{bus}},\tau_{\text{peak}}\) 就能定義幾條線性不等式。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Actuator physics can go into the simulator with zero learning.</b> No data-collection-and-train loop as with an actuator network — spec-sheet \(R,K_t,K_v,V_{\text{bus}},\tau_{\text{peak}}\) define a handful of linear inequalities.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">約束要在「馬達空間」而不是「關節空間」施加。</b> 對 Hound 這種髖/膝共軸、行星齒輪耦合的設計,關節速度不等於馬達速度除以減速比;必須用齒輪矩陣換算,否則裁切位置是錯的。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Enforce the constraint in motor space, not joint space.</b> For Hound's coaxial, planetary-coupled hip/knee, joint speed is not simply motor speed over the ratio; you must go through the gearbox matrix or you clip in the wrong place.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">「裁切」本身不會教策略避開不可行區——是裁切 + 平滑懲罰一起。</b> 被裁切後實際扭矩相同、扭矩懲罰也相同;真正讓策略收手的是 action smoothness 懲罰對「突然跳出去」的指令罰得更重。<span class="add">[導讀補充] 這是本文 Discussion 的論點,但值得強調:它不是 CMDP 意義下的約束 RL。</span></li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Clipping alone does not teach the policy to avoid infeasible commands — clipping plus a smoothness penalty does.</b> After clipping the applied torque and the torque penalty are identical; what makes the policy back off is the action-smoothness term punishing commands that jump outside. <span class="add">[guide note] This is the paper's own Discussion argument, but worth stressing: it is not constrained RL in the CMDP sense.</span></li>
+          <li data-lang="zh"><b style="color:var(--c-result)">高速瓶頸常是「單顆馬達」先飽和。</b> 沿用既有獎勵時出力偏向一側;加一個對角步態獎勵讓四腿均分扭矩,就從 6.0 推到 6.5 m/s。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">The high-speed bottleneck is often one motor saturating first.</b> With the inherited reward, power skewed to one side; a diagonal-pair gait reward that spreads torque across legs takes the robot from 6.0 to 6.5 m/s.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Actuator-Constrained Reinforcement Learning for High-Speed Quadrupedal Locomotion</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Young-Ha Shin, Tae-Gyu Song, Gwanghyeon Ji, Hae-Won Park</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span><span data-lang="zh">KAIST 機械系 Humanoid Robot Research Center</span><span data-lang="en">Humanoid Robot Research Center, Dept. of ME, KAIST</span></span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span><span data-lang="zh">2023 · arXiv:2312.17507 預印本(cs.RO)</span><span data-lang="en">2023 · arXiv:2312.17507 preprint (cs.RO)</span></span>
+          <b><span data-lang="zh">平台</span><span data-lang="en">Robot</span></b><span><span data-lang="zh">KAIST Hound,45 kg 電動四足</span><span data-lang="en">KAIST Hound, 45 kg electric quadruped</span></span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span><span data-lang="zh">論文未提供</span><span data-lang="en">not provided in the paper</span></span>
+        </div>
+        <p data-lang="zh" style="font-size:12.5px;color:var(--muted);margin:10px 0 0"><span class="add">[導讀補充]</span> arXiv 頁面無 venue 註記;IEEE Robotics &amp; Automation Magazine 2025 刊出同作者、題為 "Reinforcement Learning for High-Speed Quadrupedal Locomotion With Motor Operating Region Constraints" 的文章,看起來是延伸版本,本導讀只依 arXiv v1 撰寫。</p>
+        <p data-lang="en" style="font-size:12.5px;color:var(--muted);margin:10px 0 0"><span class="add">[guide note]</span> The arXiv page lists no venue; IEEE Robotics &amp; Automation Magazine (2025) carries an article by the same authors titled "Reinforcement Learning for High-Speed Quadrupedal Locomotion With Motor Operating Region Constraints," apparently an extended version. This guide is based on arXiv v1 only.</p>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它把「致動器建模」從「訓練一顆 actuator network」降成「抄規格書、寫幾條不等式」,並證明這在<b>馬達被用到極限</b>的任務上決定成敗(4.5 → 6.5 m/s)。對任何高功率任務(跳躍、負重)都可直接套用。</span>
+        <span data-lang="en">It reduces actuator modelling from "train an actuator network" to "copy the spec sheet, write a few inequalities," and shows that this decides success in tasks that <b>push motors to the limit</b> (4.5 → 6.5 m/s). It applies directly to any high-power task (jumping, payload carrying).</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Motor Operating Region</span><span class="chip">Back-EMF</span>
+          <span class="chip">Torque clipping</span><span class="chip">Regenerative braking</span>
+          <span class="chip">Gearbox matrix</span><span class="chip">RaiSim</span>
+          <span class="chip">Concurrent estimator</span><span class="chip">Flying trot</span>
+        </div>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">模型保真度</span><span data-lang="en">model fidelity</span></span><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">熱限制</span><span data-lang="en">thermal</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">URDF 關節限制</span><span data-lang="en">URDF joint limits</span></b><br><small><span data-lang="zh">常數上下界</span><span data-lang="en">constant bounds</span></small></td><td><span data-lang="zh">扭矩與速度各自一個常數上下界 → <mark class="m-problem" data-t="PROBLEM/GAP">矩形可行區</mark>;高速時允許真實馬達給不出的扭矩,再生區又過度保守。</span><span data-lang="en">Independent constant bounds on torque and speed → a <mark class="m-problem" data-t="PROBLEM/GAP">rectangular feasible set</mark>; permits torque a real motor cannot give at high speed, and is over-conservative in regeneration.</span></td></tr>
+          <tr><td><b>Domain randomization</b><br><small>(RMA, Rapid Locomotion)</small></td><td><span data-lang="zh">對扭矩常數、質量加雜訊能涵蓋<mark class="m-problem" data-t="PROBLEM/GAP">參數不確定</mark>,但無法表達「扭矩上限隨轉速變」這種<b>結構性</b>限制。</span><span data-lang="en">Noise on torque constants and mass covers <mark class="m-problem" data-t="PROBLEM/GAP">parameter uncertainty</mark>, but cannot express a <b>structural</b> limit like "the torque cap depends on speed."</span></td></tr>
+          <tr><td><b>Actuator network</b><br><small>(Hwangbo et al. 2019)</small></td><td><span data-lang="zh">要在實機蒐集資料再訓練網路;作者指出非線性與<mark class="m-problem" data-t="PROBLEM/GAP">廠商資訊不足</mark>使 SEA 難建模。</span><span data-lang="en">Needs hardware data collection and network training; the authors note nonlinearity and <mark class="m-problem" data-t="PROBLEM/GAP">missing manufacturer information</mark> make SEAs hard to model.</span></td></tr>
+          <tr><td><b><span data-lang="zh">MPC + 實測 \(\tau\)–\(\omega\) 曲線</span><span data-lang="en">MPC + measured \(\tau\)–\(\omega\) curves</span></b><br><small>(MIT humanoid)</small></td><td><span data-lang="zh">每步精確計算致動器約束,但<mark class="m-problem" data-t="PROBLEM/GAP">只用第一象限</mark>,忽略減速 / 再生區。</span><span data-lang="en">Computes actuator constraints precisely at each step, but <mark class="m-problem" data-t="PROBLEM/GAP">only in the first quadrant</mark>, ignoring deceleration / regeneration.</span></td></tr>
+          <tr><td><b><span data-lang="zh">線性 \(\tau=K_t i\)</span><span data-lang="en">Linear \(\tau=K_t i\)</span></b></td><td><span data-lang="zh">鐵芯馬達在大電流時磁通飽和,<mark class="m-problem" data-t="PROBLEM/GAP">同樣電流給的扭矩比線性預期少</mark>(Fig.2 中 \(\tau_{\text{peak}}\) 定義在偏離線性 20% 處)。</span><span data-lang="en">Iron-core motors saturate at high current, so <mark class="m-problem" data-t="PROBLEM/GAP">the same current yields less torque than linear predicts</mark> (\(\tau_{\text{peak}}\) in Fig. 2 is defined at 20% deviation from linearity).</span></td></tr>
+          <tr><td><b><span data-lang="zh">沿用的獎勵(Ji et al. 2022)</span><span data-lang="en">Inherited reward (Ji et al. 2022)</span></b></td><td><span data-lang="zh">高速時出力<mark class="m-problem" data-t="PROBLEM/GAP">偏向一側</mark>,整機極速被「第一顆飽和的馬達」綁住。</span><span data-lang="en">At speed, motor power <mark class="m-problem" data-t="PROBLEM/GAP">skews to one side</mark>; top speed is capped by the first motor to saturate.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「當馬達被推到極限時,怎樣讓模擬中的狀態轉移不超出真實馬達的能力?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"When motors are pushed to the limit, how do we keep simulated state transitions within what a real motor can actually do?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,本文怎麼補</span><span data-lang="en">Gap table — who lacks what, and how this paper fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">本文如何補上</span><span data-lang="en">How this paper fills it</span></th></tr>
+          <tr>
+            <td><b><span data-lang="zh">URDF 矩形限制</span><span data-lang="en">URDF rectangle</span></b></td>
+            <td><span data-lang="zh">與速度無關。</span><span data-lang="en">Speed-independent.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">MOR 六邊形</mark>:\(|\tau|\le\tau_{\text{peak}}\) 加上兩條電壓斜線。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">MOR hexagon</mark>: \(|\tau|\le\tau_{\text{peak}}\) plus two voltage lines.</span></td>
+          </tr>
+          <tr>
+            <td><b>Actuator network</b></td>
+            <td><span data-lang="zh">需資料、需訓練、黑盒。</span><span data-lang="en">Data-hungry, trained, black box.</span></td>
+            <td><span data-lang="zh">只需<mark class="m-method" data-t="METHOD/IDEA">規格書參數</mark>,解析式、可解釋。</span><span data-lang="en">Only <mark class="m-method" data-t="METHOD/IDEA">spec-sheet parameters</mark>; analytic and interpretable.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">第一象限 MPC 約束</span><span data-lang="en">First-quadrant MPC constraint</span></b></td>
+            <td><span data-lang="zh">沒有煞車 / 再生區。</span><span data-lang="en">No braking / regeneration.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">四個象限</mark>都建模,再生區較寬。</span><span data-lang="en">Models <mark class="m-method" data-t="METHOD/IDEA">all four quadrants</mark>, with wider regenerative ones.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">關節空間限制</span><span data-lang="en">Joint-space limits</span></b></td>
+            <td><span data-lang="zh">耦合齒輪下關節≠馬達。</span><span data-lang="en">With coupled gearing, joint ≠ motor.</span></td>
+            <td><span data-lang="zh">用疊加原理推<mark class="m-method" data-t="METHOD/IDEA">齒輪矩陣</mark>,在馬達空間裁切。</span><span data-lang="en">Derive a <mark class="m-method" data-t="METHOD/IDEA">gearbox matrix</mark> by superposition; clip in motor space.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">線性 \(\tau\)–\(i\)</span><span data-lang="en">Linear \(\tau\)–\(i\)</span></b></td>
+            <td><span data-lang="zh">大扭矩時實機出力不足。</span><span data-lang="en">Under-delivers at high torque.</span></td>
+            <td><span data-lang="zh">實測單軸資料,<mark class="m-method" data-t="METHOD/IDEA">二次近似補償電流</mark>。</span><span data-lang="en">Single-axis measurements; <mark class="m-method" data-t="METHOD/IDEA">quadratic current compensation</mark>.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">既有獎勵</span><span data-lang="en">Inherited reward</span></b></td>
+            <td><span data-lang="zh">單顆馬達先飽和。</span><span data-lang="en">One motor saturates first.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">對角步態獎勵</mark> + 輕量化足端。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Diagonal gait reward</mark> + lightweight foot.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意這裡的痛點<b>只在高速才顯現</b>:Fig.7 顯示 3.5 m/s 以下,有沒有 MOR 的評估結果完全一樣。所以這不是「所有 RL 四足都該改」的通用 bug,而是「<b>一旦你想逼近硬體極限</b>,矩形限制就會說謊」。這也解釋了為什麼先前以穩健行走為目標的工作很少在意它。</p>
+          <p data-lang="en" style="margin-top:6px">Note the pain <b>only shows at high speed</b>: Fig. 7 shows that below 3.5 m/s, evaluation with or without the MOR is identical. So this is not a universal bug every RL quadruped must fix, but "<b>once you approach the hardware limit</b>, the rectangle lies." That also explains why prior work aimed at robust walking rarely cared.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">標題的「Actuator-Constrained RL」容易讓人以為是 <b>CMDP / Lagrangian 式的約束強化學習</b>。其實不是:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">約束是加在模擬器的動力學裡</mark>(環境端扭矩飽和),RL 演算法本身沒變,也沒有約束滿足的保證。作者自己把「與能顯式處理不等式約束的 RL 方法比較」列為未來工作。</span>
+        <span data-lang="en">The title "Actuator-Constrained RL" invites reading it as <b>CMDP / Lagrangian constrained RL</b>. It is not: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the constraint lives in the simulator dynamics</mark> (environment-side torque saturation); the RL algorithm is unchanged and there is no constraint-satisfaction guarantee. The authors themselves list "comparison with RL methods that explicitly handle inequality constraints" as future work.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">策略在模擬裡學到的,是「這個動作會導致什麼下一狀態」。若模擬允許不可能的轉移,策略就會把它當成工具——上實機時那個工具消失,行為就分岔。修正動力學模型比事後加懲罰更「根本」。</span>
+        <span data-lang="en">What a policy learns in simulation is "this action leads to that next state." If the simulator allows impossible transitions, the policy uses them as tools — on hardware the tool vanishes and behavior diverges. Fixing the dynamics model is more fundamental than adding penalties after the fact.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">裁切 vs 約束 RL</span><span data-lang="en">clip vs constrained RL</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">基準線</span><span data-lang="en">baselines</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">管線:動作 → 扭矩 → 馬達空間裁切 → 施加</span><span data-lang="en">Pipeline: action → torque → motor-space clipping → apply</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STEP 1</span><b>Estimator + Actor</b><small><span data-lang="zh">估測器(Ji et al. 2022)估體速、足高、接觸機率,與原始觀測合併後給 actor;輸出期望關節角 \(\theta_{\text{ref}}\)。</span><span data-lang="en">The estimator (Ji et al. 2022) predicts body velocity, foot height and contact probability, merged with raw observations for the actor, which outputs desired joint angles \(\theta_{\text{ref}}\).</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 2</span><b>Joint PD</b><small><span data-lang="zh">\(K_p=50\),\(K_d=1.0\),期望速度 0,得關節扭矩 \(\tau_j\)。</span><span data-lang="en">\(K_p=50\), \(K_d=1.0\), zero desired velocity, giving joint torque \(\tau_j\).</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 3</span><b><span data-lang="zh">轉到馬達空間</span><span data-lang="en">To motor space</span></b><small><span data-lang="zh">用齒輪矩陣(Eq.3–4)得 \(\omega_m,\tau_m\)。</span><span data-lang="en">Gearbox matrix (Eq. 3–4) gives \(\omega_m,\tau_m\).</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 4</span><b><span data-lang="zh">MOR 裁切</span><span data-lang="en">MOR clipping</span></b><small><span data-lang="zh">若 \((\omega_m,\tau_m)\) 超出 MOR,沿扭矩方向裁到邊界得 \(\bar\tau_m\)。</span><span data-lang="en">If \((\omega_m,\tau_m)\) leaves the MOR, clip along torque to the boundary, giving \(\bar\tau_m\).</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 5</span><b><span data-lang="zh">施加 / 上實機</span><span data-lang="en">Apply / deploy</span></b><small><span data-lang="zh">模擬:\(\bar\tau_m\) 轉回 \(\bar\tau_j\) 施加於 RaiSim。實機:\(\tau_m\) 經 \(\tau\)–\(i\) 補償得電流指令 \(i_{\text{ref}}\)。</span><span data-lang="en">Sim: \(\bar\tau_m\) mapped back to \(\bar\tau_j\) and applied in RaiSim. Hardware: \(\tau_m\) passes through \(\tau\)–\(i\) compensation to a current command \(i_{\text{ref}}\).</span></small></div>
+        </div>
+        <figure class="fig"><img src="figs/Shin2023/fig5_framework.png" alt="Figure 5 framework">
+          <figcaption data-lang="zh"><b>Fig.5</b> 整體框架。看三種箭頭:<b>點線 = 只在訓練</b>(關節→馬達轉換、MOR 裁切、施加到 URDF 模擬)、<b>虛線 = 只在實機評估</b>(馬達扭矩 → \(\tau\)–\(i\) 補償 → 電流指令)。中下方小圖是 MOR 裁切示意:紅點(不可行)垂直往下投到邊界上的灰點。注意在實機上沒有軟體裁切——裁切的是馬達物理本身。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> Overall framework. Read the arrow styles: <b>dotted = training only</b> (joint-to-motor transform, MOR clipping, applying to the URDF sim), <b>dashed = hardware evaluation only</b> (motor torque → \(\tau\)–\(i\) compensation → current command). The lower inset shows MOR clipping: the red (infeasible) point drops vertically onto the grey point on the boundary. Note there is no software clipping on hardware — the motor physics does the clipping.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 1:把 MOR 寫成線性不等式</span><span data-lang="en">Key idea 1: the MOR as linear inequalities</span></h3>
+        <p data-lang="zh">作者假設電流變化率可忽略(和用 dynamometer 量靜態點畫 \(\tau\)–\(\omega\) 曲線的條件相同),得到準靜態馬達方程(Eq.1):</p>
+        <p data-lang="en">The authors assume the rate of current change is negligible (the same condition as plotting a \(\tau\)–\(\omega\) curve from static dynamometer points), giving the quasi-static motor equation (Eq. 1):</p>
+        <div class="eq">$$V_{\text{applied}} = iR + L\frac{di}{dt} + V_{\text{BackEMF}} \;\approx\; iR + V_{\text{BackEMF}} \;=\; \frac{R}{K_t}\,\tau + \frac{1}{K_v}\,\omega$$</div>
+        <p data-lang="zh">施加電壓不可能超過匯流排電壓(Eq.2),再疊上峰值扭矩,得到<mark class="m-method" data-t="METHOD/IDEA">MOR = 四條線性不等式圍成的六邊形</mark>:</p>
+        <p data-lang="en">The applied voltage cannot exceed the bus voltage (Eq. 2); adding the peak torque gives the <mark class="m-method" data-t="METHOD/IDEA">MOR = a hexagon bounded by linear inequalities</mark>:</p>
+        <div class="eq">$$\mathcal{M}=\Big\{(\omega,\tau)\;:\; -V_{\text{bus}}\le \frac{R}{K_t}\tau+\frac{1}{K_v}\omega\le V_{\text{bus}},\quad -\tau_{\text{peak}}\le\tau\le\tau_{\text{peak}}\Big\}$$</div>
+        <p data-lang="zh">論文說超出 MOR 的扭矩被「依 Eq.(1) 裁切」、Fig.5 畫的是固定轉速下沿扭矩軸投影。寫成顯式公式即 <span class="add">[導讀補充:由 Eq.2 與 Fig.5 箭頭整理,論文未寫出此式]</span>:</p>
+        <p data-lang="en">The paper says violating torques are clipped "according to Eq. (1)," and Fig. 5 draws a projection along the torque axis at fixed speed. Written explicitly <span class="add">[guide note: assembled from Eq. 2 and the Fig. 5 arrow; the paper does not write this formula]</span>:</p>
+        <div class="eq">$$\bar\tau_m=\min\!\Big(\max\big(\tau_m,\ \underline{\tau}(\omega_m)\big),\ \overline{\tau}(\omega_m)\Big),\quad \overline{\tau}(\omega)=\min\!\Big(\tau_{\text{peak}},\ \tfrac{K_t}{R}\big(V_{\text{bus}}-\tfrac{\omega}{K_v}\big)\Big),\quad \underline{\tau}(\omega)=\max\!\Big(-\tau_{\text{peak}},\ -\tfrac{K_t}{R}\big(V_{\text{bus}}+\tfrac{\omega}{K_v}\big)\Big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">關於 \(\tau_{\text{peak}}\):作者強調它<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不是絕對值,而是避免繞組過熱燒毀的建議值</mark>,定義為扭矩偏離線性 20% 之處(引 TQ RoboDrive 的定義)。從 Fig.5 與 Fig.11 的插圖讀到,膝馬達(馬達側)的 \(\tau_{\text{peak}}\) 約 50 Nm、無載轉速約 85 rad/s <span class="add">[導讀補充:由圖讀值]</span>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">On \(\tau_{\text{peak}}\): the authors stress it is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">not an absolute limit but a recommended value to keep the windings from burning out</mark>, defined where torque deviates 20% from linearity (citing TQ RoboDrive's definition). Reading the Fig. 5 / Fig. 11 insets, the knee motor (motor side) has \(\tau_{\text{peak}}\approx 50\) Nm and a no-load speed of about 85 rad/s <span class="add">[guide note: read off the plots]</span>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 2:耦合齒輪下的關節 ↔ 馬達空間</span><span data-lang="en">Key idea 2: joint ↔ motor space under coupled gearing</span></h3>
+        <p data-lang="zh">Hound 的髖(HFE)與膝(KFE)模組是<b>一體的共軸設計</b>:HFE 用中空軸,HFE 的輸出接在 KFE 行星齒輪的<b>環齒輪</b>上。所以 HFE 一轉,KFE 齒輪箱原本「固定」的環齒輪也跟著轉。URDF 的串聯關節約定描述不了這種並聯結構,作者用<mark class="m-method" data-t="METHOD/IDEA">疊加原理</mark>推出(Eq.3–4):</p>
+        <p data-lang="en">Hound's hip (HFE) and knee (KFE) modules form <b>one coaxial unit</b>: HFE uses a hollow shaft and its output is bonded to the <b>ring gear</b> of the KFE planetary stage. So when HFE turns, the KFE gearbox's nominally stationary ring turns too. URDF's serial-joint convention cannot describe this parallel arrangement; the authors use <mark class="m-method" data-t="METHOD/IDEA">superposition</mark> to derive (Eq. 3–4):</p>
+        <div class="eq">$$\begin{bmatrix}\omega_{\mathrm{HFE},m}\\ \omega_{\mathrm{KFE},m}\end{bmatrix}=A^{-1}\begin{bmatrix}\omega_{\mathrm{HFE},j}\\ \omega_{\mathrm{KFE},j}\end{bmatrix},\qquad \begin{bmatrix}\tau_{\mathrm{HFE},m}\\ \tau_{\mathrm{KFE},m}\end{bmatrix}=A^{-\top}\begin{bmatrix}\tau_{\mathrm{HFE},j}\\ \tau_{\mathrm{KFE},j}\end{bmatrix},\qquad A=\begin{bmatrix}\frac{1}{G_{\mathrm{HFE}}} &amp; 0\\[3pt] -\frac{1}{G_{\mathrm{HFE}}G_{\mathrm{KFE}}} &amp; \frac{1}{G_{\mathrm{KFE}}}\end{bmatrix}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><span class="add">[導讀補充]</span> 由虛功原理,若 \(\omega_j=A\,\omega_m\),扭矩應滿足 \(\tau_m=A^{\top}\tau_j\)(等價於 \(\tau_j=A^{-\top}\tau_m\))。用單級減速驗算:\(A=1/G\) 時應得 \(\tau_m=\tau_j/G\),但照印出的 Eq.(4) 會得到 \(\tau_m=G\,\tau_j\)。因此 Eq.(4) 很可能是左右兩邊寫反的筆誤——實作若照抄要小心。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><span class="add">[guide note]</span> By virtual work, if \(\omega_j=A\,\omega_m\) then torques satisfy \(\tau_m=A^{\top}\tau_j\) (equivalently \(\tau_j=A^{-\top}\tau_m\)). Sanity check with a single reduction: \(A=1/G\) should give \(\tau_m=\tau_j/G\), but Eq. (4) as printed gives \(\tau_m=G\,\tau_j\). So Eq. (4) is most likely a typo with the sides swapped — be careful if implementing it verbatim.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 3:非線性 \(\tau\)–\(i\) 補償(只在實機)</span><span data-lang="en">Key idea 3: nonlinear \(\tau\)–\(i\) compensation (hardware only)</span></h3>
+        <p data-lang="zh">模擬裡低階指令是<b>扭矩</b>,實機上是<b>電流</b>。鐵芯馬達磁通飽和讓 \(\tau\)–\(i\) 在大扭矩時明顯偏離線性,於是作者在單軸馬達上量 \((i,\tau)\) 資料點,用<mark class="m-method" data-t="METHOD/IDEA">二次近似</mark>求出「要得到某扭矩該給多少電流」:</p>
+        <p data-lang="en">The low-level command is <b>torque</b> in simulation but <b>current</b> on hardware. Core saturation makes \(\tau\)–\(i\) deviate from linear at high torque, so the authors measure \((i,\tau)\) points on a single-axis motor and fit a <mark class="m-method" data-t="METHOD/IDEA">quadratic approximation</mark> for "how much current yields a given torque":</p>
+        <div class="eq">$$i_{\text{ref}} = f(\tau_m)\approx a_1\,\tau_m + a_2\,\tau_m^2 \quad\text{vs. ideal}\quad i_{\text{ref}}=\tau_m/K_t$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><span class="add">[導讀補充]</span> 上式只是示意形式,係數未公開。Fig.5 插圖的實驗點只到約 32 Nm / 49 A,而曲線外插到 50 Nm / 約 84 A(理想線性約 70 A)——也就是說,<b>最需要補償的飽和區正好是外插</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><span class="add">[guide note]</span> The formula is schematic; coefficients are not published. The experimental points in the Fig. 5 inset only reach about 32 Nm / 49 A, while the curve is extrapolated to 50 Nm / about 84 A (ideal linear: about 70 A) — i.e., <b>the saturated region that most needs compensation is extrapolated</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 4:獎勵——對角步態 + 著地速度</span><span data-lang="en">Key idea 4: rewards — diagonal gait + contact velocity</span></h3>
+        <p data-lang="zh">整體獎勵沿用 Ji et al. 2022 的 concurrent training 框架,<b>新增兩項(粗體)</b>。腳的編號 1–4 = RR、RL、FR、FL,\(C_{f,i}\in\{0,1\}\) 為接觸狀態。<mark class="m-method" data-t="METHOD/IDEA">步態獎勵</mark>只在「RR+FL 著地、另兩腳騰空」或反之時給分——即對角腳成對 <span class="add">[導讀補充:這就是 trot,論文只說「對稱步態」]</span>:</p>
+        <p data-lang="en">The overall reward follows Ji et al. 2022's concurrent-training framework, <b>adding two terms (bold)</b>. Feet 1–4 = RR, RL, FR, FL; \(C_{f,i}\in\{0,1\}\) is the contact state. The <mark class="m-method" data-t="METHOD/IDEA">gait reward</mark> pays only when "RR+FL are down and the other two are airborne," or vice versa — diagonal pairs <span class="add">[guide note: i.e. a trot; the paper only says "symmetrical gait"]</span>:</p>
+        <div class="eq">$$r_{\text{gait}}=\begin{cases}C_{\text{gait}} &amp; \text{if } C_{f,1}\wedge C_{f,4}\wedge\neg C_{f,2}\wedge\neg C_{f,3}\\ C_{\text{gait}} &amp; \text{else if } \neg C_{f,1}\wedge\neg C_{f,4}\wedge C_{f,2}\wedge C_{f,3}\\ 0 &amp; \text{else}\end{cases},\qquad r_{\text{contact}}=C_{\text{contact}}\,k_{\text{contact}}\,\|V_{f,z,i}\|^2$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(k_{\text{contact}}\) 只在<b>著地前一步</b>為 1。著地速度獎勵用來壓低腳觸地前的相對速度——因為 RaiSim 是硬接觸模型,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">模擬裡沒有真實地面與腳之間的恢復係數(反彈)</mark>,實機高速著地容易不穩。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(k_{\text{contact}}\) is 1 only in <b>the step just before touchdown</b>. The contact-velocity term reduces foot-ground relative velocity before impact, because RaiSim uses a hard contact model <mark class="m-assume" data-t="ASSUMPTION/CLAIM">without the real restitution (bounce) between foot and ground</mark>, making high-speed touchdown unstable on hardware.</p>
+        <table>
+          <tr><th><span data-lang="zh">獎勵項</span><span data-lang="en">Term</span></th><th><span data-lang="zh">形式</span><span data-lang="en">Expression</span></th><th><span data-lang="zh">係數</span><span data-lang="en">Coef.</span></th></tr>
+          <tr><td><span data-lang="zh">線速度追蹤</span><span data-lang="en">Linear velocity</span></td><td>\(C_V\exp(-\|V^{\text{des}}_{xy}-V_{xy}\|^2)\)</td><td>6.0</td></tr>
+          <tr><td><span data-lang="zh">角速度追蹤</span><span data-lang="en">Angular velocity</span></td><td>\(C_{\dot\theta}\exp(-1.5(\dot\theta^{\text{des}}_z-\dot\theta_z)^2)\)</td><td>3.0</td></tr>
+          <tr><td><b><span data-lang="zh">著地速度</span><span data-lang="en">Contact velocity</span></b></td><td>\(C_{\text{contact}}k_{\text{contact}}\|V_{f,z,i}\|^2\)</td><td>−6.0</td></tr>
+          <tr><td><b><span data-lang="zh">步態</span><span data-lang="en">Gait</span></b></td><td><span data-lang="zh">見上式</span><span data-lang="en">see above</span></td><td>1.2</td></tr>
+          <tr><td><span data-lang="zh">腳滑</span><span data-lang="en">Foot slip</span></td><td>\(C_{\text{slip}}C_{f,i}\|V_{f,xy,i}\|^2\)</td><td>−0.16</td></tr>
+          <tr><td><span data-lang="zh">抬腳高度</span><span data-lang="en">Foot clearance</span></td><td>\(C_{\text{clr}}(\neg C_{f,i})({}^{w}p_{f,z,i}-{}^{w}p^{\text{des}}_{f,z})^2\|V_{f,xy,i}\|^{0.5}\)</td><td><span data-lang="zh">表中未列</span><span data-lang="en">not listed</span></td></tr>
+          <tr><td><span data-lang="zh">姿態</span><span data-lang="en">Orientation</span></td><td>\(C_{\text{ori}}\,\text{angle}(\phi_{\text{body},z},\phi_{\text{world},z})^2\)</td><td>−3.0</td></tr>
+          <tr><td><span data-lang="zh">關節扭矩</span><span data-lang="en">Joint torque</span></td><td>\(C_\tau\|\tau\|^2\)</td><td>\(-2\times10^{-4}\)</td></tr>
+          <tr><td><span data-lang="zh">關節位置 / 速度 / 加速度</span><span data-lang="en">Joint pos. / speed / accel.</span></td><td>\(C_q\|q_t-q_{\text{nom}}\|^2,\ C_{\dot q}\|\dot q_t\|^2,\ C_{\ddot q}\|\dot q_t-\dot q_{t-1}\|^2\)</td><td>\(-0.75,\ -3\times10^{-4},\ -6.7\times10^{-3}\)</td></tr>
+          <tr><td><span data-lang="zh">動作平滑 1 / 2</span><span data-lang="en">Action smoothness 1 / 2</span></td><td>\(C_{s1}\|q^{\text{des}}_t-q^{\text{des}}_{t-1}\|^2,\ C_{s2}\|q^{\text{des}}_t-2q^{\text{des}}_{t-1}+q^{\text{des}}_{t-2}\|^2\)</td><td>\(-2.5,\ -0.8\)</td></tr>
+          <tr><td><span data-lang="zh">機身晃動</span><span data-lang="en">Base motion</span></td><td>\(C_{\text{base}}(0.8V_z^2+0.2|\dot\theta_x|+0.2|\dot\theta_y|)\)</td><td>−4</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">訓練配方與「高速專用」技巧</span><span data-lang="en">Training recipe and speed-specific tricks</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.85">
+          <li data-lang="zh"><b>網路</b>:policy / value [256,128,64],estimator [256,128];RaiSim;400 個平行環境、每回合 4 秒、控制 100 Hz → 每次迭代 160,000 筆樣本;Threadripper PRO 5995WX + RTX 3080 Ti 約 <b>6 小時</b>。</li>
+          <li data-lang="en"><b>Networks</b>: policy / value [256,128,64], estimator [256,128]; RaiSim; 400 parallel envs, 4-s episodes, 100 Hz control → 160,000 samples per iteration; Threadripper PRO 5995WX + RTX 3080 Ti, about <b>6 hours</b>.</li>
+          <li data-lang="zh"><b>速度課程</b>:前進指令從 \(U(-0.3,1.5)\) m/s 逐步放寬到 \(U(-1.4,7.0)\) m/s(Fig.12 下圖)。</li>
+          <li data-lang="en"><b>Velocity curriculum</b>: forward command widened from \(U(-0.3,1.5)\) to \(U(-1.4,7.0)\) m/s (Fig. 12 bottom).</li>
+          <li data-lang="zh"><b>初始狀態</b>:25% 機率從上一回合的末狀態接續(學急加減速),且新舊指令差不超過 2 m/s;75% 從靜止開始、指令在第一秒內漸增——否則指令與現速差太大時,機器人會選擇<mark class="m-problem" data-t="PROBLEM/GAP">直接站著不動以免回合終止</mark>。</li>
+          <li data-lang="en"><b>Initial states</b>: with 25% probability start from the previous episode's final state (to learn abrupt speed changes), with the command change capped at 2 m/s; 75% start from standstill with the command ramped over the first second — otherwise, with a large command-speed gap, the robot <mark class="m-problem" data-t="PROBLEM/GAP">learns to stand still to avoid termination</mark>.</li>
+          <li data-lang="zh"><b>獎勵權重排程</b>:速度越快,扭矩 / 關節速度懲罰越大,機器人傾向放棄追蹤;因此<mark class="m-method" data-t="METHOD/IDEA">逐步調高線速度與角速度追蹤權重</mark>。</li>
+          <li data-lang="en"><b>Reward-weight schedule</b>: faster running incurs larger torque / joint-speed penalties and the robot tends to give up tracking, so the <mark class="m-method" data-t="METHOD/IDEA">linear and angular velocity weights are gradually increased</mark>.</li>
+          <li data-lang="zh"><b>Domain randomization</b>:機身質量、慣量、質心位置(難以鑑別的量)。</li>
+          <li data-lang="en"><b>Domain randomization</b>: body mass, inertia, and CoM position (quantities hard to identify).</li>
+          <li data-lang="zh"><b>輕量化足端</b>:分析模擬中奔跑的觸地/離地角,只保留必要的一段球面 → 小腿質量降為原本的 <mark class="m-result" data-t="RESULT/EVIDENCE">38.0%</mark>(313 g → 119 g)、俯仰慣量降為 37.4%。</li>
+          <li data-lang="en"><b>Lightweight foot</b>: from simulated attack / detach angles, keep only the needed patch of a sphere → calf mass down to <mark class="m-result" data-t="RESULT/EVIDENCE">38.0%</mark> of the original (313 g → 119 g), pitch inertia to 37.4%.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\tau,\ \omega\)</td><td><span data-lang="zh">馬達側(減速器之前)的扭矩與角速度;下標 \(m\) 為馬達空間、\(j\) 為關節空間。</span><span data-lang="en">Motor-side (before the reducer) torque and angular velocity; subscript \(m\) = motor space, \(j\) = joint space.</span></td></tr>
+          <tr><td>\(V_{\text{bus}}\)</td><td><span data-lang="zh">匯流排電壓;實機電池 20S2P 21700,充到 81 V(上限 84 V,留裕度給再生回灌電流)。</span><span data-lang="en">Bus voltage; the motor battery is a 20S2P 21700 pack charged to 81 V (max 84 V, leaving margin for regenerative current).</span></td></tr>
+          <tr><td>\(R,\ L\)</td><td><span data-lang="zh">繞組電阻、電感(\(L\) 項在準靜態假設下被丟掉)。</span><span data-lang="en">Winding resistance and inductance (the \(L\) term is dropped under the quasi-static assumption).</span></td></tr>
+          <tr><td>\(K_t,\ K_v\)</td><td><span data-lang="zh">扭矩常數(N·m/A)、角速度常數(反電動勢 \(=\omega/K_v\))。</span><span data-lang="en">Torque constant (N·m/A) and angular-velocity constant (back-EMF \(=\omega/K_v\)).</span></td></tr>
+          <tr><td>\(\tau_{\text{peak}}\)</td><td><span data-lang="zh">峰值扭矩:\(\tau\)–\(i\) 偏離線性 20% 處;是防過熱的建議值而非物理硬限。</span><span data-lang="en">Peak torque: where \(\tau\)–\(i\) departs 20% from linear; a thermal recommendation, not a hard physical limit.</span></td></tr>
+          <tr><td>\(G_{\mathrm{HFE}},G_{\mathrm{KFE}},A\)</td><td><span data-lang="zh">髖、膝減速比與耦合齒輪矩陣(關節速度 \(=A\times\) 馬達速度)。</span><span data-lang="en">Hip / knee reduction ratios and the coupled gearbox matrix (joint speed \(=A\times\) motor speed).</span></td></tr>
+          <tr><td>\(\bar\tau_m,\ \bar\tau_j\)</td><td><span data-lang="zh">裁切後(落在 MOR 內)的馬達扭矩,以及換回關節空間後實際施加的扭矩。</span><span data-lang="en">Clipped (inside-MOR) motor torque and the joint torque actually applied after mapping back.</span></td></tr>
+          <tr><td>\(C_{f,i}\)</td><td><span data-lang="zh">第 \(i\) 隻腳是否著地(1 = 著地);1–4 = RR、RL、FR、FL。</span><span data-lang="en">Whether foot \(i\) is in contact (1 = contact); 1–4 = RR, RL, FR, FL.</span></td></tr>
+          <tr><td>\(\Delta r_{\text{MOR}}\)</td><td><span data-lang="zh">無 MOR 訓練的策略:「無 MOR 評估」減「有 MOR 評估」的平均獎勵差。</span><span data-lang="en">For the policy trained without MOR: average reward evaluated without MOR minus evaluated with MOR.</span></td></tr>
+          <tr><td>\(\Delta r_{\text{sim-to-real}}\)</td><td><span data-lang="zh">同一策略模擬評估減實機評估的獎勵差(排除接觸相關項,體速用估測器輸出)。</span><span data-lang="en">Reward in simulation minus reward on hardware for the same policy (contact terms excluded; body velocity from the estimator).</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">策略照舊輸出關節角、PD 照舊算扭矩;只是在扭矩送進物理引擎前,先問一句「<b>以這顆馬達現在的轉速,電池電壓推得出這個扭矩嗎?</b>」推不出就裁到推得出的最大值。</span>
+        <span data-lang="en">The policy still outputs joint angles and PD still computes torque; but before torque enters the physics engine, ask: "<b>at this motor's current speed, can the battery voltage actually push this torque?</b>" If not, clip it to the most it can.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為什麼策略會學著「不越界」?</span><span data-lang="en">Why does the policy learn to stay inside?</span></span>
+        <span data-lang="zh">裁切後,越界指令與邊界上的指令產生<b>同樣的扭矩</b>、同樣的扭矩懲罰——策略本來對兩者無差別。打破平手的是<mark class="m-method" data-t="METHOD/IDEA">action smoothness 懲罰</mark>:要產生越界扭矩,關節角指令必須突然大跳,被罰得更重。Fig.11(b) 的長條圖:平滑懲罰約 −1.7(越界)vs −0.7(已裁切),扭矩懲罰兩者相同 <span class="add">[導讀補充:由圖讀值]</span>。作者也提到:沒有平滑懲罰訓練的策略上實機會振動。</span>
+        <span data-lang="en">After clipping, an out-of-region command and the boundary command produce <b>the same torque</b> and the same torque penalty — the policy is indifferent. The tie-breaker is the <mark class="m-method" data-t="METHOD/IDEA">action-smoothness penalty</mark>: producing an out-of-region torque requires a sudden jump in the joint-angle command, which is penalized harder. Fig. 11(b) bars: smoothness penalty about −1.7 (out-of-region) vs −0.7 (clipped), identical torque penalties [guide note: read off the plot]. The authors also note that a policy trained without the smoothness penalty vibrates on hardware.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意:動作到底是什麼?</span><span data-lang="en">Note: what is the action, exactly?</span></div>
+        <span data-lang="zh">Fig.5 圖說寫「動作以馬達扭矩表示」,但正文寫 actor 輸出<b>期望關節角</b>、經 PD 轉成扭矩。兩者應以正文為準:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">動作 = 關節角目標,馬達扭矩是 PD 之後的中間量</mark>。這也代表 PD 增益決定了「同一個動作在高速時會要求多大扭矩」。</span>
+        <span data-lang="en">The Fig. 5 caption says "the action was expressed in terms of motor torque," but the text says the actor outputs <b>desired joint positions</b>, converted to torque by PD. Go with the text: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">action = joint-angle targets; motor torque is an intermediate after PD</mark>. It also means the PD gains decide how much torque the same action demands at speed.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果:實機消融(Table II,跑步機最高速 ↑)</span><span data-lang="en">Main result: hardware ablation (Table II, best treadmill speed ↑)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">設定</span><span data-lang="en">Setting</span></th><th><span data-lang="zh">最高紀錄 (m/s)</span><span data-lang="en">Best record (m/s)</span></th><th><span data-lang="zh">相對完整方法</span><span data-lang="en">vs full method</span></th></tr>
+          <tr><td><span data-lang="zh">去掉步態獎勵(\(C_{\text{gait}}=0\))</span><span data-lang="en">Without gait reward (\(C_{\text{gait}}=0\))</span></td><td>6.0</td><td class="bad">−0.5</td></tr>
+          <tr><td><span data-lang="zh">換回原本圓柱足端</span><span data-lang="en">Original cylindrical foot</span></td><td>5.5</td><td class="bad">−1.0</td></tr>
+          <tr><td><span data-lang="zh">訓練時不做 MOR 裁切</span><span data-lang="en">No MOR clipping in training</span></td><td>4.5</td><td class="bad">−2.0</td></tr>
+          <tr><td class="win">Ours</td><td class="win">6.5</td><td class="win">—</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">協定:跑步機以 0.5 m/s 為間隔加速,<b>能在該速度維持 10 秒</b>即算成功。7 m/s 時機器人被往後推、腳跑出跑步機,判為失敗。三個因素中<mark class="m-result" data-t="RESULT/EVIDENCE">MOR 的影響最大(−2.0 m/s)</mark>。最高紀錄那次是從靜止 8 秒內加速到 6.5 m/s、在跑步機上待了 35 秒。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Protocol: treadmill speed stepped in 0.5 m/s increments; <b>holding a speed for 10 s</b> counts as success. At 7 m/s the robot was pushed back and its feet left the treadmill — a failure. Of the three factors, <mark class="m-result" data-t="RESULT/EVIDENCE">the MOR matters most (−2.0 m/s)</mark>. The record run accelerated from rest to 6.5 m/s in 8 s and stayed on the treadmill for 35 s.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">模擬與 sim-to-real 證據</span><span data-lang="en">Simulation and sim-to-real evidence</span></h3>
+        <p data-lang="zh"><b>模擬(Fig.7)</b>:把「無 MOR 訓練」的策略分別在「有 / 無 MOR」下評估(以 \(1\,\text{m/s}^2\) 從靜止加速、速度收斂後取 3 秒平均)。\(\Delta r_{\text{MOR}}\) 在 <mark class="m-result" data-t="RESULT/EVIDENCE">3.5 m/s 以下為 0</mark>,4 m/s 起上升,6.5 m/s 時約 0.15(含接觸項)/ 0.22(不含接觸項)<span class="add"><span data-lang="zh">[由圖讀值]</span><span data-lang="en">[read off plot]</span></span>。也就是說:這個策略在高速時<b>確實靠著不可行扭矩在跑</b>。</p>
+        <p data-lang="en"><b>Simulation (Fig. 7)</b>: evaluate the policy trained without MOR both with and without MOR (accelerating from rest at \(1\,\text{m/s}^2\), averaging 3 s after speed converges). \(\Delta r_{\text{MOR}}\) is <mark class="m-result" data-t="RESULT/EVIDENCE">zero below 3.5 m/s</mark>, rises from 4 m/s, and reaches about 0.15 (with contact terms) / 0.22 (without) at 6.5 m/s. That is: at speed this policy <b>really is running on infeasible torque</b>.</p>
+        <figure class="fig"><img src="figs/Shin2023/fig9_sim2real.png" alt="Figure 9 sim-to-real reward gap">
+          <figcaption data-lang="zh"><b>Fig.9</b> 實機 \(\Delta r_{\text{sim-to-real}}\)(兩個策略在模擬中都能跑 6.5 m/s)。看重點:<b>3.5 m/s 以前兩條線幾乎重疊</b>(差距約 0.1 以內);分岔要到 4.5–5 m/s 才明顯——無 MOR 策略(橘)持續上升並在 5 m/s 跌倒(×),有 MOR 策略(藍)在 4.5 m/s 附近持平後甚至下降。</figcaption>
+          <figcaption data-lang="en"><b>Fig.9</b> Hardware \(\Delta r_{\text{sim-to-real}}\) (both policies reach 6.5 m/s in simulation). Key point: <b>below 3.5 m/s the two curves nearly coincide</b> (within about 0.1); they diverge clearly only at 4.5–5 m/s — the no-MOR policy (orange) keeps rising and falls at 5 m/s (×), while the MOR policy (blue) plateaus near 4.5 m/s and even declines.</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">作者解讀:兩者整體都隨速度上升(高速時未建模動力學增加),但<mark class="m-result" data-t="RESULT/EVIDENCE">有 MOR 的策略在 3.5 m/s 後 gap 不再增加</mark>,「致動器限制讓模擬行為更像真實世界」。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The authors' reading: both grow with speed (more unmodelled dynamics at speed), but <mark class="m-result" data-t="RESULT/EVIDENCE">the MOR policy's gap stops growing after 3.5 m/s</mark> — "enforcing actuator limits makes simulated behavior resemble the real world."</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">極速下的 \(\tau\)–\(\omega\) 軌跡(Fig.8)</span><span data-lang="en">\(\tau\)–\(\omega\) trajectories at top speed (Fig. 8)</span></h3>
+        <figure class="fig"><img src="figs/Shin2023/fig8_tau_omega.png" alt="Figure 8 gait and torque-speed trajectories">
+          <figcaption data-lang="zh"><b>Fig.8</b> 6.5 m/s 下右後腿一個週期。(a) 四個階段快照;(b) 足端相對肩關節軌跡,週期 0.25 s,0.016 s 觸地、0.089 s 離地;(c) HFE / KFE 馬達的 \(\tau\)–\(\omega\) 軌跡:實線 = 實機、虛線 = 模擬(off/off、off/on、on/on)。要看的是<b>膝(KFE)</b>:紅虛線(無 MOR 訓練也無 MOR 評估)在 60–75 rad/s、30 Nm 附近<b>跑出 MOR</b>;實機軌跡則在橘圈(第二象限、站立初期的再生煞車)<b>貼著再生邊界的斜率走</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.8</b> One cycle of the rear-right leg at 6.5 m/s. (a) Snapshots of four phases; (b) foot trajectory relative to the shoulder, 0.25-s cycle, touchdown at 0.016 s, take-off at 0.089 s; (c) HFE / KFE motor \(\tau\)–\(\omega\) traces: solid = hardware, dashed = simulation (off/off, off/on, on/on). Look at the <b>knee (KFE)</b>: the red dashed trace (no MOR in training or evaluation) <b>leaves the MOR</b> around 60–75 rad/s at 30 Nm; the hardware trace, in the orange circle (quadrant II, regenerative braking early in stance), <b>follows the slope of the regenerative boundary</b>.</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">論文結論:實測馬達速度、扭矩與模擬相當,且實機確實用到了<mark class="m-result" data-t="RESULT/EVIDENCE">比第一象限更寬的第二象限再生區</mark>。CoT(以機械功率 + 焦耳熱計,15 步)= <b>0.29</b>。<span class="add">[導讀補充]</span> 由 (b) 算,站立相約 0.073 s、duty factor 約 0.29、步頻 4 Hz、每步約 1.6 m——是一個有長騰空的 flying trot。另外 KFE 軌跡大量堆在約 +85 rad/s、扭矩接近 0 的那個角點:擺動期膝馬達其實是被<b>反電動勢速度上限</b>卡住,而不是扭矩上限。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The paper concludes that measured motor speed and torque are comparable to simulation, and that the hardware really uses the <mark class="m-result" data-t="RESULT/EVIDENCE">quadrant-II regenerative region, wider than quadrant I</mark>. CoT (mechanical power + Joule heating, 15 strides) = <b>0.29</b>. <span class="add">[guide note]</span> From (b): stance about 0.073 s, duty factor about 0.29, 4 Hz stride, about 1.6 m per stride — a flying trot with long flight. Also, the KFE traces pile up at the vertex near +85 rad/s with near-zero torque: during swing the knee motor is capped by the <b>back-EMF speed limit</b>, not the torque limit.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">訓練過程中的違規比例(Fig.12)</span><span data-lang="en">Violation ratio during training (Fig. 12)</span></h3>
+        <figure class="fig"><img src="figs/Shin2023/fig12_violation.png" alt="Figure 12 violation ratio">
+          <figcaption data-lang="zh"><b>Fig.12</b> 上:每次迭代 160,000 個扭矩指令中「違反 MOR」的比例(4 個 seed 的平均 ± 標準差);下:最大前進指令速度的課程。看兩件事:(1) 到 7000 次迭代時,<b>有 MOR 約 0.02、無 MOR 約 0.07 且仍在上升</b>;(2) 但在約 2700–4900 次迭代、指令速度 4–6.5 m/s 之間,<b>有 MOR 的版本違規比例反而飆到約 0.2、變異極大</b>,之後才陡降——論文沒有討論這段。</figcaption>
+          <figcaption data-lang="en"><b>Fig.12</b> Top: share of the 160,000 torque commands per iteration that violate the MOR (mean ± std over 4 seeds); bottom: the max forward-command curriculum. Notice two things: (1) at 7000 iterations, <b>with MOR about 0.02, without MOR about 0.07 and still rising</b>; (2) but between roughly iterations 2700–4900, as commands climb from 4 to 6.5 m/s, <b>the MOR version spikes to about 0.2 with huge variance</b> before dropping sharply — the paper does not discuss this phase.</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">作者據此主張 <mark class="m-result" data-t="RESULT/EVIDENCE">MOR 約束幫助網路避免輸出不可行指令</mark>。<span class="add">[導讀補充]</span> 一個合理解讀:裁切讓「越界」在短期內沒有代價,策略在指令提速期大量推擠邊界;等平滑懲罰的累積效應與「越界也沒多拿到扭矩」被學到,才收斂到邊界內。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">From this the authors claim <mark class="m-result" data-t="RESULT/EVIDENCE">the MOR constraint helps the network avoid infeasible commands</mark>. <span class="add">[guide note]</span> One plausible reading: clipping makes overshooting free in the short run, so while commands ramp up the policy pushes hard against the boundary; only once the cumulative smoothness penalty and the "no extra torque for overshooting" lesson are learned does it settle inside.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">戶外與其他數字</span><span data-lang="en">Outdoor and other numbers</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">實驗</span><span data-lang="en">Experiment</span></th><th><span data-lang="zh">結果</span><span data-lang="en">Result</span></th></tr>
+          <tr><td><span data-lang="zh">跑步機極速</span><span data-lang="en">Treadmill top speed</span></td><td class="win"><span data-lang="zh">6.5 m/s(Fig.1:0.229 s 跑過 1.5 m,240 fps 影片)</span><span data-lang="en">6.5 m/s (Fig. 1: 1.5 m in 0.229 s, 240 fps video)</span></td></tr>
+          <tr><td><span data-lang="zh">田徑場 100 m(PU 跑道)</span><span data-lang="en">100 m on athletics track (PU)</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">19.87 s,9 次全數未跌倒</mark>;6.7 秒內從 1.2 加速到 5.9 m/s(速度為估測器輸出)</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">19.87 s, 9/9 attempts without falling</mark>; 1.2 to 5.9 m/s in 6.7 s (speed from the estimator)</span></td></tr>
+          <tr><td><span data-lang="zh">能耗</span><span data-lang="en">Energetics</span></td><td><span data-lang="zh">6.5 m/s 時 CoT = 0.29</span><span data-lang="en">CoT = 0.29 at 6.5 m/s</span></td></tr>
+          <tr><td><span data-lang="zh">訓練成本</span><span data-lang="en">Training cost</span></td><td><span data-lang="zh">約 6 小時(單 GPU);策略 100 Hz;驅動器 EtherCAT 2 kHz</span><span data-lang="en">about 6 h (single GPU); policy 100 Hz; drives over EtherCAT at 2 kHz</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">戶外比跑步機慢,作者推測是 PU 跑道較軟。<span class="add">[導讀補充]</span> 100 m / 19.87 s 的平均速度約 5.0 m/s(含加速段)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Outdoors is slower than on the treadmill; the authors suspect the softer PU track. <span class="add">[guide note]</span> 100 m in 19.87 s averages about 5.0 m/s (including acceleration).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融解讀</span><span data-lang="en">Reading the ablations</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">拿掉什麼</span><span data-lang="en">Removed</span></th><th><span data-lang="zh">代價</span><span data-lang="en">Cost</span></th><th><span data-lang="zh">證明了什麼</span><span data-lang="en">What it shows</span></th></tr>
+          <tr><td><span data-lang="zh">MOR 裁切</span><span data-lang="en">MOR clipping</span></td><td class="bad">6.5 → 4.5</td><td><span data-lang="zh">高速時,模擬允許的不可行扭矩是<mark class="m-result" data-t="RESULT/EVIDENCE">主要失效原因</mark>;與 Fig.7(4 m/s 起違規)、Fig.9(5 m/s 跌倒)一致。</span><span data-lang="en">At speed, simulator-permitted infeasible torque is <mark class="m-result" data-t="RESULT/EVIDENCE">the main failure cause</mark>; consistent with Fig. 7 (violations from 4 m/s) and Fig. 9 (fall at 5 m/s).</span></td></tr>
+          <tr><td><span data-lang="zh">輕量足端</span><span data-lang="en">Lightweight foot</span></td><td class="bad">6.5 → 5.5</td><td><span data-lang="zh">遠端慣量對高速擺腿很關鍵——又一個「致動器能力有限」的面向(擺動期膝馬達受速度上限卡住)。</span><span data-lang="en">Distal inertia matters for fast leg swing — another face of limited actuator capability (the swing-phase knee is speed-limited).</span></td></tr>
+          <tr><td><span data-lang="zh">步態獎勵</span><span data-lang="en">Gait reward</span></td><td class="bad">6.5 → 6.0</td><td><span data-lang="zh">把負荷均分到四腿能延後「第一顆馬達飽和」。</span><span data-lang="en">Spreading load across legs delays the first motor saturation.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">三項改動疊起來從 4.5 推到 6.5 m/s,其中 <b>MOR 一項就值 2 m/s</b>;而且模擬中的 \(\tau\)–\(\omega\) 軌跡與實機相符、會用到再生區——證明「把馬達包絡線放進模擬」在極速區是必要的。</span>
+        <span data-lang="en">Stacked, the three changes take the robot from 4.5 to 6.5 m/s, with <b>the MOR alone worth 2 m/s</b>; simulated \(\tau\)–\(\omega\) traces match hardware and use the regenerative region — evidence that putting the motor envelope into simulation is necessary near top speed.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">實驗證明了 / 沒證明</span><span data-lang="en">What it does / does not prove</span></div>
+        <span data-lang="zh"><b>證明了</b>:在 Hound 上,不做 MOR 的策略在 4.5–5 m/s 失效,做了可到 6.5 m/s。<b>沒證明</b>:<mark class="m-limit" data-t="LIMITATION/FUTURE">MOR 比其他致動器建模法更好</mark>(沒有 actuator network、懲罰項、約束 RL 等對照)、長時間運轉下仍成立(沒有熱模型)、或結論對其他機器人成立;每個速度只有一次 10 秒試驗,沒有誤差棒。</span>
+        <span data-lang="en"><b>Proves</b>: on Hound, a no-MOR policy fails at 4.5–5 m/s while the MOR policy reaches 6.5 m/s. <b>Does not prove</b>: <mark class="m-limit" data-t="LIMITATION/FUTURE">that the MOR beats other actuator models</mark> (no actuator-network, penalty, or constrained-RL baselines), that it holds under long operation (no thermal model), or that it transfers to other robots; each speed is one 10-s trial, with no error bars.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">基準線</span><span data-lang="en">baselines</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">極速條件</span><span data-lang="en">speed conditions</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>致動器模型的保真度有限</b>:MOR 建立在<mark class="m-assume" data-t="ASSUMPTION/CLAIM">準靜態(忽略 \(L\,di/dt\))</mark>的 DC 馬達模型上,但 flying trot 的站立相只有約 73 ms,扭矩在數十毫秒內大幅上升。電壓不等式用的是<b>線性 \(R\tau/K_t\)</b>,可作者自己也說大扭矩時鐵芯飽和、同扭矩要更多電流——那 \(iR\) 壓降應更大,真實邊界在高扭矩區比 MOR <b>更緊</b>。<span class="add">[導讀補充]</span> 其他未提的項目:PMSM 在 FOC 下的電壓利用率與 \(\omega L i\) 交叉耦合、field weakening、驅動器電流上限、摩擦。\(R,K_t,K_v,V_{\text{bus}}\) 的實際數值與來源(規格書或實測)也未報告,MOR 邊界本身<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有在 dynamometer 上驗證</mark>。</li>
+          <li data-lang="en"><b>Limited actuator-model fidelity</b>: the MOR rests on a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">quasi-static (no \(L\,di/dt\))</mark> DC-motor model, yet the flying trot's stance lasts about 73 ms with torque rising sharply within tens of ms. The voltage inequality uses a <b>linear \(R\tau/K_t\)</b>, even though the authors themselves say core saturation means more current per unit torque at high load — so the \(iR\) drop is larger and the real boundary is <b>tighter</b> than the MOR at high torque. [guide note] Other omissions: PMSM voltage utilization under FOC and \(\omega L i\) cross-coupling, field weakening, drive current limits, friction. The actual values and provenance (spec sheet vs. identified) of \(R,K_t,K_v,V_{\text{bus}}\) are not reported, and the MOR boundary itself <mark class="m-limit" data-t="LIMITATION/FUTURE">is not validated on a dynamometer</mark>.</li>
+          <li data-lang="zh"><b>熱限制被忽略</b>:\(\tau_{\text{peak}}\) 按作者自己的說法是「防繞組過熱的建議值」,卻被當成<b>與時間無關的硬限</b>。沒有連續扭矩額定、沒有熱模型;而繞組電阻隨溫度上升(銅約每度 0.4%),會讓斜邊往內縮、MOR 隨運轉時間變小。實驗最長只有 35 秒(跑步機)與約 20 秒(100 m),<mark class="m-limit" data-t="LIMITATION/FUTURE">長時間高速是否仍可行未知</mark>。</li>
+          <li data-lang="en"><b>Thermal limits ignored</b>: by the authors' own account \(\tau_{\text{peak}}\) is "a recommended value to keep the windings from burning out," yet it is used as a <b>time-independent hard cap</b>. No continuous-torque rating, no thermal model; winding resistance rises with temperature (copper, roughly 0.4% per degree), pulling the slanted edge inward so the MOR shrinks as the motor heats. The longest runs are 35 s (treadmill) and about 20 s (100 m); <mark class="m-limit" data-t="LIMITATION/FUTURE">sustained high-speed feasibility is unknown</mark>.</li>
+          <li data-lang="zh"><b>電池當成理想電壓源</b>:\(V_{\text{bus}}\) 是常數(且數值未報告),但 20S 鋰電池從 84 V 到放電末端電壓差距很大,大電流時還有內阻壓降;作者為了讓再生電流回灌,刻意只充到 81 V。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">電池電壓跌落與 SoC 對 MOR 的影響完全沒建模</mark>——同一策略在電量低時可能就跑不到 6.5 m/s。</li>
+          <li data-lang="en"><b>Battery treated as an ideal source</b>: \(V_{\text{bus}}\) is a constant (value unreported), but a 20S Li-ion pack spans a wide range from 84 V down to its discharge floor and sags under high current through internal resistance; the authors deliberately charged only to 81 V to accept regenerative current. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Voltage sag and state-of-charge effects on the MOR are not modelled at all</mark> — the same policy may fail to reach 6.5 m/s on a depleted pack.</li>
+          <li data-lang="zh"><b>這不是約束 RL,而避開效果靠的是平滑懲罰</b>:裁切屬於環境動力學,沒有約束滿足保證。Fig.12 中有 MOR 的版本在訓練中段違規比例<mark class="m-limit" data-t="LIMITATION/FUTURE">高達約 0.2、變異極大</mark>,文中卻只強調「最終較低」;最終值(0.02 vs 0.07)的比較也發生在兩個策略面對的動力學不同的情況下。</li>
+          <li data-lang="en"><b>Not constrained RL, and the avoidance comes from the smoothness penalty</b>: clipping is part of the environment dynamics, with no satisfaction guarantee. In Fig. 12 the MOR version's mid-training violation ratio <mark class="m-limit" data-t="LIMITATION/FUTURE">reaches about 0.2 with huge variance</mark>, yet the text only stresses that it "ends lower"; and the final comparison (0.02 vs 0.07) is between policies facing different dynamics.</li>
+          <li data-lang="zh"><b>基準線只有自家消融</b>:沒有與 actuator network(Hwangbo 2019)、「把 URDF 矩形縮緊」、「對違反 MOR 加獎勵懲罰」、約束 RL(如作者引用、列為未來工作的 Kim et al. 2023)或把 \(V_{\text{bus}}\) 隨機化等方案比較。所以能說「MOR 比什麼都不做好」,<mark class="m-limit" data-t="LIMITATION/FUTURE">不能說它是最好的致動器建模法</mark>。</li>
+          <li data-lang="en"><b>Only in-house ablations as baselines</b>: no comparison with an actuator network (Hwangbo 2019), a tightened URDF rectangle, a reward penalty on MOR violation, constrained RL (e.g. Kim et al. 2023, which the authors cite as future work), or randomizing \(V_{\text{bus}}\). So the paper shows "MOR beats doing nothing," <mark class="m-limit" data-t="LIMITATION/FUTURE">not that it is the best way to model actuators</mark>.</li>
+          <li data-lang="zh"><b>統計力薄弱、指標有循環性</b>:Table II 每個速度只看一次 10 秒是否成功、間隔 0.5 m/s、沒有多 seed 或重複試驗;Fig.9 兩條線在 5 m/s 前差距約 0.1,沒有誤差棒,真正的訊號只是「無 MOR 在 5 m/s 跌倒」。\(\Delta r_{\text{sim-to-real}}\) 的實機獎勵用的是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">估測器預測的體速</mark>,而估測器本身就在模擬中訓練、高速時誤差未量化。另外「何時開始違反 MOR」在文中有 3、3.5、4 m/s 三種說法。</li>
+          <li data-lang="en"><b>Weak statistics, circular metrics</b>: Table II judges each speed by a single 10-s success at 0.5 m/s granularity, with no multiple seeds or repeated trials; in Fig. 9 the curves differ by about 0.1 below 5 m/s with no error bars, so the real signal is just "the no-MOR policy falls at 5 m/s." The hardware reward in \(\Delta r_{\text{sim-to-real}}\) uses <mark class="m-assume" data-t="ASSUMPTION/CLAIM">estimator-predicted body velocity</mark>, from an estimator trained in simulation whose high-speed error is unquantified. And the onset of MOR violation is variously stated as 3, 3.5, and 4 m/s.</li>
+          <li data-lang="zh"><b>極速宣稱的條件</b>:6.5 m/s 是<b>跑步機</b>速度、成功標準是維持 10 秒;戶外只有估測器說的 5.9 m/s、100 m 平均約 5.0 m/s。「最快的電動四足」比較對象 MIT Cheetah 2(6.4 m/s)是不同體型、不同控制法,沒有做 Froude 數之類的尺度正規化;且這是 2023 年 12 月時點的宣稱。</li>
+          <li data-lang="en"><b>Conditions behind the speed claim</b>: 6.5 m/s is a <b>treadmill</b> speed with a 10-s hold criterion; outdoors there is only the estimator-reported 5.9 m/s, and the 100 m averages about 5.0 m/s. The "fastest electric quadruped" comparison to MIT Cheetah 2 (6.4 m/s) spans different body sizes and control methods, without size normalization such as Froude number; and it is a claim as of December 2023.</li>
+          <li data-lang="zh"><b>寫作上的不一致</b> <span class="add">[導讀補充]</span>:(i) Eq.(4) 的 \(A^{-\top}\) 與虛功原理不符(見 METHOD);(ii) Fig.5 圖說說動作是馬達扭矩,正文說是關節角;(iii) Fig.11(b) 圖說寫「藍線被平滑懲罰罰得更多」,但長條圖顯示紅色(MOR off)更負。單看都不致命,但對想復現的人是陷阱。</li>
+          <li data-lang="en"><b>Inconsistencies in the write-up</b> [guide note]: (i) Eq. (4)'s \(A^{-\top}\) contradicts virtual work (see METHOD); (ii) the Fig. 5 caption says the action is motor torque, the text says joint angles; (iii) the Fig. 11(b) caption says "the blue line is more penalized by action smoothness," but the bars show red (MOR off) more negative. None is fatal alone, but each is a trap for anyone reproducing the work.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>模型保真度</b>:若在 MOR 的電壓不等式中改用實測的非線性 \(i(\tau)\),並加回 \(L\,di/dt\),6.5 m/s 時的邊界會內縮多少?實機軌跡還在邊界內嗎?</li>
+          <li data-lang="en"><b>Model fidelity</b>: if the voltage inequality used the measured nonlinear \(i(\tau)\) and restored \(L\,di/dt\), how far would the boundary shrink at 6.5 m/s? Would the hardware traces still lie inside?</li>
+          <li data-lang="zh"><b>熱與電池</b>:連續跑 5 分鐘、或電池剩 30% 時,極速還剩多少?把 \(V_{\text{bus}}\) 與 \(R\) 隨溫度 / SoC 隨機化,是否比固定 MOR 更穩?</li>
+          <li data-lang="en"><b>Thermal and battery</b>: after 5 minutes of continuous running, or at 30% charge, what top speed remains? Would randomizing \(V_{\text{bus}}\) and temperature-dependent \(R\) beat a fixed MOR?</li>
+          <li data-lang="zh"><b>裁切 vs 約束 RL</b>:同樣的 MOR,用違規懲罰、constraints-as-terminations 或 Lagrangian PPO 處理,誰的極速與 sim-to-real 最好?Fig.12 中段的違規尖峰在這些方法下還會出現嗎?</li>
+          <li data-lang="en"><b>Clipping vs constrained RL</b>: with the same MOR handled by a violation penalty, constraints-as-terminations, or Lagrangian PPO, which yields the best top speed and sim-to-real? Does the mid-training spike in Fig. 12 still appear?</li>
+          <li data-lang="zh"><b>解析模型 vs 學習模型</b>:一顆用 Hound 實測資料訓練的 actuator network 能否同時抓到 MOR、飽和與動態效應?MOR 的價值是否在於「不需要資料」而非「更準」?</li>
+          <li data-lang="en"><b>Analytic vs learned model</b>: could an actuator network trained on Hound data capture the MOR, saturation, and dynamic effects together? Is the MOR's value "no data needed" rather than "more accurate"?</li>
+          <li data-lang="zh"><b>可遷移性</b>:對 Mini Cheetah 這類齒輪比低、MOR 斜邊位置不同的機器人,MOR 從哪個速度開始重要?「4.5 → 6.5」有多少是 Hound 專屬的齒輪比設計帶來的?</li>
+          <li data-lang="en"><b>Transferability</b>: for low-ratio robots such as Mini Cheetah, whose slanted edge sits elsewhere, from what speed does the MOR start to matter? How much of "4.5 → 6.5" is specific to Hound's gear-ratio design?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把結果讀成「MOR 解決了高速 sim-to-real」。Fig.9 中有 MOR 的 \(\Delta r_{\text{sim-to-real}}\) 仍高達約 1.9–2.3,而 Fig.7 中 MOR 造成的獎勵差最多約 0.22——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">MOR 只解釋了整體 gap 的一小部分</mark> <span class="add">[導讀補充:由圖讀值比較]</span>。正確理解是:它移除了一個<b>會讓機器人跌倒的特定失效模式</b>,其餘未建模動力學(作者提到地面軟硬等)依然存在。</span>
+        <span data-lang="en">Reading the result as "the MOR solves high-speed sim-to-real." In Fig. 9 the MOR policy's \(\Delta r_{\text{sim-to-real}}\) is still about 1.9–2.3, while the MOR-induced reward gap in Fig. 7 tops out near 0.22 — <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the MOR accounts for only a small share of the overall gap</mark> [guide note: comparison of plot readings]. The right reading: it removes <b>one specific failure mode that makes the robot fall</b>; other unmodelled dynamics (the authors mention ground compliance, among others) remain.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">方法極便宜(幾條不等式、無需資料)、物理意義清楚,而且作者<b>真的去看了實機的 \(\tau\)–\(\omega\) 軌跡</b>並與模擬疊圖,還正確處理了常被忽略的再生象限與耦合齒輪。對一篇工程短文,證據鏈(Fig.7 → Fig.9 → Table II)是連貫的。</span>
+        <span data-lang="en">The method is extremely cheap (a few inequalities, no data), physically transparent, and the authors <b>actually inspected hardware \(\tau\)–\(\omega\) traces</b> and overlaid them on simulation, while correctly handling the often-ignored regenerative quadrants and the coupled gearing. For a short engineering paper, the evidence chain (Fig. 7 → Fig. 9 → Table II) is coherent.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>任何要逼近硬體極限的 RL 任務,先把馬達包絡線放進模擬</b>(跳躍、衝刺、負重、急停)。最低成本版本就是本文的六邊形 MOR:查規格書、寫成速度相關的扭矩上下限,在扭矩送進物理引擎前裁切。</li>
+          <li data-lang="en"><b>For any RL task that approaches hardware limits, put the motor envelope into simulation first</b> (jumps, sprints, payloads, hard stops). The cheapest version is this paper's hexagonal MOR: read the spec sheet, write speed-dependent torque bounds, and clip before torque enters the physics engine.</li>
+          <li data-lang="zh"><b>在馬達空間做,而且四個象限都要</b>:耦合 / 共軸傳動要用齒輪矩陣換算;不要用對稱的第一象限梯形近似,否則會<b>低估煞車能力</b>,策略學不到高速著地時該用的再生煞車。</li>
+          <li data-lang="en"><b>Do it in motor space, and in all four quadrants</b>: coupled / coaxial transmissions need the gearbox matrix; don't use a symmetric first-quadrant trapezoid, or you will <b>underestimate braking capability</b> and the policy will not learn the regenerative braking that high-speed touchdown needs.</li>
+          <li data-lang="zh"><b>裁切要搭配「平滑性」類的懲罰</b>,否則策略對越界無感;若需要更強的保證,改用約束 RL(違規率成為可追蹤的指標)。</li>
+          <li data-lang="en"><b>Pair clipping with a smoothness-type penalty</b>, or the policy is indifferent to overshooting; if you need stronger guarantees, switch to constrained RL (where the violation rate becomes a tracked quantity).</li>
+          <li data-lang="zh"><b>進一步可做</b> <span class="add">[導讀補充]</span>:把 \(V_{\text{bus}}\)、\(R(T)\) 隨機化或建成狀態;加一階熱模型讓 \(\tau_{\text{peak}}\) 隨時間衰減;用 dynamometer 驗證 MOR;把觀測加入電池電壓,讓策略知道「今天能出多少力」。</li>
+          <li data-lang="en"><b>Next steps</b> [guide note]: randomize or track \(V_{\text{bus}}\) and \(R(T)\) as state; add a first-order thermal model so \(\tau_{\text{peak}}\) decays over time; validate the MOR on a dynamometer; feed battery voltage to the policy so it knows how much force it has today.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「URDF 矩形關節限制在高速時會造成 sim-to-real 失效」</span><span data-lang="en">"Rectangular URDF joint limits break sim-to-real at high speed"</span></td><td><span data-lang="zh">Fig.7 / Fig.9 / Table II:無 MOR 4.5 m/s vs 有 MOR 6.5 m/s。</span><span data-lang="en">Fig. 7 / Fig. 9 / Table II: 4.5 m/s without MOR vs 6.5 m/s with it.</span></td></tr>
+          <tr><td><span data-lang="zh">「規格書等級的致動器模型就足以進 RL 訓練」</span><span data-lang="en">"A spec-sheet-level actuator model suffices inside RL training"</span></td><td><span data-lang="zh">Eq.(1)–(2) 的 MOR 與裁切流程(Fig.5)。</span><span data-lang="en">The Eq. (1)–(2) MOR and the clipping pipeline (Fig. 5).</span></td></tr>
+          <tr><td><span data-lang="zh">「高速四足會用到再生(第二 / 四象限)區」</span><span data-lang="en">"High-speed quadrupeds use the regenerative (II / IV) quadrants"</span></td><td><span data-lang="zh">Fig.8(c) 實機 KFE 軌跡沿第二象限邊界。</span><span data-lang="en">Fig. 8(c): hardware KFE trace riding the quadrant-II boundary.</span></td></tr>
+          <tr><td><span data-lang="zh">「RL 控制的電動四足極速」</span><span data-lang="en">"Top speed of RL-controlled electric quadrupeds"</span></td><td><span data-lang="zh">6.5 m/s 跑步機(注意條件,見 CRITIQUE)。</span><span data-lang="en">6.5 m/s on a treadmill (mind the conditions; see CRITIQUE).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">這篇把「馬達轉越快、扭矩越少」這條電機學常識,用幾條線性不等式正確地(含再生象限與耦合齒輪)搬進 RL 模擬器,讓 KAIST Hound 從 4.5 跑到 6.5 m/s。它不是約束 RL、也沒有熱與電池模型,但它清楚示範了:<b>當你要榨乾硬體時,致動器物理比演算法更重要</b>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">This paper carries the electrical-machines commonplace "the faster a motor spins, the less torque it has" into an RL simulator as a few linear inequalities — correctly, including regenerative quadrants and coupled gearing — and takes KAIST Hound from 4.5 to 6.5 m/s. It is not constrained RL and has no thermal or battery model, but it shows clearly that <b>when you want to wring out the hardware, actuator physics matters more than the algorithm</b>.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀 / 關係</span><span data-lang="en">Further reading / relations</span></span>
+        <span data-lang="zh"><b>前作</b>:Shin et al. ICRA 2022(Hound 設計,以 MINLP 最佳化齒輪比)——本文用的正是該設計決定出的馬達包絡線。<b>同一路線</b>:Hwangbo et al. 2019(actuator network)、Chignoli et al. 2021(MPC 中的 \(\tau\)–\(\omega\) 約束)。<b>RL 基底</b>:Ji et al. 2022(policy + estimator 同步訓練)。<b>約束 RL</b>:Kim et al. 2023。<b>庫中相關導讀</b>:RMA、Walk These Ways、DreamWaQ、HIMLoco、Stanford Doggo。</span>
+        <span data-lang="en"><b>Predecessor</b>: Shin et al. ICRA 2022 (Hound design, MINLP-optimized gear ratios) — this paper uses the motor envelope that design fixed. <b>Same line</b>: Hwangbo et al. 2019 (actuator network), Chignoli et al. 2021 (\(\tau\)–\(\omega\) constraints in MPC). <b>RL base</b>: Ji et al. 2022 (concurrent policy + estimator training). <b>Constrained RL</b>: Kim et al. 2023. <b>Related guides in this library</b>: RMA, Walk These Ways, DreamWaQ, HIMLoco, Stanford Doggo.</span>
+        <div class="chips" style="margin-top:8px">
+          <span class="chip">KAIST Hound (ICRA 2022)</span>
+          <span class="chip">Actuator network</span>
+          <span class="chip">MIT Cheetah 2</span>
+          <span class="chip">Concurrent estimator</span>
+          <span class="chip">Constrained RL</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論或由圖讀值,其餘事實與數據均出自原論文(arXiv v1)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences or plot readings; all other facts and figures come from the original paper (arXiv v1).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Shin et al. 2023 (Actuator-Constrained RL, KAIST Hound) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Actuator-constrained RL reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

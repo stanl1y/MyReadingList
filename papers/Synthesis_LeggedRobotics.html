@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>論文地圖 · Legged-Robots 書單</title>
+<meta name="paper-meta" content='{"kind":"synthesis","title":"Paper Map · The Legged-Robots Reading List","authors":"singhaman1750/Legged-Robots · ~150 entries","year":"2007–2026","venue":"論文地圖 / Paper Map","tags":["Synthesis","Legged Robotics"],"tldr":"把 singhaman1750/Legged-Robots 整份書單(控制、機器人設計、致動器、協同設計共約 150 篇)整理成一張可搜尋的雙語地圖:每篇一句話定位、開放取用狀態、與本站導讀的連結,外加四條閱讀路線。","tldr_en":"The whole singhaman1750/Legged-Robots list (~150 entries across control, robot design, actuators and co-design) organized into one searchable bilingual map: a one-line positioning per paper, access status, links to guides in this library, and four reading routes."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --gen:#a0522d;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0;background:var(--paper)}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50; box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.16em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28); border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0; font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 16px; cursor:pointer; letter-spacing:.06em; border-bottom:3px solid transparent; transition:.15s; font-family:inherit}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+  nav .cnt{display:inline-block; margin-left:6px; font-size:10px; background:rgba(255,255,255,.12); color:#dfe5ef; border-radius:9px; padding:1px 7px}
+  nav button.on .cnt{background:var(--gold); color:var(--navy)}
+  .toolbar{display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 26px; background:#243a63; font-size:12.5px; color:#dfe5ef}
+  .toolbar input[type=search]{flex:1 1 260px; max-width:420px; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; border-radius:18px; padding:7px 14px; font-size:13px; font-family:inherit; outline:none}
+  .toolbar input[type=search]::placeholder{color:#9fb0cc}
+  .toolbar label{display:flex; align-items:center; gap:6px; cursor:pointer; white-space:nowrap}
+  .toolbar .hits{color:var(--gold-soft); font-family:ui-monospace,Menlo,monospace; font-size:11.5px}
+  .toolbar .keys{color:#9fb0cc; font-size:11px}
+
+  main{max-width:1240px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px; flex-wrap:wrap}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 340px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 10px} .hbar,.toolbar{padding-left:16px;padding-right:16px} main{padding:22px 16px 80px}}
+  @media(max-width:620px){header{position:static} .legend{display:none} .toolbar .keys{font-size:10.5px} .sectitle{font-size:24px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card h4{margin:16px 0 8px; font-size:15px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em; padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none; border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method); border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4; padding:1px 7px; border-radius:5px; margin-left:4px; white-space:nowrap}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold); border-radius:8px; padding:6px 14px; margin:10px 0; overflow-x:auto}
+  .katex{font-size:1.02em}
+
+  /* blog-structure diagram */
+  .map{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:6px 0 4px}
+  .map .box{border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:#fbf8f0}
+  .map .box b{display:block; font-size:14px; margin-bottom:4px}
+  .map .box small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .map .hw{border-top:4px solid #8a6d2f} .map .ct{border-top:4px solid var(--c-method)}
+  .map .cd{grid-column:1 / span 2; border-top:4px solid var(--gen); text-align:center}
+  .map .ar{grid-column:1 / span 2; text-align:center; color:var(--gold); font-weight:700; font-size:13px; margin:-6px 0}
+  @media(max-width:620px){.map{grid-template-columns:1fr} .map .cd,.map .ar{grid-column:auto}}
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:4px 0 6px}
+  .stat{background:#fbf8f0; border:1px solid var(--line); border-radius:12px; padding:12px; text-align:center}
+  .stat .v{font-size:26px; font-weight:700; color:var(--navy); font-family:Georgia,serif; line-height:1.2}
+  .stat .l{font-size:11px; color:var(--muted); letter-spacing:.04em}
+  @media(max-width:620px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+  /* catalog tables */
+  .subhead{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:26px 0 8px}
+  .subhead h3{margin:0; font-size:18px}
+  .subhead .src{font-size:11px; color:var(--muted)}
+  .subhead .shown{font-size:11px; color:var(--gen); font-family:ui-monospace,Menlo,monospace}
+  .ctable{overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--card)}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  .ctable table{min-width:820px}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:10.5px; letter-spacing:.06em; border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase; vertical-align:bottom; background:#fbf8f0}
+  td{padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.num{color:var(--muted); font-family:ui-monospace,Menlo,monospace; font-size:11px; width:30px}
+  td.ttl{width:31%}
+  td.ttl .nm{font-weight:700; color:var(--gen); display:block; font-size:12.5px}
+  td.ttl a{color:var(--ink); text-decoration:none; border-bottom:1px dotted #b9ab86}
+  td.ttl a:hover{color:var(--c-method); border-bottom-color:var(--c-method)}
+  td.ttl .alt{font-size:11px; margin-left:4px}
+  td.yr{font-family:ui-monospace,Menlo,monospace; font-size:12px; white-space:nowrap; width:52px}
+  td.vn{font-size:12px; color:#4a4e55; width:120px}
+  td.vn .x{display:inline-block; margin-top:3px; font-size:10.5px; background:#efe9da; border-radius:8px; padding:0 6px; color:#5a5238}
+  td.ac{width:58px; text-align:center}
+  .ab{display:inline-block; font-family:ui-monospace,Menlo,monospace; font-size:9.5px; letter-spacing:.06em; font-weight:700; padding:2px 6px; border-radius:6px; white-space:nowrap; border:1px solid}
+  .ab-oa{color:#1f7a45; background:#e6f5ec; border-color:#b6e0c6}
+  .ab-pay{color:#7a5a1f; background:#f6eedd; border-color:#e3d2ad}
+  .ab-web{color:#2f5aa8; background:#e8effb; border-color:#c3d3f0}
+  .ab-thesis{color:#6b3fa0; background:#f1e9fa; border-color:#d9c6ef}
+  .ab-patent{color:#555; background:#eee; border-color:#d5d5d5}
+  .ab-blog{color:#8a4b2a; background:#f8ebe3; border-color:#e9cdbd}
+  td.ttl .alt{font-size:9.5px; font-family:ui-monospace,Menlo,monospace; font-weight:700; color:#1f7a45; background:#e6f5ec; border:1px solid #b6e0c6; border-radius:6px; padding:1px 5px; text-decoration:none; margin-left:6px; white-space:nowrap}
+  td.sm{font-size:12.8px; line-height:1.6}
+  td.gd{width:84px; text-align:center}
+  .gbtn{display:inline-block; background:var(--navy); color:var(--gold); text-decoration:none; font-size:11.5px; padding:4px 10px; border-radius:14px; white-space:nowrap}
+  .gbtn:hover{background:var(--gold); color:var(--navy)}
+  tr.grp td{background:#f3eddd; color:#5a5238; font-size:11px; font-weight:700; letter-spacing:.08em; padding:6px 10px; text-transform:uppercase}
+  tr.guided td.num{color:var(--gen); font-weight:700}
+  tr.hide{display:none}
+  .empty{padding:14px; color:var(--muted); font-size:13px; text-align:center}
+
+  .steps{counter-reset:st; list-style:none; padding:0; margin:0}
+  .steps li{position:relative; padding:10px 0 10px 46px; border-bottom:1px dashed var(--line)}
+  .steps li:last-child{border:none}
+  .steps li:before{counter-increment:st; content:counter(st); position:absolute; left:0; top:10px; width:30px; height:30px; background:var(--navy); color:var(--gold); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700}
+  .steps a{color:var(--c-method); text-decoration:none; font-weight:600}
+  .steps a:hover{text-decoration:underline}
+  .steps .why{display:block; color:var(--muted); font-size:12.5px}
+  .route{border-top:4px solid var(--gold)}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">PAPER MAP · 論文地圖</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 OVERVIEW</button>
+    <button data-p="1">02 CONTROL<span class="cnt" data-tab="1"></span></button>
+    <button data-p="2">03 ROBOT DESIGN<span class="cnt" data-tab="2"></span></button>
+    <button data-p="3">04 ACTUATORS<span class="cnt" data-tab="3"></span></button>
+    <button data-p="4">05 CO-DESIGN<span class="cnt" data-tab="4"></span></button>
+    <button data-p="5">06 ROADMAP</button>
+  </nav>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="搜尋標題、機器人、期刊、關鍵字… / search title, robot, venue, keyword…">
+    <label><input type="checkbox" id="onlyg"><span data-lang="zh">只看有導讀的 📖</span><span data-lang="en">Guided only 📖</span></label>
+    <span class="hits" id="hits"></span>
+    <span class="keys">📖 <span data-lang="zh">本站導讀</span><span data-lang="en">guide here</span> · <span class="ab ab-oa">FREE</span> <span data-lang="zh">免費全文</span><span data-lang="en">free full text</span> · <span class="ab ab-pay">PUB</span> <span data-lang="zh">出版商(可能需訂閱)</span><span data-lang="en">publisher (may be paywalled)</span> · <span class="ab ab-web">WEB</span> · <span class="ab ab-thesis">THESIS</span> · <span class="ab ab-patent">PATENT</span> · <span class="ab ab-blog">BLOG</span></span>
+  </div>
+</header>
+
+<main>
+<!-- ============ 01 OVERVIEW ============ -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">One Reading List, Four Territories</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px"><a href="https://github.com/singhaman1750/Legged-Robots" target="_blank" rel="noopener">singhaman1750/Legged-Robots</a> 是一份足式機器人的研究書單,約 150 條,橫跨四塊領土:<b>控制</b>(模型派 vs 學習派)、<b>機器人本體設計</b>(人形與四足平台)、<b>致動器與傳動</b>(行星、擺線、SEA、雙馬達)、<b>協同設計</b>(硬體與控制一起最佳化)。這頁把<b>每一條</b>都放進可搜尋的雙語表格,附一句話定位與取得方式;其中 <b><span id="st-guided2"></span> 篇</b>在本站有完整六分頁導讀(📖)。讀這份書單最重要的一件事:<mark class="m-method" data-t="METHOD/IDEA">硬體決定了控制能用什麼假設,控制又反過來決定硬體該怎麼設計</mark>——四塊領土其實是一個迴圈。</p>
+        <p class="serif" data-lang="en" style="font-size:17px"><a href="https://github.com/singhaman1750/Legged-Robots" target="_blank" rel="noopener">singhaman1750/Legged-Robots</a> is a legged-robotics reading list of about 150 entries across four territories: <b>control</b> (model-based vs learning), <b>robot design</b> (humanoid and quadruped platforms), <b>actuators and transmissions</b> (planetary, cycloidal, SEA, dual-motor) and <b>co-design</b> (optimizing hardware and control together). This page puts <b>every</b> entry into a searchable bilingual table with a one-line positioning and how to get it; <b><span id="st-guided3"></span></b> of them have a full six-tab guide in this library (📖). The one idea to carry through the list: <mark class="m-method" data-t="METHOD/IDEA">hardware fixes which assumptions control can make, and control in turn dictates how the hardware should be designed</mark> — the four territories form a loop.</p>
+      </div>
+
+      <div class="card">
+        <h3 data-lang="zh">書單的結構(以及它們怎麼互相牽動)</h3><h3 data-lang="en">How the list is structured (and how the parts pull on each other)</h3>
+        <div class="map">
+          <div class="box hw"><b><a href="#" data-go="3">04 ACTUATORS</a> → <a href="#" data-go="2">03 ROBOT DESIGN</a></b>
+            <small data-lang="zh">馬達、減速器、彈性元件 → 組成整台人形/四足。減速比、反驅性、頻寬決定了「力能不能被量到、模型準不準」。</small>
+            <small data-lang="en">Motors, reducers, elastic elements → whole humanoids and quadrupeds. Gear ratio, backdrivability and bandwidth decide whether force can be sensed and how accurate the model is.</small></div>
+          <div class="box ct"><b><a href="#" data-go="1">02 CONTROL</a></b>
+            <small data-lang="zh">模型派(MPC + 全身 QP)假設簡化模型夠準;學習派(模擬中 RL → 真機)假設模擬夠像。兩派都吃硬體的透明度。</small>
+            <small data-lang="en">Model-based (MPC + whole-body QP) assumes the reduced model is accurate; learning (RL in sim → real) assumes the simulator is faithful. Both depend on hardware transparency.</small></div>
+          <div class="ar">⇅</div>
+          <div class="box cd"><b><a href="#" data-go="4">05 CO-DESIGN</a></b>
+            <small data-lang="zh">不再「先設計硬體、再調控制器」,而是把設計參數放進最佳化迴圈:外層改身體、內層求控制器(軌跡最佳化或 RL)。</small>
+            <small data-lang="en">Instead of designing hardware first and tuning control after, design parameters go into the optimization loop: the outer loop changes the body, the inner loop solves for the controller (trajectory optimization or RL).</small></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 data-lang="zh">數字一覽</h3><h3 data-lang="en">At a glance</h3>
+        <div class="stats">
+          <div class="stat"><div class="v" id="st-all">–</div><div class="l"><span data-lang="zh">不重複條目</span><span data-lang="en">unique entries</span></div></div>
+          <div class="stat"><div class="v" id="st-guided">–</div><div class="l"><span data-lang="zh">本站完整導讀 📖</span><span data-lang="en">full guides here 📖</span></div></div>
+          <div class="stat"><div class="v" id="st-oa">–</div><div class="l"><span data-lang="zh">可免費取得全文</span><span data-lang="en">free full text</span></div></div>
+          <div class="stat"><div class="v" id="st-span">–</div><div class="l"><span data-lang="zh">年代跨度</span><span data-lang="en">year span</span></div></div>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin-top:10px" data-lang="zh">同一篇出現在多個分類時(例如 Berkeley Humanoid Lite 同時在擺線、人形、測功機三處),表格各列一次,但上方統計只算一次。</p>
+        <p style="font-size:13px;color:var(--muted);margin-top:10px" data-lang="en">When one paper is listed under several topics (e.g., Berkeley Humanoid Lite under cycloidal gearboxes, humanoids and dyno testing), each table shows it, but the counts above count it once.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note"><span class="tag">HOW TO USE</span>
+        <p data-lang="zh" style="margin:0">上方搜尋框會同時過濾四個分頁,分頁標籤上的數字是命中數;勾「只看有導讀」就只剩 📖 條目。論文標題連到書單給的原始連結,FREE ↗ 小圖示則是另找到的免費版本。</p>
+        <p data-lang="en" style="margin:0">The search box filters all four catalog tabs at once; the number on each tab is its hit count. Tick Guided only to keep just the 📖 rows. Titles link to the list's original URL; a small FREE ↗ marks an open-access copy found separately.</p>
+      </div>
+      <div class="note pitfall"><div class="ttl">⚠ <span data-lang="zh">誠信說明</span><span data-lang="en">Integrity note</span></div>
+        <p data-lang="zh" style="margin:0">📖 條目的一句話來自完整精讀;其餘條目的定位是依標題、摘要與書單分類整理 <span class="add">導讀補充</span>,沒有逐篇精讀,不含未經查證的數字。年份與出處以書單為準。</p>
+        <p data-lang="en" style="margin:0">One-liners for 📖 rows come from full reads; the rest are written from titles, abstracts and the list's categories <span class="add">guide note</span>, not full reads, and contain no unverified numbers. Years and venues follow the list.</p>
+      </div>
+      <div class="note insight"><span class="tag">NOT COVERED</span>
+        <p data-lang="zh" style="margin:0">書單的 Hands-on(YouTube、GitHub、課程、書)、Community(實驗室、會議、公司)與 Hardware(購買零件)三區不是論文,這裡不收,請直接看原書單。</p>
+        <p data-lang="en" style="margin:0">The list's Hands-on (YouTube, GitHub, lectures, books), Community (labs, venues, companies) and Hardware (buying parts) sections are not papers and are left out; see the original list.</p>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 02 CONTROL ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Control: Two Worldviews, Converging</h2></div>
+  <div class="cols">
+    <div class="card">
+      <p data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">足式控制的核心難題:接觸是離散的(腳要嘛著地要嘛沒有)、動力學高度非線性、決策要在毫秒級完成。</mark>書單的 17 篇分成兩條主線。<b>模型派</b>把機器人簡化成單剛體,<mark class="m-method" data-t="METHOD/IDEA">線上解 MPC 規劃地面反作用力,再交給全身 QP 追蹤</mark>(Convex MPC → WBIC → RF-MPC);它<mark class="m-assume" data-t="ASSUMPTION/CLAIM">假設簡化模型夠準、接觸時序可事先排好</mark>。<b>學習派</b>在模擬器裡大規模 RL,零樣本轉到真機(RMA → Walk These Ways → DreamWaQ → HIMLoco);它<mark class="m-assume" data-t="ASSUMPTION/CLAIM">假設模擬 + 隨機化涵蓋了真實世界</mark>,並把「看不到的環境」交給從本體感覺歷史估測的 latent。</p>
+      <p data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">The core difficulty of legged control: contact is discrete (a foot is either down or not), the dynamics are highly nonlinear, and decisions must be made within milliseconds.</mark> The list's 17 control papers split into two main lines. <b>Model-based</b> reduces the robot to a single rigid body, <mark class="m-method" data-t="METHOD/IDEA">solves an MPC online to plan ground-reaction forces, and hands them to a whole-body QP for tracking</mark> (Convex MPC → WBIC → RF-MPC); it <mark class="m-assume" data-t="ASSUMPTION/CLAIM">assumes the reduced model is accurate and the contact schedule can be fixed in advance</mark>. <b>Learning-based</b> runs massive RL in simulation and transfers zero-shot (RMA → Walk These Ways → DreamWaQ → HIMLoco); it <mark class="m-assume" data-t="ASSUMPTION/CLAIM">assumes simulation plus randomization covers reality</mark> and hands the unseen environment to a latent estimated from proprioceptive history.</p>
+      <p data-lang="zh">兩派正在互相借東西:<mark class="m-method" data-t="METHOD/IDEA">Feedback MPC 把 MPC 的回授策略直接放進力矩層、PIP-Loco 把 RL 學到的模型與價值函數接回線上規劃</mark>;學習派也從「估環境參數」(RMA)走向「估機器人自己的反應」(HIMLoco)。<mark class="m-limit" data-t="LIMITATION/FUTURE">書單的人形控制只有一篇(Bi-Level Imitation,且只在模擬),是最明顯的缺口。</mark><span class="add">導讀補充</span></p>
+      <p data-lang="en">The two camps are borrowing from each other: <mark class="m-method" data-t="METHOD/IDEA">Feedback MPC puts the MPC's feedback policy straight into the torque loop, and PIP-Loco plugs RL-learned models and value functions back into online planning</mark>; the learning line itself moved from estimating environment parameters (RMA) to estimating the robot's own response (HIMLoco). <mark class="m-limit" data-t="LIMITATION/FUTURE">Humanoid control has just one entry on the list (Bi-Level Imitation, simulation only) — the clearest gap.</mark><span class="add">guide note</span></p>
+    </div>
+    <aside>
+      <div class="note"><span class="tag">READ IN THIS ORDER</span>
+        <p data-lang="zh" style="margin:0"><b>模型派:</b>Wensing 綜述 → Convex MPC → WBIC → RF-MPC。<br><b>學習派:</b>Motion Imitation → RMA → Walk These Ways → DreamWaQ → HIMLoco → PIP-Loco。<br><b>延伸行為:</b>DribbleBot、Tencent Lifelike、Bi-Level Imitation。完整路線見 <a href="#" data-go="5">06 ROADMAP</a>。</p>
+        <p data-lang="en" style="margin:0"><b>Model-based:</b> Wensing survey → Convex MPC → WBIC → RF-MPC.<br><b>Learning:</b> Motion Imitation → RMA → Walk These Ways → DreamWaQ → HIMLoco → PIP-Loco.<br><b>Beyond walking:</b> DribbleBot, Tencent Lifelike, Bi-Level Imitation. Full routes in <a href="#" data-go="5">06 ROADMAP</a>.</p>
+      </div>
+      <div class="note pitfall"><div class="ttl">⚠ <span data-lang="zh">分類小陷阱</span><span data-lang="en">A filing quirk</span></div>
+        <p data-lang="zh" style="margin:0">書單把 Motion Imitation 放在模型派底下,但它其實是 RL 模仿學習;本頁保留書單原分類,只在一句話裡註明。</p>
+        <p data-lang="en" style="margin:0">The list files Motion Imitation under model-based control, but it is RL imitation learning; this page keeps the list's filing and notes it in the one-liner.</p>
+      </div>
+    </aside>
+  </div>
+  <div class="subhead"><h3 data-lang="zh">Model-based 控制:四足</h3><h3 data-lang="en">Model-based control: quadrupeds</h3><span class="shown" data-for="ctl-mb"></span></div>
+  <div class="ctable ptable" data-sec="ctl-mb"></div>
+  <div class="subhead"><h3 data-lang="zh">Learning-based 控制:四足</h3><h3 data-lang="en">Learning-based control: quadrupeds</h3><span class="shown" data-for="ctl-rl"></span></div>
+  <div class="ctable ptable" data-sec="ctl-rl"></div>
+  <div class="subhead"><h3 data-lang="zh">四足的有趣行為(行走之外)</h3><h3 data-lang="en">Interesting behaviors in quadrupeds (beyond walking)</h3><span class="shown" data-for="ctl-beh"></span></div>
+  <div class="ctable ptable" data-sec="ctl-beh"></div>
+  <div class="subhead"><h3 data-lang="zh">Learning-based 控制:人形</h3><h3 data-lang="en">Learning-based control: humanoids</h3><span class="shown" data-for="ctl-hum"></span></div>
+  <div class="ctable ptable" data-sec="ctl-hum"></div>
+</section>
+
+<!-- ============ 03 ROBOT DESIGN ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Robot Design: Platforms Through the Years</h2></div>
+  <div class="cols">
+    <div class="card">
+      <p data-lang="zh"><b>人形(22 台)</b>大致有三個世代 <span class="add">導讀補充</span>:<mark class="m-problem" data-t="PROBLEM/GAP">2009–2019 是大型研究/救災人形</mark>(LOLA、COMAN、TORO、JAXON、WALK-MAN、DRC-HUBO+、HRP-5P),重點是功率、剛性與 DRC 等級的任務;<mark class="m-method" data-t="METHOD/IDEA">2021–2023 轉向動態與本體感知致動器</mark>(Tello、MIT Humanoid);<mark class="m-result" data-t="RESULT/EVIDENCE">2024–2025 爆發一波開源、低成本、「為學習而設計」的平台</mark>(Berkeley Humanoid、Berkeley Humanoid Lite、ToddlerBot、AGILOped、PANDORA、ARTEMIS)。</p>
+      <p data-lang="en"><b>Humanoids (22)</b> fall roughly into three generations <span class="add">guide note</span>: <mark class="m-problem" data-t="PROBLEM/GAP">2009–2019 large research and disaster-response humanoids</mark> (LOLA, COMAN, TORO, JAXON, WALK-MAN, DRC-HUBO+, HRP-5P), focused on power, stiffness and DRC-class tasks; <mark class="m-method" data-t="METHOD/IDEA">2021–2023 a turn to dynamic motion and proprioceptive actuators</mark> (Tello, MIT Humanoid); <mark class="m-result" data-t="RESULT/EVIDENCE">2024–2025 a burst of open-source, low-cost, learning-ready platforms</mark> (Berkeley Humanoid, Berkeley Humanoid Lite, ToddlerBot, AGILOped, PANDORA, ARTEMIS).</p>
+      <p data-lang="zh"><b>四足(26 篇)</b>書單按驅動方式與重量分表:液壓(HyQ 系列,45–91 kg)→ 電動小型(Minitaur、Stanford Doggo、Solo、Stoch,2–9 kg)→ Mini Cheetah 級(9–13 kg)→ 中型(StarlETH/ANYmal 的 SEA 路線、MIT Cheetah 的本體感知路線)→ 大型高負載(Cheetah 3、Tachyon、HOUND、Kirin、Barry、RAIBO2)。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">讀這區時,把每台都問一句:它的腿用什麼傳動、減速比多少?</mark>答案通常解釋了它的控制方式(見 <a href="#" data-go="3">04 ACTUATORS</a>)。</p>
+      <p data-lang="en"><b>Quadrupeds (26)</b> are tabled by actuation and mass: hydraulic (the HyQ line, 45–91 kg) → small electric (Minitaur, Stanford Doggo, Solo, Stoch, 2–9 kg) → Mini Cheetah class (9–13 kg) → mid-size (the SEA route of StarlETH/ANYmal, the proprioceptive route of MIT Cheetah) → large high-payload (Cheetah 3, Tachyon, HOUND, Kirin, Barry, RAIBO2). <mark class="m-assume" data-t="ASSUMPTION/CLAIM">For each robot ask one question: what transmission drives the legs, and at what gear ratio?</mark> The answer usually explains its control approach (see <a href="#" data-go="3">04 ACTUATORS</a>).</p>
+    </div>
+    <aside>
+      <div class="note"><span class="tag">START HERE</span>
+        <p data-lang="zh" style="margin:0">只讀一篇硬體設計:<b>MIT Cheetah 設計原則(2013)</b>。想動手做:<b>Stanford Doggo</b> 📖 → <b>Berkeley Humanoid Lite</b> 📖。想了解「為 RL 設計硬體」:<b>Berkeley Humanoid</b> 📖。</p>
+        <p data-lang="en" style="margin:0">One hardware-design paper only: <b>MIT Cheetah design principles (2013)</b>. Want to build: <b>Stanford Doggo</b> 📖 → <b>Berkeley Humanoid Lite</b> 📖. Hardware designed for RL: <b>Berkeley Humanoid</b> 📖.</p>
+      </div>
+      <div class="note pitfall"><div class="ttl">⚠ <span data-lang="zh">取得難度</span><span data-lang="en">Access</span></div>
+        <p data-lang="zh" style="margin:0">這區大多是 IEEE / Elsevier / SAGE 期刊與會議(PUB),免費版本常在作者或學校典藏庫;MIT 的論文多半能在 DSpace@MIT 找到。</p>
+        <p data-lang="en" style="margin:0">Most of this section is IEEE / Elsevier / SAGE (PUB); free versions often live on author pages or institutional repositories — MIT papers are usually on DSpace@MIT.</p>
+      </div>
+    </aside>
+  </div>
+  <div class="subhead"><h3 data-lang="zh">人形機器人設計</h3><h3 data-lang="en">Humanoid robot design</h3><span class="shown" data-for="des-hum"></span></div>
+  <div class="ctable ptable" data-sec="des-hum"></div>
+  <div class="subhead"><h3 data-lang="zh">四足機器人設計(依驅動方式與重量)</h3><h3 data-lang="en">Quadruped robot design (by actuation and mass)</h3><span class="shown" data-for="des-quad"></span></div>
+  <div class="ctable ptable" data-sec="des-quad"></div>
+  <div class="subhead"><h3 data-lang="zh">足式機器人設計原則</h3><h3 data-lang="en">Design principles for legged robots</h3><span class="shown" data-for="des-pr"></span></div>
+  <div class="ctable ptable" data-sec="des-pr"></div>
+  <div class="subhead"><h3 data-lang="zh">設計專利</h3><h3 data-lang="en">Design patents</h3><span class="shown" data-for="des-pat"></span></div>
+  <div class="ctable ptable" data-sec="des-pat"></div>
+</section>
+
+<!-- ============ 04 ACTUATORS ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Actuators: The Gear-Ratio Trade-off</h2></div>
+  <div class="cols">
+    <div class="card">
+      <p data-lang="zh">致動器區的 40 多條,幾乎都在回答同一個取捨 <span class="add">導讀補充</span>:馬達本身力矩小、轉速高,所以要減速。減速比 \(N\) 放大輸出力矩,但也把馬達轉子慣量以 \(N^2\) 放大到關節端:</p>
+      <p data-lang="en">The 40-odd actuator entries nearly all answer one trade-off <span class="add">guide note</span>: a motor has low torque and high speed, so it needs a reduction. A gear ratio \(N\) amplifies output torque, but it also amplifies the rotor inertia seen at the joint by \(N^2\):</p>
+      <div class="eq">$$\tau_{\text{out}} = \eta\, N\, K_t\, i, \qquad J_{\text{refl}} = N^2 J_{\text{rotor}}, \qquad P_{\text{Joule}} = i^2 R = \frac{\tau_m^2}{K_m^2},\quad K_m=\frac{K_t}{\sqrt{R}}$$</div>
+      <p data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">高減速比 = 力矩大但難以反驅、撞擊時傷齒輪、力只能靠額外感測器量</mark>;<mark class="m-method" data-t="METHOD/IDEA">低減速比的準直驅(QDD,約 6:1 單級行星,Mini Cheetah 路線)讓馬達電流本身就是力矩感測器(\(\tau \approx N K_t i\))</mark>,這正是凸 MPC 與 sim-to-real RL 都仰賴的「透明」硬體。其餘路線各解決 QDD 的一個弱點:<b>擺線</b>單級就有高減速比、可 3D 列印,但要處理背隙;<b>SEA</b> 用彈簧吸收衝擊、以形變量力;<b>雙馬達/變速</b>讓一顆致動器有「高速」與「大力矩」兩個工作點;<b>致動器建模</b>則把力矩-轉速限制帶進控制器與 RL。</p>
+      <p data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">A high ratio means big torque but poor backdrivability, gear damage on impact, and force that needs extra sensors</mark>; <mark class="m-method" data-t="METHOD/IDEA">a low-ratio quasi-direct drive (QDD, about 6:1 single-stage planetary, the Mini Cheetah route) turns motor current itself into a torque sensor (\(\tau \approx N K_t i\))</mark> — the transparent hardware both convex MPC and sim-to-real RL rely on. The other routes each patch one QDD weakness: <b>cycloidal</b> gets a high single-stage ratio and is 3D-printable but must fight backlash; <b>SEA</b> absorbs impacts with a spring and measures force by its deflection; <b>dual-motor / variable transmissions</b> give one actuator both a high-speed and a high-torque operating point; <b>actuator modeling</b> brings torque-speed limits into controllers and RL.</p>
+    </div>
+    <aside>
+      <div class="note"><span class="tag">SYMBOLS</span>
+        <p data-lang="zh" style="margin:0">\(N\) 減速比 · \(\eta\) 傳動效率 · \(K_t\) 力矩常數 · \(i\) 電流 · \(R\) 繞組電阻 · \(K_m\) 馬達常數(每單位發熱能給多少力矩,選馬達時最重要的單一指標)。</p>
+        <p data-lang="en" style="margin:0">\(N\) gear ratio · \(\eta\) transmission efficiency · \(K_t\) torque constant · \(i\) current · \(R\) winding resistance · \(K_m\) motor constant (torque per unit of heat — the single most useful number when picking a motor).</p>
+      </div>
+      <div class="note insight"><span class="tag">HANDS-ON</span>
+        <p data-lang="zh" style="margin:0">想自己量致動器:先讀 Ben Katz 的測功機文章與 Dynos for Dummies,再看 Berkeley Humanoid Lite 📖 怎麼做耐久與特性測試。</p>
+        <p data-lang="en" style="margin:0">To characterize your own actuator: read Ben Katz's dyno posts and Dynos for Dummies, then see how Berkeley Humanoid Lite 📖 runs its durability and characterization tests.</p>
+      </div>
+    </aside>
+  </div>
+  <div class="subhead"><h3 data-lang="zh">行星減速器</h3><h3 data-lang="en">Planetary gearboxes</h3><span class="shown" data-for="act-plan"></span></div>
+  <div class="ctable ptable" data-sec="act-plan"></div>
+  <div class="subhead"><h3 data-lang="zh">擺線減速器</h3><h3 data-lang="en">Cycloidal gearboxes</h3><span class="shown" data-for="act-cyc"></span></div>
+  <div class="ctable ptable" data-sec="act-cyc"></div>
+  <div class="subhead"><h3 data-lang="zh">串聯彈性致動器(SEA)</h3><h3 data-lang="en">Series elastic actuators (SEA)</h3><span class="shown" data-for="act-sea"></span></div>
+  <div class="ctable ptable" data-sec="act-sea"></div>
+  <div class="subhead"><h3 data-lang="zh">雙馬達致動器與變速傳動</h3><h3 data-lang="en">Dual-motor actuators and variable transmissions</h3><span class="shown" data-for="act-dual"></span></div>
+  <div class="ctable ptable" data-sec="act-dual"></div>
+  <div class="subhead"><h3 data-lang="zh">致動器動態建模</h3><h3 data-lang="en">Modelling actuator dynamics</h3><span class="shown" data-for="act-model"></span></div>
+  <div class="ctable ptable" data-sec="act-model"></div>
+  <div class="subhead"><h3 data-lang="zh">馬達理論與測功機(非論文資源)</h3><h3 data-lang="en">Motor theory and dyno testing (non-paper resources)</h3><span class="shown" data-for="act-motor"></span></div>
+  <div class="ctable ptable" data-sec="act-motor"></div>
+</section>
+
+<!-- ============ 05 CO-DESIGN ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Co-Design: Optimizing the Body and the Brain Together</h2></div>
+  <div class="cols">
+    <div class="card">
+      <p data-lang="zh">協同設計是書單最大、也最新的一區(45 篇,超過一半是 2024 年以後)。共同的數學形狀是一個巢狀最佳化 <span class="add">導讀補充</span>:</p>
+      <p data-lang="en">Co-design is the list's largest and newest section (45 entries, more than half from 2024 on). They share one mathematical shape, a nested optimization <span class="add">guide note</span>:</p>
+      <div class="eq">$$d^\star = \arg\max_{d \in \mathcal{D}} \; J\big(d,\ \pi^\star(d)\big), \qquad \pi^\star(d) = \arg\max_{\pi} J(d, \pi)$$</div>
+      <p data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">難處在內層:每評估一個設計 \(d\),都要重新求一次控制器 \(\pi^\star(d)\),非常昂貴。</mark>書單的分類其實就是「怎麼攤提這個成本」的不同答案:<mark class="m-method" data-t="METHOD/IDEA">模型派用軌跡最佳化/最佳控制求內層,外層用梯度、ADMM 或隨機規劃</mark>(Dinev 2022、Robust Co-Design、Vitruvio);<mark class="m-method" data-t="METHOD/IDEA">RL 派讓一個「知道設計」的策略同時適用許多設計</mark>(Meta-RL design、PEA co-design、Morphological pretraining),或乾脆把「改設計」變成策略的動作(Transform2Act、Hardware as Policy);2025–2026 則出現代理模型、演化 + RL、LLM/Transformer 生成設計。</p>
+      <p data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">The hard part is the inner loop: every candidate design \(d\) needs its own controller \(\pi^\star(d)\), which is expensive.</mark> The list's categories are really different answers to how to amortize that cost: <mark class="m-method" data-t="METHOD/IDEA">model-based work solves the inner loop with trajectory optimization / optimal control and the outer loop with gradients, ADMM or stochastic programming</mark> (Dinev 2022, Robust Co-Design, Vitruvio); <mark class="m-method" data-t="METHOD/IDEA">RL work trains one design-aware policy that serves many designs</mark> (Meta-RL design, PEA co-design, morphological pretraining), or turns changing the design into a policy action (Transform2Act, Hardware as Policy); 2025–2026 adds surrogates, evolution plus RL, and LLM/Transformer design generators.</p>
+      <p data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">最大的缺口:多數工作只在模擬中驗證,真的把最佳化出來的設計做成硬體、再證明它更好的論文很少。</mark></p>
+      <p data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">The biggest gap: most work is validated only in simulation; papers that actually build the optimized design and show it is better on hardware are rare.</mark></p>
+    </div>
+    <aside>
+      <div class="note"><span class="tag">READ IN THIS ORDER</span>
+        <p data-lang="zh" style="margin:0">Embodied Co-Design 綜述 📖(地圖)→ Dinev 2022 📖(模型派代表)→ Transform2Act 📖(設計即策略)→ PEA co-design 📖(RL + 真實硬體元件)。</p>
+        <p data-lang="en" style="margin:0">Embodied Co-Design survey 📖 (the map) → Dinev 2022 📖 (model-based exemplar) → Transform2Act 📖 (design as policy) → PEA co-design 📖 (RL plus a real hardware component).</p>
+      </div>
+      <div class="note"><span class="tag">SYMBOLS</span>
+        <p data-lang="zh" style="margin:0">\(d\) 設計參數(連桿長度、減速比、彈簧剛度、拓撲…)· \(\mathcal{D}\) 可行設計空間 · \(\pi\) 控制器/策略 · \(J\) 任務表現(速度、能耗、穩健度)。</p>
+        <p data-lang="en" style="margin:0">\(d\) design parameters (link lengths, gear ratios, spring stiffness, topology, …) · \(\mathcal{D}\) feasible design space · \(\pi\) controller / policy · \(J\) task performance (speed, energy, robustness).</p>
+      </div>
+    </aside>
+  </div>
+  <div class="subhead"><h3 data-lang="zh">綜述</h3><h3 data-lang="en">Surveys</h3><span class="shown" data-for="cd-surv"></span></div>
+  <div class="ctable ptable" data-sec="cd-surv"></div>
+  <div class="subhead"><h3 data-lang="zh">四足 · 模型式控制</h3><h3 data-lang="en">Quadruped · model-based control</h3><span class="shown" data-for="cd-qmb"></span></div>
+  <div class="ctable ptable" data-sec="cd-qmb"></div>
+  <div class="subhead"><h3 data-lang="zh">四足 · 強化學習</h3><h3 data-lang="en">Quadruped · reinforcement learning</h3><span class="shown" data-for="cd-qrl"></span></div>
+  <div class="ctable ptable" data-sec="cd-qrl"></div>
+  <div class="subhead"><h3 data-lang="zh">雙足/人形 · 模型式控制</h3><h3 data-lang="en">Biped and humanoid · model-based control</h3><span class="shown" data-for="cd-bmb"></span></div>
+  <div class="ctable ptable" data-sec="cd-bmb"></div>
+  <div class="subhead"><h3 data-lang="zh">雙足/人形 · 強化學習</h3><h3 data-lang="en">Biped and humanoid · reinforcement learning</h3><span class="shown" data-for="cd-brl"></span></div>
+  <div class="ctable ptable" data-sec="cd-brl"></div>
+  <div class="subhead"><h3 data-lang="zh">單腿跳躍</h3><h3 data-lang="en">Monoped jumping</h3><span class="shown" data-for="cd-mono"></span></div>
+  <div class="ctable ptable" data-sec="cd-mono"></div>
+  <div class="subhead"><h3 data-lang="zh">RL 設計生成與神經設計策略</h3><h3 data-lang="en">RL-based design generation and neural design policies</h3><span class="shown" data-for="cd-gen"></span></div>
+  <div class="ctable ptable" data-sec="cd-gen"></div>
+  <div class="subhead"><h3 data-lang="zh">其他學習式與通用方法</h3><h3 data-lang="en">Other learning-based and general methods</h3><span class="shown" data-for="cd-other"></span></div>
+  <div class="ctable ptable" data-sec="cd-other"></div>
+</section>
+
+<!-- ============ 06 ROADMAP ============ -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Roadmap: Four Ways Through the List</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card route">
+        <h3 data-lang="zh">路線 A · 我想做 RL 運動控制</h3><h3 data-lang="en">Route A · I want to do RL locomotion</h3>
+        <ol class="steps">
+          <li><a href="Peng2020_MotionImitation.html">Motion Imitation</a> <span class="why" data-lang="zh">sim-to-real RL 的基本配方:參考動作 + 動態隨機化 + 真機適應。</span><span class="why" data-lang="en">The basic sim-to-real RL recipe: reference motion + dynamics randomization + on-robot adaptation.</span></li>
+          <li><a href="Kumar2021_RMA.html">RMA</a> → <a href="Nahrendra2023_DreamWaQ.html">DreamWaQ</a> → <a href="Long2024_HIMLoco.html">HIMLoco</a> <span class="why" data-lang="zh">「看不到的環境」怎麼估:特權參數蒸餾 → 非對稱 critic + VAE → 估機器人自己的反應。</span><span class="why" data-lang="en">How to estimate what you cannot see: privileged-parameter distillation → asymmetric critic + VAE → estimating the robot's own response.</span></li>
+          <li><a href="Margolis2022_WalkTheseWays.html">Walk These Ways</a> → <a href="Ji2023_DribbleBot.html">DribbleBot</a> <span class="why" data-lang="zh">同一實驗室:從「一條策略多種步態」到「用腿操作物體」。</span><span class="why" data-lang="en">Same lab: from one policy with many gaits to manipulating objects with the legs.</span></li>
+          <li><a href="Han2024_LifelikeAgility.html">Tencent Lifelike</a> · <a href="Zhao2024_BiLevelImitation.html">Bi-Level Imitation</a> <span class="why" data-lang="zh">動作先驗的兩種延伸:預訓練可重用的生成式先驗;讓參考動作本身也被最佳化。</span><span class="why" data-lang="en">Two extensions of motion priors: a reusable pre-trained generative prior; letting the reference itself be optimized.</span></li>
+          <li><a href="Shin2023_ActuatorConstrainedRL.html">Actuator-Constrained RL</a> · <a href="Liao2024_BerkeleyHumanoid.html">Berkeley Humanoid</a> <span class="why" data-lang="zh">回頭看硬體:把致動器限制放進 RL,或乾脆把硬體設計成好模擬的樣子。</span><span class="why" data-lang="en">Back to hardware: put actuator limits into RL, or design the hardware so it is easy to simulate.</span></li>
+        </ol>
+      </div>
+      <div class="card route">
+        <h3 data-lang="zh">路線 B · 我想懂模型式控制</h3><h3 data-lang="en">Route B · I want to understand model-based control</h3>
+        <ol class="steps">
+          <li><a href="Wensing2022_OptControlSurvey.html">Wensing 綜述</a> <span class="why" data-lang="zh">先拿到整張地圖:接觸建模、簡化模型、轉錄、全身 QP。</span><span class="why" data-lang="en">Get the whole map first: contact modeling, reduced models, transcription, whole-body QP.</span></li>
+          <li>Convex MPC (Cheetah 3) <span class="why" data-lang="zh">凸 MPC 的原點;本站因 DSpace 限制抓取尚未導讀,可在 02 CONTROL 表格點 FREE ↗ 讀全文。</span><span class="why" data-lang="en">The origin of convex MPC; not yet guided here because DSpace blocks scripted downloads — read it via the FREE ↗ link in the 02 CONTROL table.</span></li>
+          <li><a href="Kim2019_WBIC.html">WBIC + MPC</a> → <a href="Ding2021_RFMPC.html">RF-MPC</a> <span class="why" data-lang="zh">加上全身脈衝控制;再把姿態線性化搬到 SO(3) 上,做大角度動作。</span><span class="why" data-lang="en">Add whole-body impulse control; then move attitude linearization onto SO(3) for large-rotation motions.</span></li>
+          <li><a href="Shirwatkar2024_PIPLoco.html">PIP-Loco</a> <span class="why" data-lang="zh">兩派的交會:把 RL 學到的東西接回規劃器。</span><span class="why" data-lang="en">Where the camps meet: plugging what RL learned back into a planner.</span></li>
+        </ol>
+      </div>
+      <div class="card route">
+        <h3 data-lang="zh">路線 C · 我想自己做一台機器人</h3><h3 data-lang="en">Route C · I want to build a robot</h3>
+        <ol class="steps">
+          <li>MIT Cheetah design principles (2013) <span class="why" data-lang="zh">本體感知致動器的設計哲學從這裡開始(03 ROBOT DESIGN 表格有 FREE ↗ 期刊版)。</span><span class="why" data-lang="en">Where the proprioceptive-actuator philosophy begins (03 ROBOT DESIGN table has the FREE ↗ journal version).</span></li>
+          <li><a href="Kau2019_StanfordDoggo.html">Stanford Doggo</a> <span class="why" data-lang="zh">用現成無人機馬達 + 皮帶做 QDD,看一台低成本四足怎麼權衡。</span><span class="why" data-lang="en">QDD from off-the-shelf drone motors and a belt: how a low-cost quadruped makes its trade-offs.</span></li>
+          <li><a href="Chi2025_BerkeleyHumanoidLite.html">Berkeley Humanoid Lite</a> <span class="why" data-lang="zh">3D 列印擺線致動器 + 測試方法 + 整台人形 BOM。</span><span class="why" data-lang="en">3D-printed cycloidal actuators, the test methodology and a whole-humanoid BOM.</span></li>
+          <li><span data-lang="zh">04 ACTUATORS 的行星 / 擺線 / 雙馬達表格 + 測功機資源</span><span data-lang="en">The planetary / cycloidal / dual-motor tables in 04 ACTUATORS, plus the dyno resources</span> <span class="why" data-lang="zh">按你要的減速比與功率挑路線。</span><span class="why" data-lang="en">Pick a route by the ratio and power you need.</span></li>
+        </ol>
+      </div>
+      <div class="card route">
+        <h3 data-lang="zh">路線 D · 我想做協同設計</h3><h3 data-lang="en">Route D · I want to do co-design</h3>
+        <ol class="steps">
+          <li><a href="WangYX2025_EmbodiedCoDesign.html">Embodied Co-Design 綜述</a> <span class="why" data-lang="zh">先看分類法,知道自己的問題落在哪一格。</span><span class="why" data-lang="en">Start with the taxonomy to see which cell your problem falls in.</span></li>
+          <li><a href="Dinev2022_VersatileCoDesign.html">Versatile Co-Design</a> <span class="why" data-lang="zh">模型派:外層設計 × 內層最佳控制。</span><span class="why" data-lang="en">Model-based: outer design loop × inner optimal control.</span></li>
+          <li><a href="Yuan2022_Transform2Act.html">Transform2Act</a> <span class="why" data-lang="zh">RL 派:把「改身體」變成策略的動作。</span><span class="why" data-lang="en">RL: turning changing the body into a policy action.</span></li>
+          <li><a href="Bjelonic2023_PEACoDesign.html">PEA co-design</a> <span class="why" data-lang="zh">落地版:在真實四足上用 RL 一起決定彈簧與控制。</span><span class="why" data-lang="en">Grounded version: RL decides springs and control together for a real quadruped.</span></li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight"><span class="tag">CROSS-CUTTING</span>
+        <p data-lang="zh" style="margin:0 0 8px"><b>1. 透明硬體是兩派控制的共同前提。</b>QDD 讓電流 ≈ 力矩,MPC 才能直接下力指令、模擬器裡的致動器模型才夠準。</p>
+        <p data-lang="zh" style="margin:0 0 8px"><b>2. 致動器模型正在回到學習裡。</b>從 RL 忽略馬達極限,到把力矩-轉速限制寫進訓練(HOUND),再到為了好模擬而設計硬體(Berkeley Humanoid)。</p>
+        <p data-lang="zh" style="margin:0 0 8px"><b>3. 開源與 3D 列印是近五年的主旋律。</b>Doggo、Solo、PADWQ、BH Lite、ToddlerBot、AGILOped、PANDORA、ARTEMIS。</p>
+        <p data-lang="zh" style="margin:0"><b>4. 協同設計從模型派移向學習派,但硬體驗證仍是瓶頸。</b><span class="add">導讀補充</span></p>
+        <p data-lang="en" style="margin:0 0 8px"><b>1. Transparent hardware is a shared premise of both control camps.</b> QDD makes current ≈ torque, so MPC can command forces directly and simulated actuator models stay accurate.</p>
+        <p data-lang="en" style="margin:0 0 8px"><b>2. Actuator models are coming back into learning.</b> From RL ignoring motor limits, to writing torque-speed limits into training (HOUND), to designing hardware that is easy to simulate (Berkeley Humanoid).</p>
+        <p data-lang="en" style="margin:0 0 8px"><b>3. Open source and 3D printing dominate the last five years.</b> Doggo, Solo, PADWQ, BH Lite, ToddlerBot, AGILOped, PANDORA, ARTEMIS.</p>
+        <p data-lang="en" style="margin:0"><b>4. Co-design is moving from model-based to learning-based, but hardware validation remains the bottleneck.</b><span class="add">guide note</span></p>
+      </div>
+      <div class="note"><span class="tag">COVERAGE</span>
+        <p data-lang="zh" style="margin:0">本站導讀刻意讓每一塊領土至少有一篇深讀。尚未導讀但最值得補的:Convex MPC(Cheetah 3)、MIT Cheetah 設計原則、Mini Cheetah、Meta-RL design、Morphological pretraining。</p>
+        <p data-lang="en" style="margin:0">Guides here deliberately give every territory at least one deep read. Most worth adding next: Convex MPC (Cheetah 3), MIT Cheetah design principles, Mini Cheetah, Meta-RL design, morphological pretraining.</p>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">PAPER MAP · singhaman1750/Legged-Robots · <span data-lang="zh">整理自 2026-10 版書單</span><span data-lang="en">built from the October 2026 version of the list</span> · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<script>
+/* Catalog data: one row per entry in the singhaman1750/Legged-Robots topic pages.
+   s = section id, n = short name, t = title, y = year, v = venue, u = link from the list,
+   alt = open-access alternative, a = oa|pay|web|thesis|patent|blog, x = extra chip,
+   g = guide file in this library, id = shared key when one paper appears in several sections,
+   grp = sub-group header. */
+const DATA = [
+/* ---------- 02 CONTROL ---------- */
+{s:"ctl-mb",n:"Survey",t:"Optimization-Based Control for Dynamic Legged Robots",y:"2022",v:"IEEE T-RO",u:"https://arxiv.org/abs/2211.11644",a:"oa",g:"Wensing2022_OptControlSurvey.html",
+ zh:"六位模型派學者的全景綜述:把足式運動統一成一個最佳控制問題,沿接觸建模、簡化模型、數值轉錄、全身 QP 四個工具箱梳理十年進展,並給出與 RL 融合的路線圖。",
+ en:"Panoramic survey framing legged locomotion as one optimal-control problem, organized along contact modeling, reduced models, transcription and whole-body QP, with a roadmap for fusing with RL."},
+{s:"ctl-mb",n:"Convex MPC",t:"Dynamic Locomotion in the MIT Cheetah 3 Through Convex Model-Predictive Control",y:"2018",v:"IROS",u:"https://ieeexplore.ieee.org/document/8594448",alt:"https://dspace.mit.edu/handle/1721.1/138000.2",a:"oa",
+ zh:"四足 MPC 的起點:單剛體模型線性化後,把地面反作用力規劃寫成凸 QP;最長 0.5 s 視界、1 ms 內解完、20–30 Hz 重解,一套控制器跑 trot、bound、pronk 到 3D gallop。",
+ en:"The starting point of quadruped MPC: a linearized single-rigid-body model turns ground-reaction-force planning into a convex QP (horizons up to 0.5 s, solved in under 1 ms at 20–30 Hz), one controller for trot, bound, pronk and a 3D gallop."},
+{s:"ctl-mb",n:"Feedback MPC",t:"Feedback MPC for Torque-Controlled Legged Robots",y:"2019",v:"IROS",u:"https://arxiv.org/abs/1905.06144",a:"oa",
+ zh:"ETH RSL:不只把 MPC 的前饋軌跡交給底層追蹤,而是直接在力矩層使用 MPC 算出的最佳回授策略,讓力矩控制的四足(ANYmal)更能吸收擾動與模型誤差。",
+ en:"ETH RSL: instead of handing only the MPC's feedforward plan to a tracking layer, uses the MPC's optimal feedback policy directly at the torque level of a torque-controlled quadruped (ANYmal)."},
+{s:"ctl-mb",n:"RF-MPC",t:"Representation-Free Model Predictive Control for Dynamic Motions in Quadrupeds",y:"2021",v:"IEEE T-RO",u:"https://arxiv.org/abs/2012.10002",a:"oa",g:"Ding2021_RFMPC.html",
+ zh:"以旋轉矩陣 + SO(3) 上的 variation 線性化,把單剛體 MPC 寫成 160–250 Hz 的 QP,讓 5.5 kg 的 Panther 實機穿越 Euler 奇異姿態完成受控後空翻。",
+ en:"Rotation-matrix MPC with variation-based linearization on SO(3), solved as a 160–250 Hz QP, letting the 5.5 kg Panther robot backflip through the Euler-angle singularity on hardware."},
+{s:"ctl-mb",n:"Motion Imitation",t:"Learning Agile Robotic Locomotion Skills by Imitating Animals",y:"2020",v:"RSS",u:"https://arxiv.org/abs/2004.00784",a:"oa",g:"Peng2020_MotionImitation.html",
+ zh:"(書單把它放在模型派,其實是學習派)把真狗 mocap retarget 成參考動作,在模擬中用 RL + 動態隨機化學模仿,再用 latent 動態編碼在真機 Laikago 上約 50 次試驗快速適應。",
+ en:"(Listed under model-based, but it is a learning method.) Retargets dog mocap into reference motions, imitates them with RL under dynamics randomization, then adapts on the real Laikago in about 50 trials via a latent dynamics encoding."},
+{s:"ctl-mb",n:"Nonlinear RF-MPC",t:"Real-Time Constrained Nonlinear Model Predictive Control on SO(3) for Dynamic Legged Locomotion",y:"2020",v:"IROS",u:"http://ras.papercept.net/images/temp/IROS/files/2325.pdf",a:"web",
+ zh:"RF-MPC 的非線性版本:在 SO(3) 上直接解帶約束的非線性 MPC,並做到即時求解。(書單連結是會議暫存檔,可能失效)",
+ en:"Nonlinear counterpart of RF-MPC: constrained nonlinear MPC formulated directly on SO(3) and solved in real time. (The list links a temporary conference file that may expire.)"},
+{s:"ctl-mb",n:"WBIC + MPC",t:"Highly Dynamic Quadruped Locomotion via Whole-Body Impulse Control and Model Predictive Control",y:"2019",v:"arXiv",u:"https://arxiv.org/abs/1909.06586",a:"oa",g:"Kim2019_WBIC.html",
+ zh:"凸 MPC 規劃一個步態週期的地面反作用力,WBIC 以 500 Hz 全身 QP「追力而非追軌跡」;Mini-Cheetah 一組參數跑六種步態、最高 3.7 m/s。",
+ en:"Convex MPC plans a gait cycle of reaction forces; a 500 Hz whole-body QP tracks forces rather than trajectories — six gaits up to 3.7 m/s on Mini-Cheetah with one parameter set."},
+
+{s:"ctl-rl",n:"RMA",t:"RMA: Rapid Motor Adaptation for Legged Robots",y:"2021",v:"RSS",u:"https://www.roboticsproceedings.org/rss17/p011.pdf",a:"oa",g:"Kumar2021_RMA.html",
+ zh:"特權環境參數訓 base policy,再學從 0.5 秒本體感覺歷史回歸環境 latent 的 adaptation module;純模擬訓練、零樣本上 A1,一秒內適應沙、泥、油面與樓梯。",
+ en:"A base policy on privileged extrinsics plus an adaptation module regressing them from 0.5 s of proprioceptive history; sim-only training, zero-shot on A1, adapting within a second on sand, mud, oil and stairs."},
+{s:"ctl-rl",n:"Walk These Ways",t:"Walk These Ways: Tuning Robot Control for Generalization with Multiplicity of Behavior",y:"2022",v:"CoRL",u:"https://arxiv.org/abs/2212.03238",a:"oa",g:"Margolis2022_WalkTheseWays.html",
+ zh:"只在平地訓練的一條策略,用 8 維行為參數(步態時序、頻率、身高、俯仰、站寬、抬腳高)即時切換多種解法,讓人現場調參泛化到未見地形。",
+ en:"One flat-ground policy with an 8-D behavior vector (gait timing, frequency, height, pitch, stance width, foot swing) switched at runtime, letting a human tune it to unseen terrain."},
+{s:"ctl-rl",n:"DreamWaQ",t:"DreamWaQ: Learning Robust Quadrupedal Locomotion with Implicit Terrain Imagination via Deep Reinforcement Learning",y:"2023",v:"ICRA",u:"https://arxiv.org/abs/2301.10602",a:"oa",g:"Nahrendra2023_DreamWaQ.html",
+ zh:"只用 IMU + 關節編碼器:非對稱 actor-critic 讓 actor 隱式「想像」地形,β-VAE 共同估測體速與 context;單卡 1 小時訓完,A1 零樣本上樓梯與野外長程。",
+ en:"Proprioception only: an asymmetric actor-critic lets the actor imagine terrain implicitly while a β-VAE estimates velocity and context; one GPU-hour of training, zero-shot stairs and outdoor trails on A1."},
+{s:"ctl-rl",n:"HIMLoco",t:"Hybrid Internal Model: Learning Agile Legged Locomotion with Simulated Robot Response",y:"2024",v:"ICLR",u:"https://arxiv.org/abs/2312.11460",a:"oa",g:"Long2024_HIMLoco.html",
+ zh:"借 IMC 觀念「估反應而非估擾動」:顯式速度回歸 + SwAV 對比式隱式 latent,單階段、免 teacher-student 的盲走;實機長程樓梯 176.5 階(RMA 75.4)。",
+ en:"Estimates the robot's response rather than the terrain (explicit velocity plus a SwAV-contrastive latent): one-stage, imitation-free blind locomotion that climbs 176.5 real stairs vs 75.4 for RMA."},
+{s:"ctl-rl",n:"Tencent Robotics X",t:"Lifelike Agility and Play in Quadrupedal Robots using Reinforcement Learning and Generative Pre-trained Models",y:"2024",v:"Nature Machine Intelligence",u:"https://tencent-roboticsx.github.io/lifelike-agility-and-play/",alt:"https://arxiv.org/abs/2308.15143",a:"oa",g:"Han2024_LifelikeAgility.html",
+ zh:"把狗的 mocap 預訓練成 VQ 離散動作先驗,再凍結重用、逐層疊上越障與 self-play 策略,零樣本讓實體四足 MAX 玩鬼抓人。",
+ en:"Pre-trains dog mocap into a VQ discrete motion prior, then freezes and reuses it to stack obstacle traversal and self-play strategy, letting the real MAX quadruped play chase tag zero-shot."},
+{s:"ctl-rl",n:"Linear Policy",t:"Force Control for Robust Quadruped Locomotion: A Linear Policy Approach",y:"2023",v:"ICRA",u:"https://ieeexplore.ieee.org/document/10161080",a:"pay",
+ zh:"IISc Stoch 實驗室:用線性策略(而非深度網路)結合力控制,追求簡單、可分析又穩健的四足步行。",
+ en:"IISc Stoch lab: a linear policy (rather than a deep network) combined with force control, aiming for simple, analyzable yet robust quadruped walking."},
+{s:"ctl-rl",n:"PIP-Loco",t:"PIP-Loco: A Proprioceptive Infinite Horizon Planning Framework for Quadrupedal Robot Locomotion",y:"2024",v:"ICRA 2025",u:"https://arxiv.org/abs/2409.09441",a:"oa",g:"Shirwatkar2024_PIPLoco.html",
+ zh:"IISc Stoch 實驗室:訓練時順便學出觀測空間的 Dreamer 模型,部署時以 H=10 + 學習價值終端的受約束 MPPI 同時修正動作與速度命令,把 MPC 的規劃與約束接回本體感知 RL。",
+ en:"IISc Stoch lab: learns an observation-space Dreamer model alongside PPO, then deploys a constrained MPPI (H=10 plus a learned terminal value) that corrects both actions and velocity commands — MPC-style planning and constraints for proprioceptive RL."},
+
+{s:"ctl-beh",n:"DribbleBot",t:"DribbleBot: Dynamic Legged Manipulation in the Wild",y:"2023",v:"ICRA",u:"https://arxiv.org/abs/2304.01159",a:"oa",g:"Ji2023_DribbleBot.html",
+ zh:"Go1 只靠機載魚眼相機與運算,在沙、雪、草地上盤帶足球:以球速為指令的 PPO 全身策略 + 微調 YOLOv7 + 球拖曳隨機化 + 跌倒起身;直接繼承 Walk These Ways。",
+ en:"A Go1 dribbles a soccer ball over sand, snow and grass with only onboard fisheye cameras and compute: a ball-velocity-commanded PPO whole-body policy, fine-tuned YOLOv7, ball-drag randomization and fall recovery — built directly on Walk These Ways."},
+{s:"ctl-beh",n:"Legs as Manipulator",t:"Legs As Manipulator: Pushing Quadrupedal Agility Beyond Locomotion",y:"2023",v:"ICRA",u:"https://robot-skills.github.io/resources/legmanip.pdf",a:"oa",
+ zh:"把四足的腿當操作臂:學習腿部操作技能(例如攀上牆按按鈕)並與行走技能串接,把敏捷性推到行走之外;與 RMA 同為 Pathak 組。",
+ en:"Uses a quadruped's legs as manipulators — learning leg-manipulation skills (e.g., climbing a wall to press a button) and chaining them with locomotion; from the Pathak lab, like RMA."},
+
+{s:"ctl-hum",n:"Bi-Level Imitation",t:"Bi-Level Motion Imitation for Humanoid Robots",y:"2024",v:"CoRL",u:"https://openreview.net/forum?id=wH7Wv0nAm8",alt:"https://arxiv.org/abs/2410.01968",a:"oa",g:"Zhao2024_BiLevelImitation.html",
+ zh:"不再固定參考動作,而是讓產生參考的 decoder 與 RL 追蹤策略交替共同最佳化,以自洽 latent 錨保留人類動作模式,讓 MoCap 對人形變得可做(目前僅模擬)。",
+ en:"Instead of tracking a fixed retargeted reference, co-optimizes the reference-generating decoder with the RL policy, anchored by a self-consistent latent, so human MoCap becomes feasible for a humanoid (simulation only)."},
+/* ---------- 03 ROBOT DESIGN · humanoids ---------- */
+{s:"des-hum",n:"LOLA · TUM",t:"System Design and Control of Anthropomorphic Walking Robot LOLA",y:"2009",v:"IEEE/ASME T-Mech",u:"https://portal.fis.tum.de/en/publications/system-design-and-control-of-anthropomorphic-walking-robot-lola/",a:"web",
+ zh:"TUM 的高性能類人步行機器人:輕量化結構、質量分布與驅動設計,目標是快速且類人的步行。相關:J. Physiol. Paris 2009〈Design and Walking Control〉。",
+ en:"TUM's performance-oriented anthropomorphic walker: lightweight structure, mass distribution and drive design for fast, human-like walking. Related: J. Physiol. Paris 2009, Design and Walking Control."},
+{s:"des-hum",n:"COMAN · IIT",t:"COMpliant huMANoid COMAN: Optimal Joint Stiffness Tuning for Modal Frequency Control",y:"2013",v:"ICRA",u:"https://www.research.ed.ac.uk/en/publications/compliant-humanoid-coman-optimal-joint-stiffness-tuning-for-modal/",a:"oa",
+ zh:"IIT 的柔順人形:關節內建被動柔順,並調整關節剛度來安排系統的模態頻率,讓步態更省力。",
+ en:"IIT's compliant humanoid: passive joint compliance whose stiffness is tuned to place the system's modal frequencies for more efficient gaits."},
+{s:"des-hum",n:"TORO · DLR",t:"Overview of the Torque-Controlled Humanoid Robot TORO",y:"2014",v:"Humanoids",u:"https://elib.dlr.de/94529/",alt:"https://ieeexplore.ieee.org/document/7041473",a:"oa",
+ zh:"DLR 的全身力矩控制人形,沿用其輕量機械臂的關節力矩感測技術。",
+ en:"DLR's fully torque-controlled humanoid, built on the joint-torque-sensing technology of its lightweight arms."},
+{s:"des-hum",n:"Tik-Tok · Cornell",t:"Tik-Tok humanoid (Ruina lab, Dynamic Walking 2014–2015)",y:"2015",v:"Dynamic Walking",u:"http://ruina.tam.cornell.edu/research/topics/locomotion_and_robotics/Tik-Tok/",a:"web",
+ zh:"Cornell Ruina 實驗室的雙足/人形計畫(Dynamic Walking 會議發表),只有專案網頁。",
+ en:"Cornell Ruina lab's biped/humanoid project presented at Dynamic Walking; project webpage only."},
+{s:"des-hum",n:"JAXON · JSK",t:"Development of High-Speed and High-Power Humanoid Research Platform JAXON",y:"2016",v:"JRSJ",u:"https://www.jstage.jst.go.jp/article/jrsj/34/7/34_34_458/_article/-char/en",a:"oa",
+ zh:"東大 JSK 的高速、高功率人形研究平台,DARPA Robotics Challenge 世代的代表作。",
+ en:"JSK (U. Tokyo)'s high-speed, high-power humanoid research platform from the DARPA Robotics Challenge era."},
+{s:"des-hum",n:"WALK-MAN · IIT",t:"WALK-MAN: A High-Performance Humanoid Platform for Realistic Environments",y:"2017",v:"J. Field Robotics",u:"https://arpi.unipi.it/handle/11568/901986",a:"web",
+ zh:"IIT 為真實/災難環境打造的高性能人形(DRC 參賽機)。",
+ en:"IIT's high-performance humanoid for realistic (disaster-response) environments, a DRC entrant."},
+{s:"des-hum",n:"DRC-HUBO+ · KAIST",t:"Development of the Humanoid Disaster Response Platform DRC-HUBO+",y:"2018",v:"IEEE T-RO",u:"https://doi.org/10.1109/TRO.2017.2776287",a:"pay",
+ zh:"KAIST 的災難救援人形——2015 DARPA Robotics Challenge 決賽冠軍,可在步行與膝部輪式移動之間切換。",
+ en:"KAIST's disaster-response humanoid — winner of the 2015 DARPA Robotics Challenge Finals, switching between walking and wheeled (kneeling) mobility."},
+{s:"des-hum",n:"HRP-5P · AIST",t:"Humanoid Robot HRP-5P: An Electrically Actuated Humanoid Robot With High-Power and Wide-Range Joints",y:"2019",v:"IEEE RA-L",u:"https://doi.org/10.1109/LRA.2019.2896465",a:"pay",
+ zh:"AIST 的電動大型人形:高功率、大行程關節,示範搬運並安裝石膏板等重活。",
+ en:"AIST's electrically actuated humanoid with high-power, wide-range joints, demonstrated on heavy work such as installing gypsum boards."},
+{s:"des-hum",n:"Tello · UIUC",t:"The Dynamic Effect of Mechanical Losses of Transmissions on the Equation of Motion of Legged Robots",y:"2021",v:"ICRA",u:"https://arxiv.org/abs/2106.01842",a:"oa",
+ zh:"UIUC:把傳動機構的機械損耗(摩擦、效率)寫進足式機器人的運動方程式,分析它對動態行為的影響。",
+ en:"UIUC: puts transmission mechanical losses (friction, efficiency) into the legged-robot equations of motion and analyzes their dynamic effect."},
+{s:"des-hum",n:"ARDOP",t:"ARDOP: A Versatile Humanoid Robotic Research Platform",y:"2021",v:"arXiv",u:"https://arxiv.org/abs/2108.07983",a:"oa",
+ zh:"多用途人形研究平台(arXiv 預印本)。",
+ en:"A versatile humanoid research platform (arXiv preprint)."},
+{s:"des-hum",n:"Tello Leg · UIUC",t:"Tello Leg: The Study of Design Principles and Metrics for Dynamic Humanoid Robots",y:"2022",v:"IEEE RA-L",u:"https://ieeexplore.ieee.org/document/9813569",a:"pay",
+ zh:"UIUC:動態人形腿的設計原則與量化指標,並以 Tello 腿實作驗證。",
+ en:"UIUC: design principles and metrics for dynamic humanoid legs, embodied in the Tello leg."},
+{s:"des-hum",n:"ergoCub · IIT",t:"Optimization of Humanoid Robot Designs for Human-Robot Ergonomic Payload Lifting",y:"2022",v:"Humanoids",u:"https://arxiv.org/abs/2211.13503",a:"oa",
+ zh:"IIT:以人機協作搬運的人因工學為目標,最佳化人形的設計參數(ergoCub)。",
+ en:"IIT: optimizes humanoid design parameters for ergonomic human-robot collaborative payload lifting (ergoCub)."},
+{s:"des-hum",id:"mithum",n:"MIT Humanoid",t:"Design and Development of the MIT Humanoid: A Dynamic and Robust Research Platform",y:"2023",v:"Humanoids",u:"https://ieeexplore.ieee.org/document/10375199",a:"pay",
+ zh:"MIT Humanoid:以高力矩密度模組化致動器打造的動態、耐衝擊研究平台(Bi-Level Imitation 的模擬也用它)。",
+ en:"MIT Humanoid: a dynamic, impact-robust research platform built on high-torque-density modular actuators (also the model used in Bi-Level Imitation)."},
+{s:"des-hum",id:"bh",n:"Berkeley Humanoid",t:"Berkeley Humanoid: A Research Platform for Learning-based Control",y:"2024",v:"ICRA 2025",u:"https://arxiv.org/abs/2407.21781",a:"oa",g:"Liao2024_BerkeleyHumanoid.html",
+ zh:"把「小 sim-to-real 差距」當硬體規格的 16 kg 自製 QDD 人形:9:1 行星致動器即關節、不用彈簧、窄域隨機化,一個無歷史的 MLP 策略就零樣本戶外行走與單腳跳。",
+ en:"A 16 kg in-house QDD humanoid that treats a small sim-to-real gap as a hardware spec (9:1 planetary actuators as joints, no springs, narrow randomization), so a memoryless MLP policy walks outdoors and hops on one leg zero-shot."},
+{s:"des-hum",n:"PANDORA · Virginia Tech",t:"PANDORA: The Open-Source, Structurally Elastic Humanoid Robot",y:"2024",v:"Humanoids",u:"https://doi.org/10.1109/Humanoids58906.2024.10769594",a:"pay",
+ zh:"Virginia Tech 的開源人形,結構本身具彈性(structurally elastic)。",
+ en:"Virginia Tech's open-source humanoid whose structure itself is elastic."},
+{s:"des-hum",n:"Musashi · JSK",t:"Component Modularized Design of Musculoskeletal Humanoid Platform Musashi to Investigate Learning Control Systems",y:"2024",v:"arXiv",u:"https://arxiv.org/abs/2410.22000",a:"oa",
+ zh:"JSK 的肌肉骨骼型人形:元件模組化設計,用來研究學習式控制。",
+ en:"JSK's musculoskeletal humanoid with a component-modularized design, built to study learning-based control."},
+{s:"des-hum",n:"Miha",t:"Miha: An Affordable Humanoid Platform for Research and Development",y:"2024",v:"IEEE Access",u:"https://doi.org/10.1109/ACCESS.2024.3474731",a:"oa",
+ zh:"低成本、可負擔的人形研發平台(IEEE Access 開放取用)。",
+ en:"An affordable humanoid platform for research and development (open-access IEEE Access)."},
+{s:"des-hum",id:"bhlite",n:"Berkeley Humanoid Lite",t:"Demonstrating Berkeley Humanoid Lite: An Open-source, Accessible, and Customizable 3D-printed Humanoid Robot",y:"2025",v:"RSS",u:"https://arxiv.org/abs/2504.17249",a:"oa",g:"Chi2025_BerkeleyHumanoidLite.html",
+ zh:"用桌上型 FDM 列印的 PLA 擺線減速器做出 22 關節、BOM 4,312 美元的開源人形,以測功機驗證效率與 60 小時耐久,並能零樣本 sim-to-real 行走(書單在擺線、人形、測功機三處都列了它)。",
+ en:"A $4,312, 22-joint open-source humanoid on desktop-printed PLA cycloidal gearboxes, dyno-validated for efficiency and 60 h durability, walking zero-shot from simulation (listed under cycloidal gearboxes, humanoids and dyno testing)."},
+{s:"des-hum",n:"ARTEMIS · UCLA RoMeLa",t:"ARTEMIS: An Open-Source, Full-sized Humanoid Robot for Dynamic Locomotion",y:"2025",v:"Humanoids",u:"https://artemis.romela.org/",a:"web",
+ zh:"UCLA RoMeLa 的全尺寸開源人形,主打動態行走(專案頁)。",
+ en:"UCLA RoMeLa's open-source full-size humanoid for dynamic locomotion (project page)."},
+{s:"des-hum",n:"ToddlerBot · Stanford",t:"ToddlerBot: Open-Source ML-Compatible Humanoid Platform for Loco-Manipulation",y:"2025",v:"CoRL",u:"https://proceedings.mlr.press/v305/shi25a.html",a:"oa",
+ zh:"Stanford 的小型開源人形:低成本、易複製,為 ML 訓練而設計(含數位分身),做 loco-manipulation。",
+ en:"Stanford's small open-source humanoid: low-cost, reproducible and ML-compatible (with a digital twin) for loco-manipulation."},
+{s:"des-hum",n:"AGILOped · Bonn",t:"AGILOped: Agile Open-Source Humanoid Robot for Research",y:"2025",v:"IEEE ICARM",u:"https://arxiv.org/abs/2509.09364",a:"oa",
+ zh:"Bonn NimbRo 的敏捷開源人形研究平台(公開 CAD)。",
+ en:"Bonn NimbRo's agile open-source humanoid research platform (CAD released)."},
+{s:"des-hum",n:"KAIST hopper",t:"Design of a 3-DOF Hopping Robot with an Optimized Gearbox: An Intermediate Platform Toward Bipedal Robots",y:"2025",v:"Humanoids",u:"https://arxiv.org/abs/2505.12231",a:"oa",
+ zh:"KAIST:以最佳化齒輪箱打造 3 自由度跳躍機器人,作為邁向雙足的中繼平台。",
+ en:"KAIST: a 3-DOF hopping robot with an optimized gearbox, an intermediate platform toward bipeds."},
+
+/* ---------- 03 ROBOT DESIGN · quadrupeds ---------- */
+{s:"des-quad",grp:"Surveys",n:"Survey",t:"A Study on Quadruped Mobile Robots",y:"2023",v:"Mech. Mach. Theory",u:"https://www.sciencedirect.com/science/article/pii/S0094114X23002197",a:"pay",
+ zh:"四足移動機器人的綜述研究(Mechanism and Machine Theory)。",
+ en:"A survey study of quadruped mobile robots (Mechanism and Machine Theory)."},
+{s:"des-quad",grp:"Surveys",n:"Survey",t:"Quadruped Robots: Bridging Mechanical Design, Control, and Applications",y:"2025",v:"Robotics (MDPI)",u:"https://www.mdpi.com/2218-6581/14/5/57",a:"oa",
+ zh:"串起機構設計、控制與應用的四足綜述(開放取用)。",
+ en:"Open-access review bridging quadruped mechanical design, control and applications."},
+{s:"des-quad",grp:"Hydraulic · 45–91 kg",n:"HyQ · IIT",t:"Design of HyQ – a Hydraulically and Electrically Actuated Quadruped Robot",y:"2011",v:"Proc. IMechE Part I",x:"91 kg",u:"https://journals.sagepub.com/doi/10.1177/0959651811402275",a:"pay",
+ zh:"IIT 的液壓+電動四足,開啟 HyQ 系列。",
+ en:"IIT's hydraulically and electrically actuated quadruped, the start of the HyQ line."},
+{s:"des-quad",grp:"Hydraulic · 45–91 kg",n:"HyQ2Max · IIT",t:"Design of the Hydraulically Actuated, Torque-Controlled Quadruped Robot HyQ2Max",y:"2017",v:"IEEE/ASME T-Mech",x:"80 kg",u:"https://doi.org/10.1109/TMECH.2016.2616284",a:"pay",
+ zh:"HyQ 的強化版:液壓驅動、力矩控制、更堅固。",
+ en:"The rugged HyQ successor: hydraulic and torque-controlled."},
+{s:"des-quad",grp:"Hydraulic · 45–91 kg",n:"LIGHTDOG",t:"Design of LIGHTDOG: A high payload-to-weight, hose-less hydraulic quadrupedal robot",y:"2025",v:"IJRR",x:"45 kg",u:"https://journals.sagepub.com/doi/full/10.1177/02783649251349225",a:"pay",
+ zh:"高負載重量比、免油管(hose-less)的液壓四足。",
+ en:"A hose-less hydraulic quadruped with a high payload-to-weight ratio."},
+{s:"des-quad",grp:"Electric · small · 2–9 kg",n:"MIT Super Mini Cheetah",t:"The MIT Super Mini Cheetah: A small, low-cost quadrupedal robot for dynamic locomotion",y:"2015",v:"IEEE SSRR",x:"9 kg",u:"https://ieeexplore.ieee.org/document/7443018",a:"pay",
+ zh:"MIT 的小型低成本動態四足(Mini Cheetah 的前身)。",
+ en:"MIT's small, low-cost dynamic quadruped (a Mini Cheetah predecessor)."},
+{s:"des-quad",grp:"Electric · small · 2–9 kg",n:"Minitaur",t:"Design Principles for a Family of Direct-Drive Legged Robots",y:"2016",v:"IEEE RA-L",x:"5 kg",u:"https://ieeexplore.ieee.org/document/7403902",a:"pay",
+ zh:"直驅(direct-drive)腿式機器人家族的設計原則,代表作 Minitaur;Stanford Doggo 直接繼承它的五連桿腿。",
+ en:"Design principles for a family of direct-drive legged robots, exemplified by Minitaur; Stanford Doggo inherits its five-bar leg."},
+{s:"des-quad",grp:"Electric · small · 2–9 kg",n:"Stanford Doggo",t:"Stanford Doggo: An Open-Source, Quasi-Direct-Drive Quadruped",y:"2019",v:"ICRA",x:"4.8 kg",u:"https://arxiv.org/abs/1905.04254",a:"oa",g:"Kau2019_StanfordDoggo.html",
+ zh:"不到 3000 美元、手工具可組的開源四足:3:1 皮帶準直驅五連桿腿跳出 1.14 m(敏捷度 2.23 m/s,追平 galago),但開環步態只跑 0.9 m/s。",
+ en:"A sub-$3000, hand-buildable open-source quadruped whose 3:1 belt quasi-direct-drive five-bar legs jump 1.14 m (2.23 m/s agility, matching the galago), though open-loop gaits reach only 0.9 m/s."},
+{s:"des-quad",grp:"Electric · small · 2–9 kg",n:"Stoch · IISc",t:"Design, Development and Experimental Realization of A Quadrupedal Research Platform: Stoch",y:"2019",v:"ICRA",x:"3.1 kg",u:"https://ieeexplore.ieee.org/document/8813480",a:"pay",
+ zh:"IISc 四足研究平台 Stoch 的設計、開發與實驗。",
+ en:"Design and experiments of IISc's quadruped research platform Stoch."},
+{s:"des-quad",grp:"Electric · small · 2–9 kg",n:"Stoch 2 · IISc",t:"Gait Library Synthesis for Quadruped Robots via Augmented Random Search",y:"2019",v:"arXiv",x:"~4 kg",u:"https://arxiv.org/abs/1912.12907",a:"oa",
+ zh:"以 Augmented Random Search 為 Stoch 2 合成四足步態庫。",
+ en:"Synthesizes a quadruped gait library for Stoch 2 via Augmented Random Search."},
+{s:"des-quad",grp:"Electric · small · 2–9 kg",n:"Solo · ODRI",t:"An Open Torque-Controlled Modular Robot Architecture for Legged Locomotion Research",y:"2020",v:"ICRA",x:"2.2 kg",u:"https://ieeexplore.ieee.org/document/9015985",a:"pay",
+ zh:"開源、力矩控制的模組化四足架構(Open Dynamic Robot Initiative),走皮帶 + 開源路線。",
+ en:"An open, torque-controlled modular quadruped architecture (Open Dynamic Robot Initiative) on the belt-drive, open-source route."},
+{s:"des-quad",grp:"Electric · small-mid · 9–13 kg",n:"UIUC Panther leg",t:"Design and experimental implementation of a quasi-direct-drive leg for optimized jumping",y:"2017",v:"IROS",x:"5.5 kg",u:"https://ieeexplore.ieee.org/document/8202172",a:"pay",
+ zh:"UIUC:為最佳化跳躍而設計的準直驅腿(其後 Panther 四足的基礎;RF-MPC 作者 Yanran Ding 的博士工作)。",
+ en:"UIUC: a quasi-direct-drive leg designed for optimized jumping (basis of the Panther quadruped; part of RF-MPC author Yanran Ding's PhD work)."},
+{s:"des-quad",grp:"Electric · small-mid · 9–13 kg",id:"minich",n:"MIT Mini Cheetah",t:"Mini Cheetah: A Platform for Pushing the Limits of Dynamic Quadruped Control",y:"2019",v:"ICRA",x:"9 kg",u:"https://ieeexplore.ieee.org/document/8793865",a:"pay",
+ zh:"MIT 的小型低成本四足:模組化可反驅致動器、高力控頻寬、耐衝擊;凸 MPC 跑到 2.45 m/s 並完成 360° 後空翻。",
+ en:"MIT's small low-cost quadruped: modular backdrivable actuators, high-bandwidth force control, impact robustness; 2.45 m/s with convex MPC and 360° backflips."},
+{s:"des-quad",grp:"Electric · small-mid · 9–13 kg",n:"PADWQ",t:"Design and Control of a Open-Source, Low Cost, 3D Printed Dynamic Quadruped Robot",y:"2021",v:"Applied Sciences",x:"12.7 kg",u:"https://www.mdpi.com/2076-3417/11/9/3762",a:"oa",
+ zh:"開源、低成本、3D 列印的動態四足設計與控制。",
+ en:"Design and control of an open-source, low-cost, 3D-printed dynamic quadruped."},
+{s:"des-quad",grp:"Electric · mid · 15–33 kg",n:"StarlETH · ETH",t:"StarlETH: A Compliant Quadrupedal Robot for Fast, Efficient, and Versatile Locomotion",y:"2012",v:"CLAWAR",x:"23 kg",u:"https://doi.org/10.1142/9789814415958_0062",a:"pay",
+ zh:"ETH 以串聯彈性致動器驅動的柔順四足,ANYmal 的前身。",
+ en:"ETH's compliant, series-elastic-actuated quadruped — ANYmal's predecessor."},
+{s:"des-quad",grp:"Electric · mid · 15–33 kg",id:"cheetah13",n:"MIT Cheetah",t:"Design Principles for Highly Efficient Quadrupeds and Implementation on the MIT Cheetah Robot",y:"2013",v:"ICRA",x:"33 kg",u:"https://ieeexplore.ieee.org/document/6631038",alt:"https://dspace.mit.edu/handle/1721.1/108096",a:"pay",
+ zh:"高效率四足的設計原則:高力矩密度馬達、低慣量腿、能量回收——MIT「本體感知致動器」路線的起點(FREE ↗ 連到 2015 T-Mech 期刊版)。",
+ en:"Design principles for highly efficient quadrupeds: high-torque-density motors, low-inertia legs, energy regeneration — the origin of MIT's proprioceptive-actuator line (FREE ↗ links the 2015 T-Mech journal version)."},
+{s:"des-quad",grp:"Electric · mid · 15–33 kg",n:"XDog",t:"Mechanical Design of a Modular Quadruped Robot – XDog",y:"2014",v:"MEIC",x:"15 kg",u:"https://doi.org/10.2991/meic-14.2014.237",a:"oa",
+ zh:"模組化四足 XDog 的機構設計。",
+ en:"Mechanical design of the modular quadruped XDog."},
+{s:"des-quad",grp:"Electric · mid · 15–33 kg",n:"ANYmal · ETH",t:"ANYmal - A Highly Mobile and Dynamic Quadrupedal Robot",y:"2016",v:"IROS",x:"~30 kg",u:"https://ieeexplore.ieee.org/document/7758092",a:"pay",
+ zh:"ETH 的高機動、動態四足 ANYmal(串聯彈性致動器),後來由 ANYbotics 商業化,也是 Feedback MPC 與 PEA co-design 的實驗平台。",
+ en:"ETH's highly mobile, dynamic SEA-driven quadruped ANYmal, later commercialized by ANYbotics — the testbed for Feedback MPC and PEA co-design."},
+{s:"des-quad",grp:"Electric · mid · 15–33 kg",n:"Stoch-3 · IISc",t:"A Chain-Driven, Sandwich-Legged Quadruped Robot: Design and Experimental Analysis",y:"2025",v:"AIR / arXiv",x:"~25 kg",u:"https://arxiv.org/abs/2503.14255",a:"oa",
+ zh:"IISc Stoch 實驗室:鏈條傳動、三明治式腿結構的四足設計與實驗分析(專案頁在書單作者的個人網站)。",
+ en:"IISc Stoch lab: a chain-driven, sandwich-legged quadruped — design and experimental analysis (project page on the list author's website)."},
+{s:"des-quad",grp:"Electric · big · 41–50 kg",n:"MIT Cheetah 3",t:"MIT Cheetah 3: Design and Control of a Robust, Dynamic Quadruped Robot",y:"2018",v:"IROS",x:"45 kg",u:"https://ieeexplore.ieee.org/document/8593885",a:"pay",
+ zh:"MIT Cheetah 3 的設計與控制:兼顧穩健與動態的 45 kg 四足(Convex MPC 論文正是在這台上做的)。",
+ en:"Design and control of MIT Cheetah 3, a robust, dynamic 45 kg quadruped (the platform of the Convex MPC paper)."},
+{s:"des-quad",grp:"Electric · big · 41–50 kg",n:"Tachyon · Sony",t:"Tachyon: Design and Control of High Payload, Robust, and Dynamic Quadruped Robot with Series-Parallel Elastic Actuators",y:"2021",v:"IROS",x:"41 kg",u:"https://ieeexplore.ieee.org/document/9636196",a:"pay",
+ zh:"Sony:以串並聯彈性致動器打造的高負載、穩健動態四足。",
+ en:"Sony: a high-payload, robust dynamic quadruped built on series-parallel elastic actuators."},
+{s:"des-quad",grp:"Electric · big · 41–50 kg",n:"KAIST HOUND",t:"Design of KAIST HOUND, a Quadruped Robot Platform for Fast and Efficient Locomotion with Mixed-Integer Nonlinear Optimization of a Gear Train",y:"2022",v:"ICRA",x:"45 kg",u:"https://ieeexplore.ieee.org/abstract/document/9811755",a:"pay",
+ zh:"KAIST:用混合整數非線性最佳化設計齒輪系的快速高效四足;其上的高速 RL 見 Actuator-Constrained RL。",
+ en:"KAIST: a fast, efficient quadruped whose gear train is designed by mixed-integer nonlinear optimization; its high-speed RL appears in Actuator-Constrained RL."},
+{s:"des-quad",grp:"Electric · big · 41–50 kg",n:"Kirin",t:"Prismatic Quasi-Direct-Drives for Dynamic Quadruped Locomotion with High Payload Capacity",y:"2022",v:"Int. J. Mech. Sci.",x:"50 kg",u:"https://doi.org/10.1016/j.ijmecsci.2022.107698",a:"pay",
+ zh:"稜柱式(prismatic)準直驅致動器,讓動態四足具備高負載能力。",
+ en:"Prismatic quasi-direct drives that give a dynamic quadruped high payload capacity."},
+{s:"des-quad",grp:"Electric · big · 41–50 kg",n:"Barry · ETH",t:"Barry: A High-Payload and Agile Quadruped Robot",y:"2023",v:"IEEE RA-L",x:"~48 kg",u:"https://ieeexplore.ieee.org/document/10246325",a:"pay",
+ zh:"ETH:高負載又敏捷的四足 Barry。",
+ en:"ETH: Barry, a high-payload yet agile quadruped."},
+{s:"des-quad",grp:"Electric · big · 41–50 kg",n:"RaiBo · KAIST",t:"RaiBo: A versatile robo-dog that runs through a sandy beach at 3 meters per second",y:"2023",v:"News",x:"n/a",u:"https://techxplore.com/news/2023-01-raibo-versatile-robo-dog-sandy-beach.html",a:"web",
+ zh:"KAIST RaiBo:能以 3 m/s 在沙灘上奔跑的多用途機器狗(新聞報導,非論文)。",
+ en:"KAIST RaiBo: a versatile robo-dog running on a sandy beach at 3 m/s (news article, not a paper)."},
+{s:"des-quad",grp:"Electric · big · 41–50 kg",n:"RAIBO2 · KAIST",t:"RAIBO2: Highly efficient quadruped robot completing full marathon with a single battery charge",y:"2025",v:"Research Square",x:"43–45 kg",u:"https://www.researchsquare.com/article/rs-6040970/v1",a:"oa",
+ zh:"KAIST RAIBO2:單次充電跑完全程馬拉松的高效率四足(預印本)。",
+ en:"KAIST RAIBO2: a highly efficient quadruped that finished a full marathon on a single charge (preprint)."},
+
+{s:"des-pr",id:"cheetah13",n:"MIT Cheetah",t:"Design Principles for Highly Efficient Quadrupeds and Implementation on the MIT Cheetah Robot",y:"2013",v:"ICRA",u:"https://ieeexplore.ieee.org/document/6631038",alt:"https://dspace.mit.edu/handle/1721.1/108096",a:"pay",
+ zh:"同上表的 MIT Cheetah 設計原則論文:若只讀一篇足式硬體設計,就讀這篇(或其 2015 期刊版)。",
+ en:"The same MIT Cheetah design-principles paper as in the quadruped table: if you read one legged-hardware design paper, read this one (or its 2015 journal version)."},
+
+{s:"des-pat",n:"Boston Dynamics",t:"List of Patents from Boston Dynamics",y:"",v:"Company page",u:"https://www.bostondynamics.com/patents",a:"patent",
+ zh:"Boston Dynamics 的專利總表,是了解其硬體做法的少數公開管道。",
+ en:"Boston Dynamics' patent list — one of the few public windows into its hardware practice."},
+{s:"des-pat",n:"Boston Dynamics",t:"Screw Actuator for Legged Robots (US10253855B2)",y:"2019",v:"US patent",u:"https://patents.google.com/patent/US10253855B2/en",a:"patent",
+ zh:"足式機器人的螺桿(screw)致動器專利。",
+ en:"A screw-actuator patent for legged robots."},
+{s:"des-pat",n:"Boston Dynamics",t:"Transmission with Integrated Overload Protection for a Legged Robot (WO2018112097)",y:"2018",v:"WIPO",u:"https://patentscope.wipo.int/search/en/detail.jsf?docId=WO2018112097",a:"patent",
+ zh:"內建過載保護的足式機器人傳動機構專利。",
+ en:"A legged-robot transmission with integrated overload protection."},
+/* ---------- 04 ACTUATORS ---------- */
+{s:"act-plan",id:"minich",n:"MIT Mini Cheetah actuator",t:"Mini Cheetah: A Platform for Pushing the Limits of Dynamic Quadruped Control",y:"2019",v:"ICRA",u:"https://ieeexplore.ieee.org/document/8793865",a:"pay",
+ zh:"準直驅行星減速致動器的範本:無人機外轉子馬達 + 單級行星減速,可反驅、高頻寬力控;Ben Katz 的部落格有完整設計筆記。",
+ en:"The template quasi-direct-drive planetary actuator: an outrunner drone motor plus a single-stage planetary, backdrivable with high-bandwidth force control; Ben Katz's blog has the full design notes."},
+{s:"act-plan",n:"MIT Humanoid actuator",t:"Design of a High Torque Density Modular Actuator for Dynamic Robots (Alex Hattori, thesis)",y:"2020",v:"MIT thesis",u:"https://dspace.mit.edu/handle/1721.1/127165",a:"thesis",
+ zh:"MIT Humanoid 致動器的設計論文:如何把高力矩密度、模組化與動態需求做進一顆致動器。",
+ en:"Thesis on the MIT Humanoid actuator: packing high torque density, modularity and dynamic capability into one actuator."},
+{s:"act-plan",id:"mithum",n:"MIT Humanoid",t:"Design and Development of the MIT Humanoid: A Dynamic and Robust Research Platform",y:"2023",v:"Humanoids",u:"https://ieeexplore.ieee.org/document/10375199",a:"pay",
+ zh:"同人形設計表:以上一列論文的致動器組成的全身平台。",
+ en:"Same as in the humanoid table: the full-body platform built from the actuator in the row above."},
+{s:"act-plan",id:"bh",n:"Berkeley Humanoid",t:"Berkeley Humanoid: A Research Platform for Learning-based Control",y:"2024",v:"ICRA 2025",u:"https://arxiv.org/abs/2407.21781",a:"oa",g:"Liao2024_BerkeleyHumanoid.html",
+ zh:"四種自製 9:1 行星 QDD 致動器,直接當關節安裝;轉子慣量與摩擦逐顆量測後寫進模擬器,以縮小 sim-to-real 差距。",
+ en:"Four in-house 9:1 planetary QDD actuator types mounted directly as joints, with rotor inertia and per-actuator friction measured and put into the simulator to shrink the sim-to-real gap."},
+{s:"act-plan",n:"QDD actuator",t:"Design and Experimental Characterisation of a Novel Quasi-Direct Drive Actuator for Highly Dynamic Robotic Applications",y:"2024",v:"ICRA",u:"https://ieeexplore.ieee.org/document/10611567",a:"pay",
+ zh:"新型準直驅致動器的設計與實驗特性量測,針對高動態機器人應用。",
+ en:"Design and experimental characterization of a novel quasi-direct-drive actuator for highly dynamic robots."},
+{s:"act-plan",n:"3D-printed actuators · EmBiR",t:"Design and Characterization of 3D Printed, Open-Source Actuators for Legged Locomotion",y:"2022",v:"IROS",u:"https://ieeexplore.ieee.org/document/9981940",a:"pay",
+ zh:"Michigan EmBiR Lab:開源 3D 列印致動器的設計與特性量測(設計檔公開於實驗室網站)。",
+ en:"Michigan EmBiR Lab: design and characterization of open-source 3D-printed actuators (design files on the lab website)."},
+
+{s:"act-cyc",id:"bhlite",n:"Berkeley Humanoid Lite",t:"Demonstrating Berkeley Humanoid Lite: An Open-source, Accessible, and Customizable 3D-printed Humanoid Robot",y:"2025",v:"RSS",u:"https://arxiv.org/abs/2504.17249",a:"oa",g:"Chi2025_BerkeleyHumanoidLite.html",
+ zh:"擺線減速器能 3D 列印、單級就有高減速比,這篇把它做成整台人形的標準致動器並公開測試數據。",
+ en:"Cycloidal reducers are 3D-printable with a high single-stage ratio; this paper makes one the standard actuator of a whole humanoid and publishes the test data."},
+{s:"act-cyc",n:"Pinwheel vs non-pinwheel",t:"Experimental comparison of pinwheel and non-pinwheel designs of 3D-printed cycloidal gearing for robotics",y:"2024",v:"ICRA",u:"https://ieeexplore.ieee.org/abstract/document/10610250/",a:"pay",
+ zh:"Twente(Wesley Roozing):實驗比較 3D 列印擺線減速的 pinwheel 與非 pinwheel 兩種設計。",
+ en:"Twente (Wesley Roozing): experimental comparison of pinwheel vs non-pinwheel 3D-printed cycloidal gearing."},
+{s:"act-cyc",n:"Anti-backlash · Twente RaM",t:"Anti-Backlash Mechanisms for Cycloidal Drive Robotic Actuators: Design and Evaluation",y:"2025",v:"IEEE",u:"https://ieeexplore.ieee.org/abstract/document/11197911/",a:"pay",
+ zh:"擺線減速致動器的消隙(anti-backlash)機構設計與評估——擺線的主要痛點之一。",
+ en:"Design and evaluation of anti-backlash mechanisms for cycloidal-drive actuators — one of cycloidal drives' main pain points."},
+{s:"act-cyc",n:"Cycloidal QDD · RoMeLa",t:"Cycloidal Quasi-Direct Drive Actuator Designs with Learning-based Torque Estimation for Legged Robotics",y:"2024",v:"arXiv",u:"https://arxiv.org/abs/2410.16591v2",a:"oa",
+ zh:"UCLA RoMeLa:擺線式準直驅致動器設計,並以學習方法估測輸出力矩。",
+ en:"UCLA RoMeLa: cycloidal quasi-direct-drive actuator designs with learning-based output-torque estimation."},
+{s:"act-cyc",n:"Compact cycloidal · KAIST",t:"Development of a Lightweight and High-efficiency Compact Cycloidal Reducer for Legged Robots",y:"2019",v:"IJPEM",u:"https://link.springer.com/article/10.1007/s12541-019-00215-9",a:"pay",
+ zh:"KAIST(Jun Ho Oh):為足式機器人開發的輕量、高效率緊湊擺線減速器。",
+ en:"KAIST (Jun Ho Oh): a lightweight, high-efficiency compact cycloidal reducer for legged robots."},
+{s:"act-cyc",n:"Q-CYC · Sant'Anna Pisa",t:"Design and Validation of a Novel Quadruple-Disk CYcloidal Compact-cam Reducer for Robotic Applications: Q-CYC",y:"",v:"ResearchGate",u:"https://www.researchgate.net/publication/405985179_Design_and_Validation_of_a_Novel_Quadruple-Disk_CYcloidal_Compact-cam_Reducer_for_Robotic_Applications_Q-CYC",a:"web",
+ zh:"四盤擺線、緊湊凸輪式減速器 Q-CYC 的設計與驗證。",
+ en:"Design and validation of Q-CYC, a quadruple-disk cycloidal compact-cam reducer."},
+
+{s:"act-sea",n:"SEA thesis · UT Austin",t:"High-Performance Series Elastic Actuation (Nicholas Paine, PhD thesis)",y:"2014",v:"UT Austin",u:"https://sites.utexas.edu/hcrl/files/2016/01/nick-paine-thesis-dissertation-2014.pdf",a:"thesis",
+ zh:"UT Austin HCRL 的博士論文:高性能串聯彈性致動(SEA)的設計與控制,SEA 主題的入門長文。",
+ en:"UT Austin HCRL PhD thesis on the design and control of high-performance series elastic actuation — a long-form entry point to SEAs."},
+
+{s:"act-dual",n:"VUB Brubotics",t:"A Methodology for Designing a Lightweight and Energy-Efficient Kinematically Redundant Actuator",y:"2022",v:"IEEE RA-L",u:"https://ieeexplore.ieee.org/document/9834077",a:"pay",
+ zh:"VUB Brubotics:輕量、節能的運動學冗餘(雙馬達)致動器設計方法。",
+ en:"VUB Brubotics: a methodology for designing a lightweight, energy-efficient kinematically redundant (dual-motor) actuator."},
+{s:"act-dual",n:"DRPD · KAIST",t:"DRPD, Dual Reduction Ratio Planetary Drive for Articulated Robot Actuators",y:"2022",v:"IROS",u:"https://ieeexplore.ieee.org/abstract/document/9981201",a:"pay",
+ zh:"KAIST:雙減速比行星驅動,讓一顆致動器兼具高速與高力矩兩種模式。",
+ en:"KAIST: a dual-reduction-ratio planetary drive giving one actuator both a high-speed and a high-torque mode."},
+{s:"act-dual",n:"Explosive actuator",t:"Explosive Electric Actuator and Control for Legged Robots",y:"2021",v:"Engineering",u:"https://reader.elsevier.com/reader/sd/pii/S2095809921005282",a:"oa",
+ zh:"雙馬達的爆發型電動致動器與控制,針對跳躍等高功率足式動作。",
+ en:"A dual-motor explosive electric actuator and its control for high-power legged motions such as jumping."},
+{s:"act-dual",n:"Two-motor actuator · MIT",t:"A Two-Motor Actuator for Legged Robotics Applications (John Harry Bell, thesis)",y:"2018",v:"MIT thesis",u:"https://dspace.mit.edu/bitstream/handle/1721.1/127152/1191839946-MIT.pdf?sequence=1&isAllowed=y",a:"thesis",
+ zh:"MIT 碩士論文:用於足式機器人的雙馬達致動器。",
+ en:"MIT master's thesis: a two-motor actuator for legged robots."},
+{s:"act-dual",n:"R&M Belgium",t:"Modeling and design of an energy-efficient dual-motor actuation unit with a planetary differential and holding brakes",y:"2017",v:"Mechatronics",u:"https://reader.elsevier.com/reader/sd/pii/S0957415817301812",a:"pay",
+ zh:"比利時 R&MM:帶行星差速與保持煞車的節能雙馬達驅動單元,建模與設計。",
+ en:"R&MM (Belgium): modeling and design of an energy-efficient dual-motor unit with a planetary differential and holding brakes."},
+{s:"act-dual",n:"Variable gear ratio",t:"Leveraging Natural Load Dynamics With Variable Gear-Ratio Actuators",y:"2017",v:"IEEE RA-L",u:"https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7814203",a:"pay",
+ zh:"可變減速比致動器,順著負載的自然動態調整減速比。",
+ en:"Variable gear-ratio actuators that exploit the natural dynamics of the load."},
+{s:"act-dual",n:"Ultra-compact IVT",t:"An Ultra-Compact Infinitely Variable Transmission for Robotics",y:"2017",v:"ICRA",u:"https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7989212",a:"pay",
+ zh:"給機器人用的超緊湊無段變速傳動(IVT)。",
+ en:"An ultra-compact infinitely variable transmission for robots."},
+{s:"act-dual",n:"Two-speed optimal control",t:"A practical optimal control approach for two-speed actuators",y:"2016",v:"ICRA",u:"https://ieeexplore.ieee.org/document/7487658",a:"pay",
+ zh:"兩段變速致動器的實用最佳控制:何時換檔、如何分配力矩。",
+ en:"Practical optimal control for two-speed actuators: when to shift and how to allocate torque."},
+{s:"act-dual",n:"+SPEA",t:"+SPEA introduction: drastic actuator energy requirement reduction by symbiosis of parallel motors, springs and locking mechanisms",y:"2016",v:"ICRA",u:"https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7487193",a:"pay",
+ zh:"並聯馬達 + 彈簧 + 鎖定機構的共生設計,大幅降低致動器能耗。",
+ en:"Parallel motors, springs and locking mechanisms combined to drastically cut actuator energy needs."},
+{s:"act-dual",n:"Two-speed actuator",t:"A Two-Speed Actuator for Robotics with Fast Seamless Gear Shifting",y:"2015",v:"IROS",u:"https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7354047",a:"pay",
+ zh:"Alexandre Girard:可快速無縫換檔的兩段變速機器人致動器。",
+ en:"Alexandre Girard: a two-speed robotic actuator with fast, seamless gear shifting."},
+{s:"act-dual",n:"Dual-motor epicyclic joint",t:"A Dual-Motor Robot Joint Mechanism with Epicyclic Gear Train",y:"2014",v:"IROS",u:"https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=6942601",a:"pay",
+ zh:"以周轉(行星)齒輪系組成的雙馬達機器人關節。",
+ en:"A dual-motor robot joint built on an epicyclic gear train."},
+{s:"act-dual",n:"Dual motors + planetary",t:"A New Actuator System Using Dual-Motors and a Planetary Gear",y:"2012",v:"IEEE/ASME T-Mech",u:"https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=6022796",a:"pay",
+ zh:"Hoyul Lee:雙馬達 + 行星齒輪的新型致動系統。",
+ en:"Hoyul Lee: a new actuator system combining dual motors and a planetary gear."},
+{s:"act-dual",n:"Serial-type DAU",t:"A Serial-Type Dual Actuator Unit With Planetary Gear Train: Basic Design and Applications",y:"2010",v:"IEEE/ASME T-Mech",u:"https://ieeexplore.ieee.org/document/4840358",a:"pay",
+ zh:"Jung Jun Park:串聯式雙致動單元(行星齒輪系)的基本設計與應用。",
+ en:"Jung Jun Park: basic design and applications of a serial-type dual actuator unit with a planetary gear train."},
+{s:"act-dual",n:"Double actuator unit",t:"Double Actuator Unit with Planetary Gear Train for a Safe Manipulator",y:"2007",v:"ICRA",u:"https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=4209243",a:"pay",
+ zh:"用於安全機械臂的雙致動單元(行星齒輪系)——這條雙馬達脈絡的源頭。",
+ en:"A double actuator unit with a planetary gear train for a safe manipulator — the origin of this dual-motor thread."},
+{s:"act-dual",n:"Serial-type DAU efficiency",t:"Improved Manipulation Efficiency Using a Serial-type Dual Actuator Unit",y:"2007",v:"IEEE",u:"https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=4406874",a:"pay",
+ zh:"以串聯式雙致動單元提升操作效率。",
+ en:"Improving manipulation efficiency with a serial-type dual actuator unit."},
+
+{s:"act-model",n:"Actuator-Constrained RL · KAIST HOUND",t:"Actuator-Constrained Reinforcement Learning for High-Speed Quadrupedal Locomotion",y:"2023",v:"arXiv",u:"https://arxiv.org/abs/2312.17507",a:"oa",g:"Shin2023_ActuatorConstrainedRL.html",
+ zh:"把馬達力矩-轉速可行區(反電動勢 vs 匯流排電壓 + 峰值力矩)寫成線性不等式,在 RL 訓練中裁切力矩指令,讓 KAIST HOUND 從 4.5 m/s 跑到 6.5 m/s。",
+ en:"Writes the motor's torque-speed region (back-EMF vs bus voltage, plus peak torque) as linear inequalities and clips torque commands to it during RL training, lifting KAIST HOUND from 4.5 to 6.5 m/s."},
+
+{s:"act-motor",grp:"Motor theory and design",n:"James Mevey",t:"Master's thesis (Kansas State University)",y:"",v:"K-State thesis",u:"https://krex.k-state.edu/server/api/core/bitstreams/e3f7aa0b-4833-44e4-9ef0-af09f411baa1/content",a:"thesis",
+ zh:"無刷馬達理論與控制的碩士論文,書單推薦作為馬達理論入門。",
+ en:"A master's thesis on brushless-motor theory and control, recommended by the list as a motor-theory primer."},
+{s:"act-motor",grp:"Motor theory and design",n:"Hanselman",t:"Brushless Permanent Magnet Motor Design (book)",y:"",v:"Book",u:"",a:"blog",
+ zh:"經典教科書:無刷永磁馬達設計(書單未附連結)。",
+ en:"The classic textbook on brushless permanent-magnet motor design (no link in the list)."},
+{s:"act-motor",grp:"Motor theory and design",n:"Instructables",t:"Make Your Own Miniature Electric Hub Motor",y:"",v:"Instructables",u:"https://www.instructables.com/Make-Your-Own-Miniature-Electric-Hub-Motor/",a:"blog",
+ zh:"自己繞線做迷你輪轂馬達的 DIY 教學。",
+ en:"A DIY guide to winding your own miniature hub motor."},
+{s:"act-motor",grp:"Motor theory and design",n:"Reddit",t:"Need some guidance with BLDC motor design (answer by alternativemax)",y:"",v:"Reddit",u:"https://www.reddit.com/r/Motors/comments/pmopwr/need_some_guidance_with_bldc_motor_design/",a:"blog",
+ zh:"Reddit 討論串:BLDC 馬達設計的入門建議。",
+ en:"Reddit thread with practical guidance on BLDC motor design."},
+{s:"act-motor",grp:"Dynamometer: actuator testing",n:"Ben Katz blog",t:"Motor dynamometer and torque-ripple characterization posts (4 links in the list)",y:"2016–2019",v:"Blog",u:"https://build-its.blogspot.com/2019/12/motor-dynamometer.html",a:"blog",
+ zh:"Mini Cheetah 致動器作者 Ben Katz 的測功機、力矩漣波量測系列文章。",
+ en:"Blog series by Ben Katz (designer of the Mini Cheetah actuator) on motor dynamometers and torque-ripple characterization."},
+{s:"act-motor",grp:"Dynamometer: actuator testing",n:"mjbots",t:"Initial dynamometer assembly",y:"2020",v:"Blog",u:"https://blog.mjbots.com/2020/08/19/initial-dynamometer-assembly/",a:"blog",
+ zh:"mjbots 的測功機組裝紀錄。",
+ en:"mjbots' dynamometer build log."},
+{s:"act-motor",grp:"Dynamometer: actuator testing",n:"The brushless zone",t:"Quantifying a motor: the IPM dyno",y:"",v:"Blog",u:"https://brushless.zone/quantifying-a-motor-the-ipm-dyno/",a:"blog",
+ zh:"用 IPM 測功機量化一顆馬達的特性。",
+ en:"Characterizing a motor with an IPM dyno."},
+{s:"act-motor",grp:"Dynamometer: actuator testing",n:"Dynos for Dummies",t:"Understanding a motor dynamometer setup (Adi Mehrotra, MIT EVT)",y:"",v:"PDF",u:"https://evt.mit.edu/textbooks/Dynos_for_Dummies.pdf",a:"oa",
+ zh:"MIT EVT 的測功機入門講義。",
+ en:"MIT EVT's primer on dynamometer setups."},
+{s:"act-motor",grp:"Dynamometer: actuator testing",id:"bhlite",n:"Berkeley Humanoid Lite",t:"Demonstrating Berkeley Humanoid Lite: An Open-source, Accessible, and Customizable 3D-printed Humanoid Robot",y:"2025",v:"RSS",u:"https://arxiv.org/abs/2504.17249",a:"oa",g:"Chi2025_BerkeleyHumanoidLite.html",
+ zh:"書單引用它的致動器測試平台作為測功機範例。",
+ en:"Cited by the list for its actuator test setup as a dynamometer example."},
+{s:"act-motor",grp:"Actuator build logs",n:"nachumtwersky",t:"3D Printed QDD Robotic Actuator (MIT Mini Cheetah Clone)",y:"",v:"Instructables",u:"https://www.instructables.com/3D-Printed-QDD-Robotic-Actuator-MIT-Mini-Cheetah-C/",a:"blog",
+ zh:"3D 列印準直驅致動器(Mini Cheetah 複刻)的 DIY 教學。",
+ en:"DIY guide to a 3D-printed QDD actuator (a Mini Cheetah clone)."},
+/* ---------- 05 CO-DESIGN ---------- */
+{s:"cd-surv",n:"Embodied Co-Design survey",t:"Embodied Co-Design for Rapidly Evolving Agents: Taxonomy, Frontiers, and Challenges",y:"2026",v:"IEEE TEC (accepted)",u:"https://arxiv.org/abs/2512.04770",a:"oa",g:"WangYX2025_EmbodiedCoDesign.html",
+ zh:"Tsinghua / CASIA:具身協同設計(大腦 × 身體)的方法導向綜述,三元件 × 四框架(bi-level / single-level / generative / open-ended)的查表地圖;約八成工作只在模擬中驗證。附 GitHub 論文清單。",
+ en:"Tsinghua / CASIA: a method-centric survey of brain-body co-design mapping 100+ works onto three components × four frameworks (bi-level, single-level, generative, open-ended); about four in five are simulation-only. Companion GitHub list."},
+
+{s:"cd-qmb",n:"Differential 3-segment leg",t:"Codesign of a Differential Three-Segment Leg Enhancing Payload and Efficiency in Quadrupeds",y:"2026",v:"IEEE/ASME T-Mech",u:"https://ieeexplore.ieee.org/abstract/document/11130397",a:"pay",
+ zh:"協同設計差動式三段腿,提升四足的負載與效率。",
+ en:"Co-designs a differential three-segment leg that raises quadruped payload and efficiency."},
+{s:"cd-qmb",n:"Versatile quadrupeds",t:"Co-designing Versatile Quadruped Robots for Dynamic and Energy-Efficient Motions",y:"2024",v:"Robotica",u:"https://www.cambridge.org/core/journals/robotica/article/codesigning-versatile-quadruped-robots-for-dynamic-and-energyefficient-motions/4BB90A9CB0BCBC185613E0DC7D0D88B0",a:"pay",
+ zh:"協同設計能同時勝任動態與節能動作的多用途四足。",
+ en:"Co-designs versatile quadrupeds for both dynamic and energy-efficient motions."},
+{s:"cd-qmb",n:"Robust compliance",t:"Engineering Compliance in Legged Robots via Robust Co-Design",y:"2024",v:"IEEE/ASME T-Mech",u:"https://doi.org/10.1109/TMECH.2024.3382305",a:"pay",
+ zh:"以穩健協同設計決定足式機器人的柔順(彈性元件)參數。",
+ en:"Engineers compliance (elastic elements) in legged robots via robust co-design."},
+{s:"cd-qmb",n:"Overconstrained limbs",t:"Computational Design Towards Energy Efficient Optimization in Overconstrained Robotic Limbs",y:"2023",v:"JCDE",u:"https://doi.org/10.1093/jcde/qwad083",a:"oa",
+ zh:"過約束(overconstrained)連桿腿的節能計算設計。",
+ en:"Computational design for energy-efficient overconstrained robotic limbs."},
+{s:"cd-qmb",n:"Versatile co-design",t:"A Versatile Co-Design Approach for Dynamic Legged Robots",y:"2022",v:"IROS",u:"https://arxiv.org/abs/2103.04660",a:"oa",g:"Dinev2022_VersatileCoDesign.html",
+ zh:"Edinburgh(Dinev 等):KNITRO 外層以平行有限差分穿過 Crocoddyl DDP 內層,在硬性設計約束下最佳化 Solo 的形態與馬達/減速比,trot/jump 能耗約降七成(僅模擬)。",
+ en:"Edinburgh (Dinev et al.): a KNITRO outer loop runs parallel finite differences through a Crocoddyl DDP inner loop to optimize Solo morphology and motor/gear ratio under hard design constraints, cutting trot/jump energy by about 70% (simulation only)."},
+{s:"cd-qmb",n:"ADMM co-design",t:"Large-Scale ADMM-based Co-Design of Legged Robots",y:"2022",v:"IROS",u:"https://ieeexplore.ieee.org/document/9981641",a:"pay",
+ zh:"以 ADMM 拆解大規模協同設計問題,同時最佳化足式機器人的設計與運動。",
+ en:"Splits large-scale legged-robot co-design with ADMM to optimize design and motion jointly."},
+{s:"cd-qmb",n:"Simulation-aided co-design",t:"Simulation Aided Co-Design for Robust Robot Optimization",y:"2022",v:"IEEE RA-L",u:"https://ieeexplore.ieee.org/document/9863656",a:"pay",
+ zh:"LAAS(Fadini 等):外層基因演算法在擾動模擬中評估硬體、內層 DDP 求軌跡與回授增益,結果偏好更輕、更透明的硬體。",
+ en:"LAAS (Fadini et al.): an outer genetic algorithm scores hardware in perturbed simulations while an inner DDP computes trajectories and feedback gains; it ends up favoring lighter, more transparent hardware."},
+{s:"cd-qmb",n:"Robust co-design",t:"Robust Co-Design: Coupling Morphology and Feedback Design Through Stochastic Programming",y:"2021",v:"ASME JDSMC",u:"https://asmedigitalcollection.asme.org/dynamicsystems/article/144/2/021007/1119647/Robust-Co-Design-Coupling-Morphology-and-Feedback",a:"pay",
+ zh:"以隨機規劃同時設計形態與回授控制器,讓設計對擾動穩健。",
+ en:"Couples morphology and feedback design through stochastic programming so the design is robust to disturbances."},
+{s:"cd-qmb",n:"Control-aware design · ETH CRL",t:"Control-Aware Design Optimization for Bio-Inspired Quadruped Robots",y:"2021",v:"IROS",u:"https://crl.ethz.ch/papers/controlAwareDesign.pdf",a:"oa",
+ zh:"ETH CRL:把控制器納入考量的仿生四足設計最佳化。",
+ en:"ETH CRL: control-aware design optimization for bio-inspired quadrupeds."},
+{s:"cd-qmb",n:"Size and actuators",t:"Computational Design of Energy-Efficient Legged Robots: Optimizing for Size and Actuators",y:"2021",v:"ICRA",u:"https://doi.org/10.1109/ICRA48506.2021.9560988",a:"pay",
+ zh:"同時最佳化尺寸與致動器選型的節能足式機器人計算設計。",
+ en:"Computational design of energy-efficient legged robots, optimizing size and actuator choice together."},
+{s:"cd-qmb",n:"Vitruvio",t:"Vitruvio: An Open-Source Leg Design Optimization Toolbox for Walking Robots",y:"2020",v:"IEEE RA-L",u:"https://doi.org/10.1109/LRA.2020.3013913",a:"pay",
+ zh:"ETH 開源的步行機器人腿部設計最佳化工具箱。",
+ en:"ETH's open-source leg-design optimization toolbox for walking robots."},
+{s:"cd-qmb",n:"One robot, many tasks",t:"One Robot for Many Tasks: Versatile Co-Design Through Stochastic Programming",y:"2020",v:"IEEE RA-L",u:"https://doi.org/10.1109/LRA.2020.2969948",a:"pay",
+ zh:"以隨機規劃讓同一個設計兼顧多個任務。",
+ en:"Versatile co-design via stochastic programming so one design serves many tasks."},
+{s:"cd-qmb",n:"Design + trajectories",t:"Computational Co-Optimization of Design Parameters and Motion Trajectories for Robotic Systems",y:"2018",v:"IJRR",u:"https://doi.org/10.1177/0278364918771172",a:"pay",
+ zh:"同時最佳化設計參數與運動軌跡的通用計算框架。",
+ en:"A general computational framework co-optimizing design parameters and motion trajectories."},
+{s:"cd-qmb",n:"Task-based limbs",t:"Task-Based Limb Optimization for Legged Robots",y:"2016",v:"IROS",u:"https://doi.org/10.1109/IROS.2016.7759324",a:"pay",
+ zh:"依任務需求最佳化足式機器人的腿部參數。",
+ en:"Task-based optimization of legged-robot limbs."},
+{s:"cd-qmb",n:"Disney Research",t:"Concurrent Optimization of Mechanical Design and Locomotion Control of a Legged Robot",y:"2014",v:"CLAWAR",u:"https://studios.disneyresearch.com/wp-content/uploads/2019/03/Concurrent-Optimization-of-Mechanical-Design-and-Locomotion-Control-of-a-Legged-Robot-Paper.pdf",a:"oa",
+ zh:"機構設計與步行控制的同步最佳化,書單中最早的協同設計論文。",
+ en:"Concurrent optimization of mechanical design and locomotion control — the earliest co-design paper on the list."},
+
+{s:"cd-qrl",n:"GLAMDRING",t:"GLAMDRING: Gait Learning and Morphology Co-Design via Reinforcement Learning of CPGs",y:"2026",v:"arXiv",u:"https://arxiv.org/abs/2609.19452",a:"oa",
+ zh:"以 RL 學習 CPG 步態,同時協同設計形態。",
+ en:"Co-designs morphology while learning CPG-based gaits with RL."},
+{s:"cd-qrl",n:"TU Delft thesis",t:"Learning-Based Co-Design for Bio-Inspired Quadrupeds",y:"2025",v:"MSc thesis, TU Delft",u:"https://repository.tudelft.nl/record/uuid:715bddc8-828c-4c8f-9c5f-1fec4eea90c3",a:"thesis",
+ zh:"TU Delft 碩士論文:仿生四足的學習式協同設計。",
+ en:"TU Delft MSc thesis on learning-based co-design for bio-inspired quadrupeds."},
+{s:"cd-qrl",n:"PEA co-design",t:"Learning-Based Design and Control for Quadrupedal Robots with Parallel-Elastic Actuators",y:"2023",v:"IEEE RA-L",u:"https://arxiv.org/abs/2301.03509",a:"oa",g:"Bjelonic2023_PEACoDesign.html",
+ zh:"ETH:以設計條件化的 RL 策略當評估器、BO 搜尋膝關節並聯彈簧,ANYmal 實機力矩成本降 33%、續航多 11%。",
+ en:"ETH: a design-conditioned RL policy serves as the evaluator while BO searches the parallel knee spring; ANYmal's torque cost drops 33% and battery life rises 11% on hardware."},
+{s:"cd-qrl",n:"Meta-RL design",t:"Meta Reinforcement Learning for Optimal Design of Legged Robots",y:"2022",v:"IEEE RA-L",u:"https://arxiv.org/abs/2210.02750",a:"oa",
+ zh:"以 meta-RL 學一個能適應不同設計的策略,評估候選設計時不必每次重訓。",
+ en:"Meta-RL learns a design-adaptive policy so candidate designs can be evaluated without retraining each time."},
+
+{s:"cd-bmb",n:"Draft",t:"Draft: A Parametric Tool for Robot Design Exploration",y:"2026",v:"arXiv",u:"https://arxiv.org/pdf/2609.38405",a:"oa",
+ zh:"機器人設計探索的參數化工具。",
+ en:"A parametric tool for robot design exploration."},
+{s:"cd-bmb",n:"Biped co-design framework",t:"Toward a Co-Design Framework for Bipedal Robots",y:"2026",v:"IEEE Access",u:"https://doi.org/10.1109/ACCESS.2026.3694586",a:"oa",
+ zh:"邁向雙足機器人的協同設計框架。",
+ en:"Toward a co-design framework for bipedal robots."},
+{s:"cd-bmb",n:"Actuator allocation",t:"Task-Aware Actuator Parameter Allocation for Multibody Robots",y:"2026",v:"IEEE RA-L",u:"https://doi.org/10.1109/LRA.2026.3674006",a:"pay",
+ zh:"依任務為多體機器人的各關節分配致動器參數。",
+ en:"Task-aware allocation of actuator parameters across a multibody robot."},
+{s:"cd-bmb",n:"Disturbance tolerance",t:"Maximising Tolerance to Disturbances via Combined Control-Actuation Optimisation for Robust Humanoid Robot Walking",y:"2025",v:"IEEE RA-L",u:"https://doi.org/10.1109/LRA.2025.3549660",a:"pay",
+ zh:"控制與致動聯合最佳化,最大化人形步行對擾動的容忍度。",
+ en:"Joint control-actuation optimization that maximizes a humanoid's walking disturbance tolerance."},
+{s:"cd-bmb",n:"HZD co-design",t:"Humanoid Robot Co-Design: Coupling Hardware Design with Gait Generation via Hybrid Zero Dynamics",y:"2023",v:"CDC",u:"https://arxiv.org/abs/2308.10962",a:"oa",
+ zh:"以 Hybrid Zero Dynamics 步態生成耦合硬體設計的人形協同設計。",
+ en:"Humanoid co-design coupling hardware design with gait generation via Hybrid Zero Dynamics."},
+{s:"cd-bmb",n:"BILP actuation",t:"Control- & Task-Aware Optimal Design of Actuation System for Legged Robots Using Binary Integer Linear Programming",y:"2023",v:"Humanoids",u:"https://arxiv.org/abs/2307.11573",a:"oa",
+ zh:"以二元整數線性規劃,依控制與任務需求挑出最佳致動系統。",
+ en:"Chooses the actuation system via binary integer linear programming, aware of control and task."},
+
+{s:"cd-brl",n:"BRIDGE",t:"BRIDGE: An Open-Source Humanoid Platform via Morphology-Control Co-Design for Physical AI",y:"2026",v:"arXiv",u:"https://arxiv.org/pdf/2609.03497",a:"oa",
+ zh:"以形態-控制協同設計打造的開源人形平台,面向 Physical AI。",
+ en:"An open-source humanoid platform built through morphology-control co-design, aimed at physical AI."},
+{s:"cd-brl",n:"Surrogate co-adaptation",t:"Efficient Co-Adaptation of Humanoid Robot Design and Locomotion Control Using Surrogate-Guided Optimization",y:"2025",v:"Biomimetic Intell. Robot.",u:"https://doi.org/10.1016/j.birob.2025.100255",a:"oa",
+ zh:"以代理模型(surrogate)引導,高效協同調整人形設計與步行控制。",
+ en:"Surrogate-guided optimization for efficient co-adaptation of humanoid design and locomotion control."},
+{s:"cd-brl",n:"Fall-recovery co-design",t:"Toward Humanoid Brain-Body Co-Design: Joint Optimization of Control and Morphology for Fall Recovery",y:"2025",v:"arXiv",u:"https://arxiv.org/pdf/2510.22336",a:"oa",
+ zh:"針對人形跌倒復原,聯合最佳化控制與形態。",
+ en:"Joint optimization of control and morphology for humanoid fall recovery."},
+{s:"cd-brl",n:"Evolutionary RL co-design",t:"Evolutionary Continuous Adaptive RL-Powered Co-Design for Enhanced Humanoid Performance",y:"2025",v:"arXiv",u:"https://arxiv.org/abs/2509.26082",a:"oa",
+ zh:"演化搜尋 + 持續自適應 RL 的人形協同設計。",
+ en:"Evolutionary search plus continuously adaptive RL for humanoid co-design."},
+{s:"cd-brl",n:"SERL structure",t:"Structural Optimization of Lightweight Bipedal Robot via SERL",y:"2024",v:"IROS",u:"https://arxiv.org/abs/2408.15632",a:"oa",
+ zh:"以 SERL 做輕量雙足機器人的結構最佳化。",
+ en:"Structural optimization of a lightweight biped via SERL."},
+
+{s:"cd-mono",n:"Geared actuator co-design",t:"Task-Oriented Co-Design and Optimization of Geared Actuators for Robotic Applications",y:"2026",v:"arXiv",u:"https://arxiv.org/pdf/2609.22795",a:"oa",
+ zh:"任務導向的齒輪致動器協同設計與最佳化。",
+ en:"Task-oriented co-design and optimization of geared actuators."},
+{s:"cd-mono",n:"SurGE",t:"SurGE: Surrogate Gradient-guided Evolution for Co-design of Legged Robots with Parallel Elasticity",y:"2026",v:"arXiv",u:"https://arxiv.org/abs/2606.21866",a:"oa",
+ zh:"以代理梯度引導演化,協同設計帶並聯彈性的足式機器人。",
+ en:"Surrogate-gradient-guided evolution for co-designing legged robots with parallel elasticity."},
+{s:"cd-mono",n:"Five-bar monoped",t:"A Co-Design Framework for High-Performance Jumping of a Five-Bar Monoped with Actuator Optimization",y:"2026",v:"AIM",u:"https://arxiv.org/pdf/2604.06025",a:"oa",
+ zh:"五連桿單腿跳躍機器人的協同設計,含致動器最佳化。",
+ en:"Co-design of a five-bar monoped for high-performance jumping, including actuator optimization."},
+{s:"cd-mono",n:"Energy-aware monoped",t:"A Co-Design Framework for Energy-Aware Monoped Jumping with Detailed Actuator Modeling",y:"2025",v:"Humanoids",u:"https://arxiv.org/pdf/2510.05923",a:"oa",
+ zh:"考慮詳細致動器模型的節能單腿跳躍協同設計。",
+ en:"Energy-aware co-design for monoped jumping with detailed actuator modeling."},
+
+{s:"cd-gen",n:"Transformer Transformer",t:"Transformer Transformer: A Unified Model for Motion-Conditioned Robot Co-Design",y:"2026",v:"arXiv",u:"https://arxiv.org/abs/2607.25798",a:"oa",
+ zh:"以目標動作為條件、同時處理設計與控制的統一協同設計模型。",
+ en:"A unified, motion-conditioned model for robot co-design."},
+{s:"cd-gen",n:"RoboMorph",t:"RoboMorph: Evolving Robot Morphology Using Large Language Models",y:"2026",v:"ICRA",u:"https://arxiv.org/pdf/2407.08626",a:"oa",
+ zh:"用大型語言模型演化機器人形態。",
+ en:"Evolves robot morphology with large language models."},
+{s:"cd-gen",n:"Transform2Act",t:"Transform2Act: Learning a Transform-and-Control Policy for Efficient Agent Design",y:"2022",v:"ICLR",u:"https://arxiv.org/abs/2110.03659",a:"oa",g:"Yuan2022_Transform2Act.html",
+ zh:"CMU:把「造身體」變成策略在 episode 開頭的動作,以 GNN + JSMLP 策略與 PPO 單一迴圈同時最佳化形態與控制;同預算下明顯勝過演化搜尋,但設計只活在沒有物理成本的 MuJoCo 世界。",
+ en:"CMU: makes body-building the first actions of an episode, co-optimizing morphology and control in one PPO loop with a GNN + JSMLP policy; clearly beats evolutionary search at equal budget, though its designs live only in cost-free MuJoCo."},
+{s:"cd-gen",n:"Hardware as Policy",t:"Hardware as Policy: Mechanical and Computational Co-Optimization Using Deep Reinforcement Learning",y:"2020",v:"CoRL",u:"https://arxiv.org/abs/2008.04460",a:"oa",
+ zh:"把硬體參數放進可微的計算圖,與控制策略一起用深度 RL 最佳化。",
+ en:"Puts hardware parameters into the computational graph and co-optimizes them with the control policy via deep RL."},
+{s:"cd-gen",n:"RoboGrammar",t:"RoboGrammar: Graph Grammar for Terrain-Optimized Robot Design",y:"2020",v:"ACM TOG / SIGGRAPH Asia",u:"https://dl.acm.org/doi/10.1145/3414685.3417831",a:"pay",
+ zh:"用圖文法(graph grammar)定義可製造的機器人結構空間,再搜尋最適合地形的設計。",
+ en:"Defines a space of fabricable robot structures with a graph grammar and searches it for terrain-optimized designs."},
+
+{s:"cd-other",n:"Morphological pretraining",t:"Accelerated Co-Design of Robots Through Morphological Pretraining",y:"2026",v:"ICLR",u:"https://arxiv.org/abs/2502.10862",a:"oa",
+ zh:"先在大量形態上預訓練通用控制器,再拿來加速協同設計。",
+ en:"Pre-trains a universal controller across many morphologies, then uses it to accelerate co-design."},
+{s:"cd-other",n:"Small-scale legged",t:"Deep Reinforcement Learning Based Co-Optimization of Morphology and Gait for Small-Scale Legged Robot",y:"2024",v:"IEEE/ASME T-Mech",u:"https://doi.org/10.1109/TMECH.2023.3330427",a:"pay",
+ zh:"以深度 RL 協同最佳化小型足式機器人的形態與步態。",
+ en:"Deep-RL co-optimization of morphology and gait for a small-scale legged robot."},
+{s:"cd-other",n:"Design-aware policy",t:"Making Use of Design-Aware Policy Optimization in Legged-Robotics Co-Design",y:"2024",v:"CoRL Workshop",u:"https://openreview.net/pdf?id=utaVaqRVO4",a:"oa",
+ zh:"在足式協同設計中使用「知道設計參數」的策略最佳化。",
+ en:"Uses design-aware policy optimization in legged-robot co-design."},
+{s:"cd-other",n:"CACTO",t:"CACTO: Exploring the Limits of a Redundant Actuation System Through Co-Design",y:"2021",v:"IEEE Access",u:"https://ieeexplore.ieee.org/document/9400808",a:"oa",
+ zh:"以協同設計探索冗餘致動系統的極限。",
+ en:"Explores the limits of a redundant actuation system through co-design."},
+{s:"cd-other",n:"Data-efficient co-adaptation",t:"Data-Efficient Co-Adaptation of Morphology and Behaviour with Deep Reinforcement Learning",y:"2019",v:"CoRL",u:"https://proceedings.mlr.press/v100/luck20a.html",a:"oa",
+ zh:"以深度 RL 資料高效地同時調整形態與行為。",
+ en:"Data-efficient co-adaptation of morphology and behaviour with deep RL."},
+];
+</script>
+<script>
+  const wrap=document.querySelector('.wrap');
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en'); wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){ btns.forEach((x,k)=>x.classList.toggle('on',k===i)); pages.forEach((p,k)=>p.classList.toggle('on',k===i)); }
+  btns.forEach(b=>b.onclick=()=>{ go(+b.dataset.p); window.scrollTo({top:0,behavior:'smooth'}); });
+  document.querySelectorAll('[data-go]').forEach(a=>a.onclick=e=>{ e.preventDefault(); go(+a.dataset.go); window.scrollTo({top:0,behavior:'smooth'}); });
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+
+  const ICON={oa:['FREE','免費全文','Free full text'],pay:['PUB','出版商頁面(可能需訂閱)','Publisher page (may be paywalled)'],
+    web:['WEB','網頁 / 專案頁','Web / project page'],thesis:['THESIS','學位論文','Thesis'],patent:['PATENT','專利','Patent'],blog:['BLOG','部落格 / 書 / 貼文','Blog / book / post']};
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  document.querySelectorAll('.ptable').forEach(box=>{
+    const rows=DATA.filter(p=>p.s===box.dataset.sec);
+    let h='<table><thead><tr><th>#</th><th><span data-lang="zh">論文</span><span data-lang="en">Paper</span></th><th><span data-lang="zh">年</span><span data-lang="en">Year</span></th><th><span data-lang="zh">出處</span><span data-lang="en">Venue</span></th><th></th><th><span data-lang="zh">一句話定位</span><span data-lang="en">One-line positioning</span></th><th><span data-lang="zh">導讀</span><span data-lang="en">Guide</span></th></tr></thead><tbody>';
+    let grp=null, k=0;
+    rows.forEach(p=>{
+      if(p.grp && p.grp!==grp){ grp=p.grp; h+='<tr class="grp"><td colspan="7">'+esc(p.grp)+'</td></tr>'; }
+      k++;
+      const ic=ICON[p.a]||ICON.web;
+      const title=p.u?'<a href="'+esc(p.u)+'" target="_blank" rel="noopener">'+esc(p.t)+'</a>':esc(p.t);
+      const alt=p.alt?'<a class="alt" href="'+esc(p.alt)+'" target="_blank" rel="noopener" title="免費版本 · open-access copy">FREE ↗</a>':'';
+      const text=[p.n,p.t,p.y,p.v,p.x,p.zh,p.en].join(' ').toLowerCase();
+      h+='<tr'+(p.g?' class="guided"':'')+' data-q="'+esc(text)+'"'+(p.g?' data-g="1"':'')+'>'+
+        '<td class="num">'+k+'</td>'+
+        '<td class="ttl">'+(p.n?'<span class="nm">'+esc(p.n)+'</span>':'')+title+alt+'</td>'+
+        '<td class="yr">'+esc(p.y||'—')+'</td>'+
+        '<td class="vn">'+esc(p.v||'')+(p.x?'<br><span class="x">'+esc(p.x)+'</span>':'')+'</td>'+
+        '<td class="ac" title="'+ic[1]+' · '+ic[2]+'"><span class="ab ab-'+(ICON[p.a]?p.a:'web')+'">'+ic[0]+'</span></td>'+
+        '<td class="sm"><span data-lang="zh">'+(p.zh||'')+'</span><span data-lang="en">'+(p.en||'')+'</span></td>'+
+        '<td class="gd">'+(p.g?'<a class="gbtn" href="'+esc(p.g)+'">📖 <span data-lang="zh">導讀</span><span data-lang="en">Guide</span></a>':'')+'</td></tr>';
+    });
+    h+='</tbody></table><div class="empty" style="display:none"><span data-lang="zh">沒有符合的條目</span><span data-lang="en">No matching entries</span></div>';
+    box.innerHTML=h;
+  });
+
+  const uniq=new Map(); DATA.forEach(p=>{ const key=p.id||p.t; if(!uniq.has(key)) uniq.set(key,p); else if(p.g) uniq.get(key).g=p.g; });
+  const U=[...uniq.values()];
+  const setv=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
+  const NG=U.filter(p=>p.g).length;
+  setv('st-all',U.length); setv('st-guided',NG); setv('st-guided2',NG); setv('st-guided3',NG);
+  setv('st-oa',U.filter(p=>p.a==='oa').length);
+  const ys=U.map(p=>parseInt(p.y)).filter(y=>y>1990); setv('st-span',Math.min(...ys)+'–'+Math.max(...ys));
+
+  const q=document.getElementById('q'), onlyg=document.getElementById('onlyg'), hits=document.getElementById('hits');
+  function filter(){
+    const s=q.value.trim().toLowerCase(), g=onlyg.checked, active=!!s||g;
+    let total=0;
+    document.querySelectorAll('.ptable').forEach(box=>{
+      let n=0;
+      box.querySelectorAll('tbody tr').forEach(tr=>{
+        if(tr.classList.contains('grp')){ tr.classList.toggle('hide',active); return; }
+        const ok=(!s||tr.dataset.q.includes(s))&&(!g||tr.dataset.g);
+        tr.classList.toggle('hide',!ok); if(ok) n++;
+      });
+      box.querySelector('.empty').style.display=n?'none':'block';
+      const sh=box.parentElement.querySelector('.shown[data-for="'+box.dataset.sec+'"]');
+      if(sh) sh.textContent=n+' / '+box.querySelectorAll('tbody tr:not(.grp)').length;
+      box.dataset.n=n; total+=n;
+    });
+    document.querySelectorAll('nav .cnt').forEach(c=>{
+      let n=0; pages[+c.dataset.tab].querySelectorAll('.ptable').forEach(b=>n+=+b.dataset.n); c.textContent=n;
+    });
+    hits.textContent=active?(total+' hits'):'';
+    if(active){ const cur=btns.findIndex(b=>b.classList.contains('on'));
+      if(cur===0||cur===5||!(+btns[cur].querySelector('.cnt')?.textContent)){ const first=[1,2,3,4].find(i=>+btns[i].querySelector('.cnt').textContent>0); if(first) go(first); } }
+  }
+  q.addEventListener('input',filter); onlyg.addEventListener('change',filter); filter();
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [{left:"$$",right:"$$",display:true},{left:"\\(",right:"\\)",display:false}],
+      throwOnError:false
+    });
+  });
+</script>

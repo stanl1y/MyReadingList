@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Embodied Co-Design Survey — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Embodied Co-Design for Rapidly Evolving Agents: Taxonomy, Frontiers, and Challenges","authors":"Yuxing Wang, Zhiyu Chen, Tiantian Zhang, Qiyue Yin, Yongzhe Chang, Zhiheng Li, Liang Wang, Xueqian Wang","year":"2025","venue":"IEEE TEC 2026 (accepted, minor revision) · arXiv 2512.04770","tags":["Legged Robotics","Co-Design","Survey","Morphology Optimization","Evolutionary Algorithms","Reinforcement Learning","Differentiable Simulation"],"tldr":"具身協同設計(大腦×身體聯合最佳化)的方法導向綜述:下層把設計拆成控制大腦、身體形態、任務環境三元件(各有設計空間×表徵),上層把 100+ 篇工作歸入 bi-level、single-level、generative、open-ended 四大框架,並整理模擬器、資料集、真機案例與五大挑戰;約八成工作只在模擬中驗證。","tldr_en":"A method-centric survey of embodied (brain-body) co-design: a lower layer splits design into controlling brain, body morphology and task environment (each with a design space and a representation), an upper layer sorts 100+ works into bi-level, single-level, generative and open-ended frameworks, plus simulators, datasets, real-robot cases and five open challenges; roughly four in five works are validated only in simulation."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+  a.chip{text-decoration:none}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+  .tight td{padding:7px 8px; font-size:12.5px}
+  .tight th{padding:7px 8px}
+  .fwrow td:first-child{font-weight:700; white-space:nowrap}
+  .fw-bi{border-left:4px solid #e3c46a} .fw-si{border-left:4px solid #7fb77e}
+  .fw-ge{border-left:4px solid #c98ab0} .fw-op{border-left:4px solid #7ea6d8}
+  .tablewrap{overflow-x:auto}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:120px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .bars td{padding:6px 8px; font-size:12.5px}
+  .bar{height:12px; background:var(--c-method); border-radius:3px; opacity:.75}
+  .bar.part{background:repeating-linear-gradient(45deg,var(--c-method),var(--c-method) 4px,#9db6e8 4px,#9db6e8 8px)}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">這是一篇<b>具身協同設計(Embodied Co-Design, ECD)</b>的方法導向綜述:不再把機器人的身體當成「環境的固定部分」、只訓練大腦,而是<mark class="m-method" data-t="METHOD/IDEA">同時最佳化身體形態(body)與控制器(brain)</mark>。作者提出<b>兩層分類法</b>——下層把設計拆成<b>控制大腦/身體形態/任務環境</b>三元件(各自有 design space × representation),上層把 100+ 篇工作歸入 <b>bi-level、single-level、generative、open-ended</b> 四大框架——再整理模擬器、資料集、真機案例與五大開放挑戰。它<mark class="m-assume" data-t="ASSUMPTION/CLAIM">本身不做實驗,價值在「地圖」與共同詞彙</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">A method-centric survey of <b>Embodied Co-Design (ECD)</b>: instead of treating a robot&#39;s body as a fixed part of the environment and training only its brain, ECD <mark class="m-method" data-t="METHOD/IDEA">jointly optimizes body morphology and controller</mark>. The authors propose a <b>two-layer taxonomy</b>—a lower layer that splits design into <b>controlling brain / body morphology / task environment</b> (each with a design space × representation), and an upper layer that sorts 100+ works into <b>bi-level, single-level, generative and open-ended</b> frameworks—then review simulators, datasets, real-robot cases and five open challenges. It <mark class="m-assume" data-t="ASSUMPTION/CLAIM">runs no experiments; its value is the map and a shared vocabulary</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/WangYX2025/fig1_codesign_vs_control.png" alt="Figure 1 control design only vs embodied co-design">
+        <figcaption data-lang="zh"><b>Fig.1</b> 「只設計控制」(最下)vs「具身協同設計」(中、上):黃框=固定,藍框=可最佳化。注意縱軸是<b>複雜度</b>——每多放開一個元件(先放開身體,再放開環境),問題就往上跳一級。這張圖就是整篇綜述的問題定義。(圖中「Agent Brian」為原文筆誤。)</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> "Control design only" (bottom) vs "embodied co-design" (middle, top): yellow = fixed, blue = optimizable. Note the vertical axis is <b>complexity</b>—each extra component you free up (first the body, then the environment) moves the problem up a level. This figure is the survey&#39;s problem statement. ("Agent Brian" is a typo in the original.)</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 身體固定時,控制器得扛下所有協調負擔;但一旦把身體也放開,就得到<mark class="m-problem" data-t="PROBLEM/GAP">巨大、常是組合式的設計空間</mark>,而且<mark class="m-problem" data-t="PROBLEM/GAP">每個候選身體通常都要從頭重訓控制器</mark>——問題高度非凸、計算昂貴。</li>
+          <li data-lang="en"><b>Problem</b> — With a fixed body the controller carries the whole coordination burden; but freeing the body yields a <mark class="m-problem" data-t="PROBLEM/GAP">vast, often combinatorial design space</mark>, and <mark class="m-problem" data-t="PROBLEM/GAP">each candidate body typically needs a controller retrained from scratch</mark>—highly non-convex and expensive.</li>
+          <li data-lang="zh"><b>方法(分類法)</b> — <mark class="m-method" data-t="METHOD/IDEA">三種形式化視角</mark>(bi-level 巢狀最佳化、單層 MDP、可微模型)+ <mark class="m-method" data-t="METHOD/IDEA">兩層分類</mark>:下層 3 元件 × {design space, representation},上層 4 框架共 13 子類。</li>
+          <li data-lang="en"><b>Method (taxonomy)</b> — <mark class="m-method" data-t="METHOD/IDEA">three formal views</mark> (bi-level nested optimization, single-level MDP, differentiable model) + a <mark class="m-method" data-t="METHOD/IDEA">two-layer taxonomy</mark>: 3 components × {design space, representation} below, 4 frameworks with 13 sub-categories above.</li>
+          <li data-lang="zh"><b>綜整結果</b> — Tables I–VI 共分類約 <b>138 列</b>工作 <span class="add">[導讀補充:導讀者自行計數]</span>:<mark class="m-result" data-t="RESULT/EVIDENCE">112 列只在模擬、26 列有真機驗證</mark>;MuJoCo / EvoGym / Bullet 最常用;約 59% 來自 2023–2025,2025 年出現 LLM/VLM 生成式設計潮。</li>
+          <li data-lang="en"><b>Synthesis</b> — Tables I–VI classify about <b>138 rows</b> of work <span class="add">[guide note: guide&#39;s own count]</span>: <mark class="m-result" data-t="RESULT/EVIDENCE">112 simulation-only, 26 with real-robot validation</mark>; MuJoCo / EvoGym / Bullet dominate; ~59% date from 2023–2025, with an LLM/VLM generative wave in 2025.</li>
+          <li data-lang="zh"><b>對足式研究者</b> — 腿足 + 人形約 30 列,<mark class="m-limit" data-t="LIMITATION/FUTURE">大多是「固定拓樸 + 連續參數(腿長、彈簧)」+ RL 內層 + EA/BO 外層</mark>;把它當地圖用,不要當腿足設計手冊。</li>
+          <li data-lang="en"><b>For legged researchers</b> — legged + humanoid ≈ 30 rows, <mark class="m-limit" data-t="LIMITATION/FUTURE">mostly "fixed topology + continuous parameters (link lengths, springs)" with an RL inner loop and EA/BO outer loop</mark>; use it as a map, not as a legged design manual.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">傳統具身智慧(EI)裡,身體是<b>手工設計</b>、被當作環境的一部分,只有控制器被最佳化。作者指出這種切割的代價:<mark class="m-problem" data-t="PROBLEM/GAP">預先指定的形態會限制感知與致動,縮小可達行為空間</mark>,若機構設計只追求機械最佳而不考慮怎麼控制,協調行為的負擔就幾乎全落在控制器上。</p>
+        <p data-lang="en">In traditional embodied intelligence (EI), the body is <b>hand-designed</b> and treated as part of the environment; only the controller is optimized. The authors argue this split is costly: <mark class="m-problem" data-t="PROBLEM/GAP">a pre-specified morphology constrains sensing and actuation and narrows the achievable behaviors</mark>; if the mechanism is designed for mechanical optimality without regard to control, nearly all the coordination burden falls on the controller.</p>
+        <p data-lang="zh">理論根基有三條:<mark class="m-method" data-t="METHOD/IDEA">morphological computation</mark>(好身體可替大腦做計算,經典例子是無控制的 passive dynamic walker,但它只能做很窄的行為 → <b>brain-body trade-off</b>)、<b>演化論 + Baldwin effect</b>(學習能力加速演化),以及「越複雜的環境孕育越強的腦-身系統」。歷史上 ECD 起於 <b>Evolutionary Robotics</b>(Sims 1994 用演化同時生成圖結構形態與神經控制器),近年因 <mark class="m-method" data-t="METHOD/IDEA">EA、RL、可微模擬、大模型</mark>四股技術而爆發。</p>
+        <p data-lang="en">Three theoretical roots: <mark class="m-method" data-t="METHOD/IDEA">morphological computation</mark> (a good body computes on the brain&#39;s behalf—the classic case is the controller-free passive dynamic walker, which however supports only narrow behavior → the <b>brain-body trade-off</b>), <b>evolutionary theory + the Baldwin effect</b> (learning accelerates evolution), and "richer environments breed more capable brain-body systems." Historically ECD began in <b>Evolutionary Robotics</b> (Sims 1994 evolved graph morphologies and neural controllers together); it has recently surged thanks to <mark class="m-method" data-t="METHOD/IDEA">EAs, RL, differentiable simulation and large models</mark>.</p>
+        <p data-lang="zh">與鄰近領域的分界:<b>A-Life</b> 關心生物現象而非工程功能;<b>Computational Robot Design</b>(拓樸最佳化、CAD)處理可製造性,但<mark class="m-problem" data-t="PROBLEM/GAP">控制常被簡化成次要角色</mark>;<b>Robot Learning</b> 大多<mark class="m-assume" data-t="ASSUMPTION/CLAIM">假設形態固定</mark>。ECD 的定位是把形態與控制放進<b>同一個最佳化迴圈</b>。</p>
+        <p data-lang="en">Boundaries with neighbors: <b>A-Life</b> studies biological phenomena rather than engineering function; <b>Computational Robot Design</b> (topology optimization, CAD) handles manufacturability but <mark class="m-problem" data-t="PROBLEM/GAP">often treats control as secondary</mark>; <b>Robot Learning</b> mostly <mark class="m-assume" data-t="ASSUMPTION/CLAIM">assumes a fixed morphology</mark>. ECD puts morphology and control into <b>one optimization loop</b>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">作者自己點出最好的類比:<b>ECD 之於身體,就像 Neural Architecture Search 之於網路</b>——外層找結構、內層調參數。<span class="add">[導讀補充]</span> 從足式機器人的角度看,我們熟悉的「調腿長、選彈簧、挑減速比」其實落在這張地圖的一個小角落:<b>固定拓樸、連續參數、直接向量編碼、任務獎勵驅動</b>。這篇綜述的價值是讓你看到這個角落之外還有多大的空間,以及別的社群(軟體機器人、虛擬生物)已經發展出哪些可借用的工具。</p>
+          <p data-lang="en" style="margin-top:6px">The authors give the best analogy themselves: <b>ECD is to bodies what Neural Architecture Search is to networks</b>—an outer loop over structure, an inner loop over parameters. <span class="add">[guide note]</span> From a legged-robotics angle, the familiar "tune link lengths, pick springs, choose gear ratios" sits in one small corner of this map: <b>fixed topology, continuous parameters, direct vector encoding, task-reward driven</b>. The survey&#39;s value is showing how much space lies outside that corner, and which tools other communities (soft robots, virtual creatures) have built that you can borrow.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">綜述沒有新演算法,但讀完應帶走這幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">The survey has no new algorithm, but these are the ideas to carry away:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-problem)">一切成本來自內層迴圈。</b>「評估一個身體 = 重訓一個控制器」是整個領域的瓶頸。<span class="add">[導讀補充]</span> 幾乎每個子類都可以讀成對內層迴圈的一種處置:<b>攤提</b>(universal controller、surrogate)、<b>繞過</b>(生成式先驗、TAME 的 controller-free fitness)、或<b>微分穿過</b>(physics-based)。</li>
+          <li data-lang="en"><b style="color:var(--c-problem)">All cost comes from the inner loop.</b> "Evaluating a body = retraining a controller" is the field&#39;s bottleneck. <span class="add">[guide note]</span> Nearly every sub-category reads as one way to handle that inner loop: <b>amortize</b> it (universal controllers, surrogates), <b>bypass</b> it (generative priors, TAME&#39;s controller-free fitness), or <b>differentiate through</b> it (physics-based).</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">同一問題、三種數學視角。</b>bi-level(巢狀 argmax)、單層 MDP(設計階段 + 控制階段,Transform2Act 一派)、model-based(穿過可微動力學 BPTT)——每種視角大致對應一個框架。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">One problem, three mathematical views.</b> Bi-level (nested argmax), single-level MDP (a design stage + a control stage, the Transform2Act school), and model-based (BPTT through differentiable dynamics)—each view roughly births one framework.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">控制器的表徵是隱藏關鍵。</b>individual(PID/MPC/CPG/MLP 綁死某個身體)vs universal(GNN、Transformer 跨形態共用)vs hybrid(共享模組 + 形態專屬模組)。<mark class="m-result" data-t="RESULT/EVIDENCE">Universal 控制器讓「訓一次、評很多身體」成為可能</mark>(NGE)。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Controller representation is the hidden lever.</b> Individual (PID/MPC/CPG/MLP bound to one body) vs universal (GNN, transformer shared across morphologies) vs hybrid (shared + morphology-specific modules). <mark class="m-result" data-t="RESULT/EVIDENCE">Universal controllers make "train once, evaluate many bodies" possible</mark> (NGE).</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">編碼的取捨沒有定論。</b>直接編碼收斂較快、較穩;間接編碼(CPPN、文法、L-system、NCA)地形較平滑、易出對稱模組化形態、早期探索佔優 → 作者建議<b>先間接後直接</b>的混合排程。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">The encoding trade-off is unresolved.</b> Direct encodings converge faster and more consistently; indirect ones (CPPN, grammars, L-systems, NCA) give smoother landscapes, symmetric modular bodies and better early exploration → the authors suggest an <b>indirect-then-direct</b> hybrid schedule.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">環境會塑造身體。</b>崎嶇地形演化出更穩、肢體更多的形態;複雜/多任務環境的設計遷移更好;DERL 顯示<mark class="m-result" data-t="RESULT/EVIDENCE">在越難環境中演化的形態,下游學習越快</mark>(Baldwin effect 的實證)。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">The environment shapes the body.</b> Rough terrain evolves more stable, limb-rich bodies; complex/multi-task environments yield designs that transfer better; DERL shows <mark class="m-result" data-t="RESULT/EVIDENCE">bodies evolved in harder environments learn downstream tasks faster</mark> (empirical Baldwin effect).</li>
+          <li data-lang="zh"><b style="color:var(--c-limit)">現實落差很大。</b><span class="add">[導讀補充]</span> 138 列裡 81% 只在模擬、87% 純任務獎勵驅動;真機 co-design 集中在固定拓樸的連續參數與夾爪/末端執行器。</li>
+          <li data-lang="en"><b style="color:var(--c-limit)">The reality gap is large.</b> <span class="add">[guide note]</span> Of 138 rows, 81% are simulation-only and 87% are purely task-reward driven; real-robot co-design concentrates on continuous parameters of fixed topologies and on grippers / end-effectors.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER · SURVEY</span>
+        <h3 class="serif" style="font-size:18px">Embodied Co-Design for Rapidly Evolving Agents: Taxonomy, Frontiers, and Challenges</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Yuxing Wang, Zhiyu Chen, Tiantian Zhang, Qiyue Yin, Yongzhe Chang, Zhiheng Li, Liang Wang, Xueqian Wang</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Tsinghua SIGS (Shenzhen) · CASIA NLPR</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Year</span></b><span>arXiv 2512.04770 v2(2025-12-17, cs.RO)</span>
+          <b><span data-lang="zh">期刊</span><span data-lang="en">Venue</span></b><span><span data-lang="zh">IEEE TEC 2026(依論文清單:accepted, minor revision)<span class="add">[導讀補充] PDF 本身未載明期刊,僅附 IEEE 格式作者簡介</span></span><span data-lang="en">IEEE TEC 2026 (per the paper list: accepted, minor revision) <span class="add">[guide note] the PDF itself names no venue, only IEEE-style author bios</span></span></span>
+          <b><span data-lang="zh">規模</span><span data-lang="en">Size</span></b><span><span data-lang="zh">29 頁 · 417 篇參考文獻 · 7 張表</span><span data-lang="en">29 pages · 417 references · 7 tables</span></span>
+          <b><span data-lang="zh">專案</span><span data-lang="en">Project</span></b><span>github.com/Yuxing-Wang-THU/SurveyBrainBody</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">這是第一份把 EA、RL、可微模擬、QD、生成模型、LLM 等<b>完全不同社群</b>的 co-design 工作放進<b>同一套欄位</b>(每篇都標註大腦/身體/環境的 design space 與 representation)的綜述。對想進場的人,它是一張可查表的地圖。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「首份系統性、方法導向」是作者自述</mark>。</span>
+        <span data-lang="en">The first survey to put co-design work from <b>very different communities</b>—EAs, RL, differentiable simulation, QD, generative models, LLMs—into <b>one schema</b> (every entry tagged with brain/body/environment design space and representation). For newcomers it is a look-up map. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"First systematic, method-centric" is the authors&#39; own claim</mark>.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Brain-body co-design</span><span class="chip">Morphological computation</span>
+          <span class="chip">Bi-level optimization</span><span class="chip">Universal controller</span>
+          <span class="chip">Quality-Diversity</span><span class="chip">Differentiable sim</span>
+          <span class="chip">EvolutionGym</span><span class="chip">LLM-as-designer</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本館相關導讀</span><span data-lang="en">Related in this library</span></span>
+        <span data-lang="zh">內層若用模型式控制(TO/DDP/MPC),先讀 <a href="Wensing2022_OptControlSurvey.html">Wensing 2022 最佳化控制綜述</a>;內層若用 RL 步態,可對照 <a href="Kumar2021_RMA.html">RMA</a>(把身體參數當成要「適應」而非「設計」的變數)。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">If your inner loop is model-based (TO/DDP/MPC), read the <a href="Wensing2022_OptControlSurvey.html">Wensing 2022 optimal-control survey</a> first; if it is an RL gait, compare with <a href="Kumar2021_RMA.html">RMA</a> (body parameters as something to <i>adapt to</i>, not to <i>design</i>). <span class="add">[guide note]</span></span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">只最佳化控制</span><span data-lang="en">Control-only EI</span></b><br><small>RL / IL / MPC</small></td><td><span data-lang="zh">身體固定 → <mark class="m-problem" data-t="PROBLEM/GAP">可達行為被形態框死</mark>,控制器承擔全部協調負擔,成為效能瓶頸。</span><span data-lang="en">Fixed body → <mark class="m-problem" data-t="PROBLEM/GAP">achievable behavior is capped by morphology</mark>; the controller carries all coordination and becomes the bottleneck.</span></td></tr>
+          <tr><td><b><span data-lang="zh">經典演化機器人學</span><span data-lang="en">Classic Evolutionary Robotics</span></b><br><small>Sims 1994 …</small></td><td><span data-lang="zh">EA 一把抓;<mark class="m-problem" data-t="PROBLEM/GAP">每代常需數千次模擬、收斂慢</mark>,難擴展到複雜任務。</span><span data-lang="en">EAs do everything; <mark class="m-problem" data-t="PROBLEM/GAP">often thousands of simulations per generation, slow convergence</mark>, hard to scale to complex tasks.</span></td></tr>
+          <tr><td><b>Computational Robot Design</b><br><small><span data-lang="zh">拓樸最佳化、CAD</span><span data-lang="en">topology opt., CAD</span></small></td><td><span data-lang="zh">顧及結構可行性與製造,但<mark class="m-problem" data-t="PROBLEM/GAP">控制被簡化或當次要元件</mark>,多為循序設計。</span><span data-lang="en">Handles structural feasibility and fabrication, but <mark class="m-problem" data-t="PROBLEM/GAP">control is simplified or secondary</mark>; mostly sequential design.</span></td></tr>
+          <tr><td><b><span data-lang="zh">跨形態機器人學習</span><span data-lang="en">Cross-embodiment robot learning</span></b></td><td><span data-lang="zh">能讓一個策略泛化到多種身體,但<mark class="m-assume" data-t="ASSUMPTION/CLAIM">身體仍是給定的</mark>,不會去「選」身體。</span><span data-lang="en">Can generalize one policy across many bodies, but <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the bodies are still given</mark>—it never chooses one.</span></td></tr>
+          <tr><td><b><span data-lang="zh">既有綜述</span><span data-lang="en">Prior surveys</span></b><br><small>soft / humanoid / ER / A-Life</small></td><td><span data-lang="zh">侷限單一領域,<mark class="m-problem" data-t="PROBLEM/GAP">沒有可橫向比較的結構化分類</mark>,也沒納入可微模擬、QD、latent / 基礎模型生成與新 benchmark。</span><span data-lang="en">Domain-specific, <mark class="m-problem" data-t="PROBLEM/GAP">no structured taxonomy for cross-method comparison</mark>, and missing differentiable sim, QD, latent / foundation-model generation and new benchmarks.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">作者把核心問題寫成:<b>要怎麼設計一個具身智能體的「最佳身體形式」,才能讓它在所處環境中有效完成任務?</b>(意譯)</p>
+        <p data-lang="en" style="margin-top:14px">The authors pose the core question as: <b>how should one design the optimal bodily form of an embodied agent so it performs its tasks effectively in its environment?</b> (paraphrased)</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">為什麼難:巢狀最佳化的帳單</span><span data-lang="en">Why it is hard: the bill for nested optimization</span></h3>
+        <p data-lang="zh">綜述的第一個形式化(Eq.1)就是 bi-level:外層搜形態 \(\omega\),內層為該形態訓出最佳控制 \(\pi^*\)。</p>
+        <p data-lang="en">The survey&#39;s first formalization (Eq.1) is bi-level: the outer level searches morphology \(\omega\); the inner level trains the best controller \(\pi^*\) for that morphology.</p>
+        <div class="eq">$$\omega^{*}=\arg\max_{\omega\in\Omega} R(\pi^{*},\omega)\qquad\text{s.t.}\qquad \pi^{*}=\arg\max_{\pi\in\Pi} R(\pi,\omega)$$</div>
+        <p data-lang="zh"><span class="add">[導讀補充]</span> 兩點值得自己補上:(1) \(\pi^*\) 其實是 \(\omega\) 的函數 \(\pi^*(\omega)\);(2) 若內層能精確求解,目標其實等價於聯合最大化 \(\max_{\omega}\max_{\pi}R(\pi,\omega)=\max_{(\omega,\pi)}R(\pi,\omega)\)——<b>bi-level 與 single-level 差的不是目標,而是搜尋程序與成本</b>。粗估帳單:</p>
+        <p data-lang="en"><span class="add">[guide note]</span> Two things worth adding yourself: (1) \(\pi^*\) is really a function \(\pi^*(\omega)\); (2) if the inner problem is solved exactly, the objective equals the joint maximization \(\max_{\omega}\max_{\pi}R(\pi,\omega)=\max_{(\omega,\pi)}R(\pi,\omega)\)—<b>bi-level and single-level differ not in objective but in search procedure and cost</b>. A rough bill:</p>
+        <div class="eq">$$\text{Cost}_{\text{bi-level}}\;\approx\;N_{\text{gen}}\times N_{\text{pop}}\times C_{\text{train}}\big(\pi\mid\omega\big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">對腿足機器人,\(C_{\text{train}}\) 就是一次完整的 RL 步態訓練。作者也點名:<mark class="m-problem" data-t="PROBLEM/GAP">即使形態只小改,先前學到的控制器也可能失效</mark>;再加上環境條件、設計約束與任務目標帶來<b>異質的回饋訊號</b>,整體高度非凸。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">For a legged robot, \(C_{\text{train}}\) is one full RL locomotion training run. The authors also note that <mark class="m-problem" data-t="PROBLEM/GAP">even minor morphological changes can invalidate a learned controller</mark>, and varying environments, constraints and objectives produce <b>heterogeneous feedback signals</b>—the whole thing is highly non-convex.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">難點地圖 — 每個難點由哪個分支回應(= 全文地圖)</span><span data-lang="en">Difficulty map — which branch answers which difficulty (= map of the survey)</span></h3>
+        <div class="tablewrap"><table class="tight">
+          <tr><th><span data-lang="zh">難點</span><span data-lang="en">Difficulty</span></th><th><span data-lang="zh">為什麼痛</span><span data-lang="en">Why it bites</span></th><th><span data-lang="zh">回應的分支</span><span data-lang="en">Responding branch</span></th><th><span data-lang="zh">代表作</span><span data-lang="en">Representative</span></th></tr>
+          <tr><td><b><span data-lang="zh">① 評估成本(巢狀)</span><span data-lang="en">① Evaluation cost (nesting)</span></b></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">內層訓練對複雜任務常要數天</mark></span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">inner training often takes days for complex tasks</mark></span></td><td><span data-lang="zh">Surrogate-assisted、universal controller、非同步/大規模平行</span><span data-lang="en">Surrogate-assisted, universal controllers, asynchronous / massively parallel</span></td><td>Co-Adapt [136] · NGE [196] · A-MEL [158] · Strgar [25] · TAME [95]</td></tr>
+          <tr><td><b><span data-lang="zh">② 設計空間巨大且混合</span><span data-lang="en">② Huge, mixed design space</span></b></td><td><span data-lang="zh">離散拓樸 + 連續參數;直接編碼維度爆炸</span><span data-lang="en">discrete topology + continuous params; direct encodings explode in dimension</span></td><td><span data-lang="zh">間接編碼、生成式 latent、設計動作 RL</span><span data-lang="en">Indirect encodings, generative latents, design-as-action RL</span></td><td>CPPN [96] · RoboGrammar [153] · Transform2Act [19]</td></tr>
+          <tr><td><b><span data-lang="zh">③ 非凸 + 形態早熟收斂</span><span data-lang="en">③ Non-convexity + premature convergence</span></b></td><td><span data-lang="zh">新形態一出生控制器還很弱,容易被淘汰</span><span data-lang="en">a new body starts with a weak controller and is culled too early</span></td><td><span data-lang="zh">QD / novelty search、創新保護、successive halving</span><span data-lang="en">QD / novelty search, innovation protection, successive halving</span></td><td>MAP-Elites [287] · [247] · GASH [206]</td></tr>
+          <tr><td><b><span data-lang="zh">④ 大腦/身體的功勞歸屬</span><span data-lang="en">④ Brain vs body credit</span></b></td><td><span data-lang="zh">分不清增益來自控制器還是形態</span><span data-lang="en">cannot tell whether gains come from controller or body</span></td><td><span data-lang="zh">MC / empowerment 指標、時間信用分配</span><span data-lang="en">MC / empowerment metrics, temporal credit assignment</span></td><td>TAME [95] · BodyGen [22]</td></tr>
+          <tr><td><b><span data-lang="zh">⑤ 一機一任務過擬合</span><span data-lang="en">⑤ One-robot-one-task overfitting</span></b></td><td><span data-lang="zh">無約束搜尋產生過複雜或過簡單、難遷移的身體</span><span data-lang="en">unconstrained search yields over-complex or trivial, non-transferable bodies</span></td><td><span data-lang="zh">可變/多任務環境、open-ended、對稱先驗與成本懲罰</span><span data-lang="en">Modifiable / multi-task envs, open-ended, symmetry priors and cost penalties</span></td><td>DERL [76] · POET [181] · PreCo [169]</td></tr>
+          <tr><td><b><span data-lang="zh">⑥ Sim-to-real 與可製造性</span><span data-lang="en">⑥ Sim-to-real &amp; manufacturability</span></b></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">摩擦、材料非線性、接觸、延遲、製造誤差</mark></span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">friction, material nonlinearity, contact, delays, fabrication error</mark></span></td><td><span data-lang="zh">廉價 surrogate → 高保真驗證、domain randomization、模組化硬體</span><span data-lang="en">Cheap surrogate → high-fidelity validation, domain randomization, modular hardware</span></td><td>Bjelonic [134] · Fadini [235] · Kriegman [408]</td></tr>
+        </table></div>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px"><span class="add">[導讀補充]</span> ①是根本,②③是它在搜尋層面的症狀,④⑤是評估層面的症狀,⑥是落地層面的症狀。腿足研究者最痛的是 ① 與 ⑥:一次 RL 訓練很貴、而設計結果最後必須能被做出來。所以腿足 co-design 幾乎都退守到「低維連續參數 + surrogate」這個最省內層的角落。</p>
+          <p data-lang="en" style="margin-top:6px"><span class="add">[guide note]</span> ① is the root; ② and ③ are its symptoms at the search level, ④ and ⑤ at the evaluation level, ⑥ at the deployment level. Legged researchers feel ① and ⑥ most: one RL run is expensive, and the design must ultimately be buildable. That is why legged co-design retreats to the "low-dimensional continuous parameters + surrogate" corner that is cheapest on the inner loop.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 bi-level / single-level 讀成「用 EA 還是用 RL」。它們分的是<b>迴圈結構</b>(巢狀 vs 聯合),與最佳化器無關:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">EA 與 RL 在兩邊都出現</mark>(bi-level 有 Evolutionary RL;single-level 也有 EA-based 與 RL-based)。</span>
+        <span data-lang="en">Don&#39;t read bi-level / single-level as "EA vs RL." They split by <b>loop structure</b> (nested vs joint), not optimizer: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">EAs and RL appear on both sides</mark> (bi-level has Evolutionary RL; single-level has both EA-based and RL-based).</span>
+      </div>
+      <div class="note">
+        <span class="tag">BRAIN-BODY TRADE-OFF</span>
+        <span data-lang="zh">簡單身體 → 輕量控制器即可做基本任務;表達力強的身體 → 需要更複雜的控制才能發揮。ECD 的目標是在<b>形態計算</b>與<b>控制器(資訊)計算</b>之間取得平衡,而不是單純「讓身體更強」。</span>
+        <span data-lang="en">Simple bodies → lightweight controllers suffice for basic tasks; expressive bodies → need sophisticated control to be exploited. ECD aims to balance <b>morphological computation</b> against <b>controller (informational) computation</b>, not simply to "make the body stronger."</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">必須先問:要訓控制器才能評身體嗎?</span><span data-lang="en">Must you train a controller to judge a body?</span></span>
+        <span data-lang="zh">作者引 TAME [95]:用<b>隨機動作基元</b>量測形態「探索環境並產生可預測轉移」的資訊理論能力,當作 controller-free fitness。答案可能是「不一定」——這是省掉內層的最激進路線。</span>
+        <span data-lang="en">The authors cite TAME [95]: using <b>random action primitives</b> to measure, information-theoretically, a body&#39;s ability to explore and produce predictable transitions, as a controller-free fitness. The answer may be "not necessarily"—the most radical way to skip the inner loop.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">算力歸一化</span><span data-lang="en">compute-normalized</span></span><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">聯合最佳化偏差</span><span data-lang="en">joint-opt bias</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif"><span data-lang="zh">分類法(兩層)</span><span data-lang="en">The Taxonomy (two layers)</span></h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">先看全貌(Fig.2)</span><span data-lang="en">The whole map first (Fig.2)</span></h3>
+        <figure class="fig"><img src="figs/WangYX2025/fig2_taxonomy.png" alt="Figure 2 taxonomy">
+          <figcaption data-lang="zh"><b>Fig.2</b> 兩層分類法。<b>下層(§3)</b>三元件各分 Design Space 與 Representation(色塊標出是哪個維度:藍=控制器參數、紅=運作模式、橘=形態參數、綠=拓樸、黃=環境參數、紫=可觀測性)。<b>上層(§4)</b>四框架共 13 子類。讀法:先在下層為你的問題「填表」,再到上層挑迴圈結構。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> The two-layer taxonomy. <b>Lower layer (§3)</b>: each of the three components splits into Design Space and Representation (color swatches mark the axis: blue = controller parameters, red = operating mode, orange = morphological parameters, green = topology, yellow = environmental parameters, purple = observability). <b>Upper layer (§4)</b>: four frameworks, 13 sub-categories. How to read: first "fill in the form" for your problem in the lower layer, then pick a loop structure above.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">三種形式化視角(§II-A)</span><span data-lang="en">Three formal views (§II-A)</span></h3>
+        <p data-lang="zh"><b>① Bi-level 視角</b>:即上一節的 Eq.1(類比 NAS:結構 ↔ 形態、權重 ↔ 控制)。<b>它沒有說明形態與控制之間的因果連結</b>,所以作者補上第二個視角。</p>
+        <p data-lang="en"><b>① Bi-level view</b>: Eq.1 from the previous section (NAS analogy: architecture ↔ morphology, weights ↔ control). <b>It does not specify the causal link between morphology and control</b>, so the authors add a second view.</p>
+        <p data-lang="zh"><b>② 單層 MDP 視角</b>:把流程切成<mark class="m-method" data-t="METHOD/IDEA">設計階段 \(\mathcal{D}\) 與控制階段 \(\mathcal{C}\)</mark>,寫成 9-tuple \(\langle \mathcal{S}^D,\mathcal{S}^C,\mathcal{A}^D,\mathcal{A}^C,\mathcal{F}^D,\mathcal{F}^C,\mathcal{R}^D,\mathcal{R}^C,\gamma\rangle\)。設計策略 \(\pi_d(a^d_t\mid s^d_t)\) 從 \(\omega_0=s^d_0\) 走 \(T_d\) 步長出身體 \(\omega=s^d_{T_d}\);之後條件於 \(\omega\) 的控制策略 \(\pi_c(a^c_t\mid s^c_t,\omega)\) 在 \(F_c(s^c_{t+1}\mid s^c_t,a^c_t,\omega)\) 下執行任務:</p>
+        <p data-lang="en"><b>② Single-level MDP view</b>: split the process into a <mark class="m-method" data-t="METHOD/IDEA">design stage \(\mathcal{D}\) and a control stage \(\mathcal{C}\)</mark>, a 9-tuple \(\langle \mathcal{S}^D,\mathcal{S}^C,\mathcal{A}^D,\mathcal{A}^C,\mathcal{F}^D,\mathcal{F}^C,\mathcal{R}^D,\mathcal{R}^C,\gamma\rangle\). A design policy \(\pi_d(a^d_t\mid s^d_t)\) grows the body over \(T_d\) steps from \(\omega_0=s^d_0\) to \(\omega=s^d_{T_d}\); then a control policy \(\pi_c(a^c_t\mid s^c_t,\omega)\) conditioned on \(\omega\) acts under \(F_c(s^c_{t+1}\mid s^c_t,a^c_t,\omega)\):</p>
+        <div class="eq">$$R=\mathbb{E}_{\pi_d,\pi_c}\Big[\sum_{t=0}^{T_d}\gamma^{t}r^{d}_{t}+\sum_{t=T_d+1}^{\infty}\gamma^{t}r^{c}_{t}\Big]$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">兩個策略都能用 RL 的梯度估計(如 PPO)以試誤一起更新——這正是 Transform2Act 一派的數學骨架。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Both policies can be updated together by trial and error with RL gradient estimators (e.g., PPO)—exactly the mathematical skeleton of the Transform2Act school.</p>
+        <p data-lang="zh"><b>③ Model-based 視角</b>:若 \(F_c\) 是<mark class="m-method" data-t="METHOD/IDEA">可微模擬器或學到的動力學模型</mark>,\(s^c_{t+1}=F_c(s^c_t,a^c_t,\omega)\),展開軌跡算終端損失 \(L\)(如行進距離),就能用連鎖律把梯度一路傳回狀態、動作與形態:</p>
+        <p data-lang="en"><b>③ Model-based view</b>: if \(F_c\) is a <mark class="m-method" data-t="METHOD/IDEA">differentiable simulator or a learned dynamics model</mark>, \(s^c_{t+1}=F_c(s^c_t,a^c_t,\omega)\); unroll a trajectory, compute a terminal loss \(L\) (e.g., distance traveled), and the chain rule carries gradients back to states, actions and morphology:</p>
+        <div class="eq">$$\frac{\partial L}{\partial s^c_t}=\frac{\partial L}{\partial s^c_{t+1}}\frac{\partial F_c}{\partial s^c_t},\qquad \frac{\partial L}{\partial a^c_t}=\frac{\partial L}{\partial s^c_{t+1}}\frac{\partial F_c}{\partial a^c_t},\qquad \frac{\partial L}{\partial \omega}=\frac{\partial L}{\partial s^c_{t+1}}\frac{\partial F_c}{\partial \omega}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><span class="add">[導讀補充]</span> 原文 Eq.5 只寫出單步項;因為 \(\omega\) 影響每一步,完整梯度應沿時間累加:\(\frac{dL}{d\omega}=\sum_{t}\frac{\partial L}{\partial s^c_{t+1}}\frac{\partial F_c}{\partial \omega}\Big|_{t}\)。這就是 BPTT 能「一次梯度更新所有設計參數」、可擴展到數千個 voxel 的原因。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><span class="add">[guide note]</span> The survey&#39;s Eq.5 shows only a single-step term; since \(\omega\) affects every step, the full gradient accumulates over time: \(\frac{dL}{d\omega}=\sum_{t}\frac{\partial L}{\partial s^c_{t+1}}\frac{\partial F_c}{\partial \omega}\Big|_{t}\). This is why BPTT updates all design parameters in one pass and scales to thousands of voxels.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">下層:三元件 × {設計空間, 表徵}(§III-A–C)</span><span data-lang="en">Lower layer: three components × {design space, representation} (§III-A–C)</span></h3>
+        <div class="tablewrap"><table class="tight">
+          <tr><th><span data-lang="zh">元件</span><span data-lang="en">Component</span></th><th><span data-lang="zh">設計空間</span><span data-lang="en">Design space</span></th><th><span data-lang="zh">表徵</span><span data-lang="en">Representation</span></th><th><span data-lang="zh">腿足對應</span><span data-lang="en">Legged instance</span> <span class="add">[導讀補充]</span></th></tr>
+          <tr><td><b><span data-lang="zh">控制大腦</span><span data-lang="en">Controlling brain</span></b></td>
+            <td><span data-lang="zh"><b>參數</b>:預定義(動作基元、固定波形、手刻步態)/ 可學習(TO、RL、IL)<br><b>模式</b>:開迴路 / 閉迴路(<mark class="m-assume" data-t="ASSUMPTION/CLAIM">ECD 多偏好閉迴路</mark>)</span><span data-lang="en"><b>Params</b>: predefined (action primitives, fixed waveforms, handcrafted gaits) / learnable (TO, RL, IL)<br><b>Mode</b>: open-loop / closed-loop (<mark class="m-assume" data-t="ASSUMPTION/CLAIM">ECD typically favors closed-loop</mark>)</span></td>
+            <td><span data-lang="zh"><b>Individual</b>:PID、MPC、CPG、MLP,綁死輸入輸出維度<br><b>Universal</b>:GNN(NerveNet、SMP)、Transformer(Amorpheus、MetaMorph、Body Transformer、URMA)<br><b>Hybrid</b>:共享先驗 + 形態專屬模組;搭 pretrain-finetune、meta-learning</span><span data-lang="en"><b>Individual</b>: PID, MPC, CPG, MLP tied to I/O sizes<br><b>Universal</b>: GNN (NerveNet, SMP), transformer (Amorpheus, MetaMorph, Body Transformer, URMA)<br><b>Hybrid</b>: shared priors + morphology-specific module; with pretrain-finetune or meta-learning</span></td>
+            <td><span data-lang="zh">對腿長分佈做 meta-RL 的 hybrid 策略 [141];在 PEA 參數分佈上預訓練的 universal 策略 [134]</span><span data-lang="en">a meta-RL hybrid policy over leg-design distributions [141]; a universal policy pre-trained over PEA parameters [134]</span></td></tr>
+          <tr><td><b><span data-lang="zh">身體形態</span><span data-lang="en">Body morphology</span></b></td>
+            <td><span data-lang="zh"><b>參數</b>:離散(模組)/ 連續(長度、形狀、材料)/ 混合<br><b>拓樸</b>:固定(雙足、四足、機械臂骨架)/ 不固定(voxel、可長可剪的圖)</span><span data-lang="en"><b>Params</b>: discrete (modules) / continuous (lengths, shapes, materials) / hybrid<br><b>Topology</b>: fixed (biped, quadruped, manipulator skeleton) / unfixed (voxels, graphs that grow or prune)</span></td>
+            <td><span data-lang="zh"><b>Direct</b>:向量、矩陣、密度、樹——可解釋但高維<br><b>Indirect</b>:L-system、文法、NCA、CPPN、RL 決策——地形平滑、對稱模組化<br><b>Hybrid</b>:部分顯式 + 部分程序生成</span><span data-lang="en"><b>Direct</b>: vectors, matrices, densities, trees—interpretable but high-dim<br><b>Indirect</b>: L-systems, grammars, NCA, CPPNs, RL decisions—smoother, symmetric, modular<br><b>Hybrid</b>: partly explicit + partly generated</span></td>
+            <td><span data-lang="zh">固定拓樸 + 連續向量(腿段長度、彈簧剛度)是腿足真機的主流</span><span data-lang="en">fixed topology + continuous vector (segment lengths, spring stiffness) is the mainstream for real legged hardware</span></td></tr>
+          <tr><td><b><span data-lang="zh">任務環境</span><span data-lang="en">Task environment</span></b></td>
+            <td><span data-lang="zh"><b>參數</b>:預定義(固定地形)/ 可修改(分佈取樣、課程、非平穩任務序列)<br><b>可觀測性</b>:完全 / 部分(不完整、含噪、逐關節局部)</span><span data-lang="en"><b>Params</b>: predefined (fixed terrain) / modifiable (sampled distributions, curricula, non-stationary sequences)<br><b>Observability</b>: full / partial (incomplete, noisy, per-joint local)</span></td>
+            <td><span data-lang="zh"><b>Task-driven</b>:速度、能耗、精度(單/多目標)<br><b>Task-agnostic</b>:多樣性、探索、新穎性、形態豐富度<br><b>Hybrid</b>:兩者合用</span><span data-lang="en"><b>Task-driven</b>: speed, energy, accuracy (single/multi-objective)<br><b>Task-agnostic</b>: diversity, exploration, novelty, morphological richness<br><b>Hybrid</b>: both combined</span></td>
+            <td><span data-lang="zh">地形課程 / domain randomization = 「可修改環境」</span><span data-lang="en">terrain curricula / domain randomization = "modifiable environment"</span></td></tr>
+        </table></div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><b>約束(§III-D)</b>:作者批評<mark class="m-problem" data-t="PROBLEM/GAP">多數 ECD 仍在幾乎無約束的設定下運作、容易過擬合</mark>。形態約束(結構穩定、材料、關節範圍、致動極限;對稱先驗;monotone co-design 式地懲罰製造時間、成本、複雜度)與行為約束(安全、致動飽和、避碰)應被顯式納入。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><b>Constraints (§III-D)</b>: the authors criticize that <mark class="m-problem" data-t="PROBLEM/GAP">most ECD still operates in largely unconstrained settings and overfits</mark>. Morphological constraints (structural stability, materials, joint ranges, actuation limits; symmetry priors; monotone-co-design-style penalties on fabrication time, cost, complexity) and behavioral constraints (safety, saturation, collisions) should be explicit.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">上層:四框架 × 13 子類(§IV,重建為一棵樹)</span><span data-lang="en">Upper layer: 4 frameworks × 13 sub-categories (§IV, rebuilt as a tree)</span></h3>
+        <div class="tablewrap"><table class="tight">
+          <tr><th><span data-lang="zh">框架 → 子類</span><span data-lang="en">Framework → sub-category</span></th><th><span data-lang="zh">核心機制</span><span data-lang="en">Core mechanism</span></th><th><span data-lang="zh">代表方法</span><span data-lang="en">Representative</span></th><th><span data-lang="zh">強項 / 弱點</span><span data-lang="en">Strength / weakness</span></th></tr>
+          <tr class="fw-bi"><td colspan="4"><b>BI-LEVEL</b> <span data-lang="zh">— 巢狀:內層為每個身體訓控制,外層依評分探索形態(最常見)</span><span data-lang="en">— nested: inner loop trains control per body, outer loop explores morphology by score (most widely adopted)</span></td></tr>
+          <tr class="fw-bi"><td>Evolutionary RL</td><td><span data-lang="zh">外層 EA(突變/交配,甚至用 LLM 當突變算子),內層 PPO/SAC 等 RL</span><span data-lang="en">outer EA (mutation/crossover, even LLMs as mutation operators), inner RL such as PPO/SAC</span></td><td><b>NGE</b> [196] <span data-lang="zh">(GNN universal 控制,省重訓)</span><span data-lang="en">(GNN universal control, less retraining)</span>; <b>DERL</b> [76] <span data-lang="zh">(每身體從頭訓 + 越來越難的環境)</span><span data-lang="en">(train each body from scratch + harder environments)</span></td><td><span data-lang="zh"><span class="ok">+</span> 搜尋廣、Baldwinian<br><span class="bad">−</span> 內層最貴</span><span data-lang="en"><span class="ok">+</span> broad search, Baldwinian<br><span class="bad">−</span> most expensive inner loop</span></td></tr>
+          <tr class="fw-bi"><td>Surrogate-Assisted</td><td><span data-lang="zh">用預測模型近似任務表現:BO+GP(PI/EI/ES/UCB)、Q-value 代理(Q-Surro)、動作遷移(A-Surro)、學到的 reward model</span><span data-lang="en">a predictive model approximates performance: BO+GP (PI/EI/ES/UCB), Q-value surrogates (Q-Surro), action transfer (A-Surro), learned reward models</span></td><td><b>Co-Adapt</b> [136]; <b>Bjelonic et al.</b> [134] <span data-lang="zh">(BO 調四足 PEA 彈簧,真機)</span><span data-lang="en">(BO on quadruped PEA springs, real robot)</span></td><td><span data-lang="zh"><span class="ok">+</span> 低維連續空間極省樣本<br><span class="bad">−</span> 代理保真度、維度受限</span><span data-lang="en"><span class="ok">+</span> very sample-efficient in low-dim continuous spaces<br><span class="bad">−</span> surrogate fidelity, dimension limits</span></td></tr>
+          <tr class="fw-bi"><td>Other Methods</td><td><span data-lang="zh">內層改用軌跡最佳化、EA、數值解算器或資訊理論分類器;非同步學習+演化;大規模平行可微模擬</span><span data-lang="en">inner loop via trajectory optimization, EAs, numerical solvers or info-theoretic classifiers; asynchronous learning+evolution; massively parallel differentiable sim</span></td><td><b>Fadini et al.</b> [235] <span data-lang="zh">(DDP 內層 + CMA-ES 外層)</span><span data-lang="en">(DDP inner + CMA-ES outer)</span>; <b>A-MEL</b> [158]</td><td><span data-lang="zh"><span class="ok">+</span> 用到模型結構<br><span class="bad">−</span> 依賴模型準確度</span><span data-lang="en"><span class="ok">+</span> exploits model structure<br><span class="bad">−</span> depends on model accuracy</span></td></tr>
+          <tr class="fw-si"><td colspan="4"><b>SINGLE-LEVEL</b> <span data-lang="zh">— 形態與控制是同一個最佳化程序裡的變數</span><span data-lang="en">— morphology and control are variables in one unified optimization</span></td></tr>
+          <tr class="fw-si"><td>EA-Based</td><td><span data-lang="zh">每個個體編碼整個 agent(或形態 + 簡化控制),一起演化</span><span data-lang="en">each individual encodes a whole agent (or body + simplified controller), evolved together</span></td><td><b>Sims</b> [79]; <span data-lang="zh">CPPN 軟體機器人</span><span data-lang="en">CPPN soft robots</span> <b>Cheney et al.</b> [96]</td><td><span data-lang="zh"><span class="ok">+</span> 最能發現新奇形態<br><span class="bad">−</span> 每代數千次模擬</span><span data-lang="en"><span class="ok">+</span> best at novel morphologies<br><span class="bad">−</span> thousands of sims per generation</span></td></tr>
+          <tr class="fw-si"><td>RL-Based</td><td><span data-lang="zh">把身體參數放進策略計算圖,或把<mark class="m-method" data-t="METHOD/IDEA">設計修改當成 RL 動作</mark></span><span data-lang="en">embed body parameters in the policy graph, or treat <mark class="m-method" data-t="METHOD/IDEA">design edits as RL actions</mark></span></td><td><b>Transform2Act</b> [19]; <b>BodyGen</b> [22] / <b>CuCo</b> [20]</td><td><span data-lang="zh"><span class="ok">+</span> 跨設計共享經驗<br><span class="bad">−</span> 信用分配、幾乎只在模擬</span><span data-lang="en"><span class="ok">+</span> experience shared across designs<br><span class="bad">−</span> credit assignment, mostly sim-only</span></td></tr>
+          <tr class="fw-si"><td>Physics-Based</td><td><span data-lang="zh">穿過可微模擬/解析模型做 BPTT(ADAM、L-BFGS);伴隨法、隨機規劃、變形/密度式設計</span><span data-lang="en">BPTT through differentiable sims / analytic models (ADAM, L-BFGS); adjoints, stochastic programming, deformation/density design</span></td><td><b>DiffAqua</b> [24]; <b>Bravo-Palacios et al.</b> [270] <span data-lang="zh">(多任務隨機規劃)</span><span data-lang="en">(multi-task stochastic programming)</span></td><td><span data-lang="zh"><span class="ok">+</span> 可擴到數千參數<br><span class="bad">−</span> <mark class="m-limit" data-t="LIMITATION/FUTURE">接觸/流體/軟材的可微模型有限,控制器常很簡單</mark></span><span data-lang="en"><span class="ok">+</span> scales to thousands of params<br><span class="bad">−</span> <mark class="m-limit" data-t="LIMITATION/FUTURE">limited differentiable contact/fluid/soft models; simple controllers</mark></span></td></tr>
+          <tr class="fw-si"><td>Diversity-Based</td><td><span data-lang="zh">MAP-Elites 以<b>形態描述子 MD</b> 建檔、novelty search、dual-map、三檔案 3B-QD</span><span data-lang="en">MAP-Elites archives indexed by <b>morphology descriptors (MD)</b>, novelty search, dual-map, three-archive 3B-QD</span></td><td><b>Nordmoen et al.</b> [287]; <b>3B-QD</b> [294]</td><td><span data-lang="zh"><span class="ok">+</span> 穩健、多樣<br><span class="bad">−</span> 描述子設計、無最優性保證</span><span data-lang="en"><span class="ok">+</span> robust, diverse<br><span class="bad">−</span> descriptor design, no optimality guarantees</span></td></tr>
+          <tr class="fw-ge"><td colspan="4"><b>GENERATIVE</b> <span data-lang="zh">— 用生成模型學「形態-任務-表現」關係,在 latent 或規則空間中最佳化</span><span data-lang="en">— a generative model learns morphology-task-performance relations; optimize in a latent or rule space</span></td></tr>
+          <tr class="fw-ge"><td>Rule-Based</td><td><span data-lang="zh">圖文法、L-system 保證組裝合法,搭啟發式搜尋 + 模型式控制</span><span data-lang="en">graph grammars, L-systems guarantee valid assemblies; heuristic search + model-based control</span></td><td><b>RoboGrammar</b> [153]</td><td><span data-lang="zh"><span class="ok">+</span> 合理、可製造<br><span class="bad">−</span> 專家文法帶偏差</span><span data-lang="en"><span class="ok">+</span> plausible, manufacturable<br><span class="bad">−</span> expert grammar bias</span></td></tr>
+          <tr class="fw-ge"><td>Latent-Based</td><td><span data-lang="zh">VAE / GAN / Diffusion / GFlowNet 把低維 latent 映到 3D 或圖形態</span><span data-lang="en">VAE / GAN / diffusion / GFlowNet map low-dim latents to 3D or graph bodies</span></td><td><b>GLSO</b> [311]; <b>DiffuseBot</b> [312]</td><td><span data-lang="zh"><span class="ok">+</span> 平滑、可重用<br><span class="bad">−</span> 需大量資料;可能解碼出不合理形態</span><span data-lang="en"><span class="ok">+</span> smooth, reusable<br><span class="bad">−</span> data-hungry; may decode invalid bodies</span></td></tr>
+          <tr class="fw-ge"><td>Large-Model-Based</td><td><span data-lang="zh">LLM/VLM 當突變算子、搜尋啟發或設計者(含反思機制)</span><span data-lang="en">LLMs/VLMs as mutation operators, search heuristics or designers (with reflection)</span></td><td><b>OpenELM</b> [319]; <b>LASeR</b> [28]</td><td><span data-lang="zh"><span class="ok">+</span> 常識 + 語意提示<br><span class="bad">−</span> <mark class="m-limit" data-t="LIMITATION/FUTURE">不保證可行、最佳或物理一致</mark></span><span data-lang="en"><span class="ok">+</span> knowledge + semantic prompting<br><span class="bad">−</span> <mark class="m-limit" data-t="LIMITATION/FUTURE">no guarantee of feasibility, optimality or physical consistency</mark></span></td></tr>
+          <tr class="fw-op"><td colspan="4"><b>OPEN-ENDED</b> <span data-lang="zh">— 取消固定終點目標,讓 agent 與環境互相產生新挑戰</span><span data-lang="en">— no fixed terminal objective; agents and environments generate new challenges for each other</span></td></tr>
+          <tr class="fw-op"><td>Brain-Body-Env Co-Evolution</td><td><span data-lang="zh">POET 式「環境-agent 配對」族群;RL 驅動的形態+環境課程;LLM 產生環境</span><span data-lang="en">POET-style populations of env-agent pairs; RL-driven morphology+environment curricula; LLM-generated environments</span></td><td><b>Stensby et al.</b> [182]; <b>MECE</b> [326]</td><td><span data-lang="zh"><span class="ok">+</span> 持續創新、少早熟<br><span class="bad">−</span> 難評估</span><span data-lang="en"><span class="ok">+</span> sustained innovation, less premature convergence<br><span class="bad">−</span> hard to evaluate</span></td></tr>
+          <tr class="fw-op"><td>Developmental Evolution</td><td><span data-lang="zh">Evo-Devo:基因型編碼「生長過程」;學習中調整參數、逐步解凍自由度、長出新肢體</span><span data-lang="en">Evo-Devo: genotypes encode growth; adjust parameters during learning, progressively unfreeze DoFs, grow new parts</span></td><td><b>Bongard</b> [342]; <b>NCRS</b> [332]</td><td><span data-lang="zh"><span class="ok">+</span> 更結構化的解<br><span class="bad">−</span> <mark class="m-limit" data-t="LIMITATION/FUTURE">作者承認尚非統一方法</mark></span><span data-lang="en"><span class="ok">+</span> more structured solutions<br><span class="bad">−</span> <mark class="m-limit" data-t="LIMITATION/FUTURE">not yet a unified methodology (authors)</mark></span></td></tr>
+        </table></div>
+        <figure class="fig"><img src="figs/WangYX2025/fig3_frameworks.png" alt="Figure 3 four co-design frameworks">
+          <figcaption data-lang="zh"><b>Fig.3</b> 四框架示意。(a) bi-level:族群層級演化形態、個體層級訓練控制——注意右下的 \(\times\,\textit{Pop\_size}\),成本就在這個乘號;(b) single-level:形態 \(\omega\sim\pi_D\) 與控制 \(\pi_C\) 在同一迴圈,環境可微走 BPTT、不可微走 EA/RL;(c) generative:從 {形態, 任務, fitness} 資料學 latent space 再解碼;(d) open-ended:agent 族群與環境配置一起演化;(e) BipedalWalker 範例的完整「填表」。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> The four frameworks. (a) Bi-level: morphology evolves at the population level, control is trained per individual—note the \(\times\,\textit{Pop\_size}\); that multiplier is the cost. (b) Single-level: body \(\omega\sim\pi_D\) and control \(\pi_C\) in one loop—BPTT if the environment is differentiable, EA/RL otherwise. (c) Generative: learn a latent space from {morphology, task, fitness} data, then decode. (d) Open-ended: agent population and environment configs co-evolve. (e) A fully "filled-in" BipedalWalker example.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">範例:把 BipedalWalker 放進分類法(§III-G)</span><span data-lang="en">Worked example: BipedalWalker in the taxonomy (§III-G)</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">BRAIN</span><b><span data-lang="zh">可學習 · 閉迴路 · Individual</span><span data-lang="en">Learnable · closed-loop · individual</span></b><small><span data-lang="zh">MLP:關節角、速度、觸地 → 關節力矩</span><span data-lang="en">MLP: joint angles, velocities, contacts → torques</span></small></div>
+          <div class="arrow">+</div>
+          <div class="step"><span class="ph mono">BODY</span><b><span data-lang="zh">連續 · 固定拓樸 · Direct</span><span data-lang="en">Continuous · fixed topology · direct</span></b><small><span data-lang="zh">8 維向量 = 兩腿各兩段的寬與高,限制在原尺寸 75% 範圍內</span><span data-lang="en">8-D vector = width/height of two 2-segment legs, within 75% of the original sizes</span></small></div>
+          <div class="arrow">+</div>
+          <div class="step"><span class="ph mono">ENV</span><b><span data-lang="zh">預定義 · 完全可觀 · Task-driven</span><span data-lang="en">Predefined · fully observable · task-driven</span></b><small><span data-lang="zh">最大化前進距離,單一目標、無約束</span><span data-lang="en">maximize forward distance, single objective, no constraints</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">FRAMEWORK</span><b>Bi-level</b><small><span data-lang="zh">外層 GA 演化形態,內層 RL 訓控制</span><span data-lang="en">outer GA over morphology, inner RL for control</span></small></div>
+        </div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><span class="add">[導讀補充]</span> 這個「填表」動作就是本綜述最實用的地方:把你自己的腿足專案也照這四格填一遍,就知道該去哪張表找鄰居。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><span class="add">[guide note]</span> This "fill in the form" move is the survey&#39;s most practical tool: fill these four boxes for your own legged project and you know which table to search for neighbors.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">評估指標(§III-F)</span><span data-lang="en">Evaluation metrics (§III-F)</span></h3>
+        <p data-lang="zh"><b>任務表現</b>仍是主要指標,但在形態搜尋中很貴(要完整訓策略 + 大量 rollout)。另外三個資訊/族群式指標:</p>
+        <p data-lang="en"><b>Task performance</b> remains the primary metric but is costly during morphology search (full policy training + many rollouts). Three information/population metrics:</p>
+        <p data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">Morphological Computation</mark>:已知動作時,前一狀態對下一狀態有多少資訊——越大代表身體-環境動力學本身推動了轉移。</p>
+        <p data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Morphological Computation</mark>: how informative the previous state is about the next, given the action—large values mean body-environment dynamics drive the transitions.</p>
+        <div class="eq">$$\mathrm{MC}=I\big(s^c_{t+1};\,s^c_t\mid a^c_t\big)$$</div>
+        <p data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">Empowerment</mark>:動作與下一狀態之間的通道容量——高代表身體能把多樣控制訊號轉成可預測結果,讓下游控制更容易。</p>
+        <p data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Empowerment</mark>: channel capacity between action and next state—high values mean the body turns diverse control signals into predictable outcomes, easing downstream control.</p>
+        <div class="eq">$$\mathcal{E}(s)=\max_{\pi}\,I\big(s^c_{t+1};\,a^c_t\mid s^c_t\big)$$</div>
+        <p data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">QD Score</mark>:在離散化的形態描述子空間(\(N\) 格)裡,每格最佳個體的回報加總:</p>
+        <p data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">QD Score</mark>: over a discretized morphology-descriptor space with \(N\) cells, sum the return of the best individual in each occupied cell:</p>
+        <div class="eq">$$\mathrm{QDScore}=\sum_{i=1}^{N}R_i$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">再加上<b>複雜度</b>(控制器 FLOPs;形態的連桿/關節/DoF 數、連通性、對稱)與<b>穩健性</b>(鎖關節、感測器故障、環境變化下的表現)。<mark class="m-limit" data-t="LIMITATION/FUTURE">作者承認 MC 的實務應用多半仍靠簡化或代理估計器</mark>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Plus <b>complexity</b> (controller FLOPs; counts of links/joints/DoF, connectivity, symmetry) and <b>robustness</b> (performance under locked joints, sensor faults, environmental variation). <mark class="m-limit" data-t="LIMITATION/FUTURE">The authors concede most practical MC use relies on simplified or surrogate estimators</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\omega\in\Omega\)</td><td><span data-lang="zh">身體形態(拓樸、材料、感測器/致動器配置)與其可行集合。</span><span data-lang="en">Body morphology (topology, materials, sensor/actuator layout) and its feasible set.</span></td></tr>
+          <tr><td>\(\pi\in\Pi\)</td><td><span data-lang="zh">控制大腦:把觀測映到動作指令的策略。</span><span data-lang="en">Controlling brain: the policy mapping observations to action commands.</span></td></tr>
+          <tr><td>\(F,\ R\)</td><td><span data-lang="zh">物理動力學與 fitness(任務表現)函數。</span><span data-lang="en">Physical dynamics and the fitness (task-performance) function.</span></td></tr>
+          <tr><td>\(\pi_d,\ \pi_c\)</td><td><span data-lang="zh">單層 MDP 中的設計策略(長出身體)與控制策略(條件於 \(\omega\))。</span><span data-lang="en">Design policy (grows the body) and control policy (conditioned on \(\omega\)) in the single-level MDP.</span></td></tr>
+          <tr><td>\(s^d_t, a^d_t, r^d_t\)</td><td><span data-lang="zh">設計階段的狀態、動作、獎勵;\(T_d\) 是設計步數。</span><span data-lang="en">Design-stage state, action, reward; \(T_d\) is the number of design steps.</span></td></tr>
+          <tr><td>\(s^c_t, a^c_t, r^c_t\)</td><td><span data-lang="zh">控制階段的狀態、動作(如關節力矩)、獎勵。</span><span data-lang="en">Control-stage state, action (e.g., joint torques), reward.</span></td></tr>
+          <tr><td>\(F_c,\ L\)</td><td><span data-lang="zh">(可微)環境轉移與終端任務損失(如行進距離)。</span><span data-lang="en">(Differentiable) environment transition and terminal task loss (e.g., distance).</span></td></tr>
+          <tr><td>\(I(\cdot;\cdot\mid\cdot)\)</td><td><span data-lang="zh">條件互資訊,用於 MC 與 empowerment。</span><span data-lang="en">Conditional mutual information, used by MC and empowerment.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">下層回答「<b>要設計什麼、用什麼編碼</b>」,上層回答「<b>大腦與身體的最佳化迴圈怎麼接</b>」。任何 co-design 論文都能用這兩個問題定位。</span>
+        <span data-lang="en">The lower layer answers "<b>what is designed and how is it encoded</b>"; the upper layer answers "<b>how are the brain and body optimization loops wired</b>." Any co-design paper can be located by these two questions.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">把一篇論文歸類的快速流程</span><span data-lang="en">Quick procedure to classify a paper</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> ① 環境/任務也在演化嗎?→ open-ended。② 候選身體主要由學到的或規則式生成器產生?→ generative。③ 每個身體都在內層把控制訓到(近)收斂?→ bi-level。④ 否則(同步更新)→ single-level;再依最佳化器分 EA / RL / physics / diversity。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> ① Does the environment/task also evolve? → open-ended. ② Are candidate bodies produced mainly by a learned or rule-based generator? → generative. ③ Is control trained to (near) convergence per body in an inner loop? → bi-level. ④ Otherwise (simultaneous updates) → single-level, then split by optimizer: EA / RL / physics / diversity.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">分類會重疊</span><span data-lang="en">Categories overlap</span></div>
+        <span data-lang="zh">LLM 當突變算子同時出現在 Evolutionary RL(§IV-A1)與 Large-Model-Based Generation(§IV-C3);RoboGAN 是 latent 生成但用演化迴圈搜尋。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">歸類取決於作者認為的「主要貢獻」</mark>,不是互斥的分割。</span>
+        <span data-lang="en">LLMs-as-mutation-operators appear both in Evolutionary RL (§IV-A1) and Large-Model-Based Generation (§IV-C3); RoboGAN is latent generation searched by an evolutionary loop. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">Placement depends on what the authors deem the main contribution</mark>, not a mutually exclusive partition.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">直接 vs 間接編碼</span><span data-lang="en">Direct vs indirect</span></span>
+        <span data-lang="zh">[160] 報告直接編碼學得較快、收斂較一致;[161][162] 發現間接編碼在早期探索佔優(緊湊、基因重用),直接編碼在後期精修較好。作者因而建議:<b>先間接廣搜、再轉直接細修</b>。</span>
+        <span data-lang="en">[160] reports direct encodings learn faster and converge more consistently; [161][162] find indirect encodings win early (compactness, genetic reuse) and direct ones win in late refinement. Hence: <b>explore broadly with indirect, refine with direct</b>.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif"><span data-lang="zh">綜述的產出:領域證據</span><span data-lang="en">What the Field Has Shown</span></h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">文獻地圖:Tables I–VI 重新計數</span><span data-lang="en">Literature map: Tables I–VI recounted</span> <span class="add">[導讀補充]</span></h3>
+        <div class="tablewrap"><table>
+          <tr><th><span data-lang="zh">框架</span><span data-lang="en">Framework</span></th><th><span data-lang="zh">列數</span><span data-lang="en">Rows</span></th><th><span data-lang="zh">子類分佈</span><span data-lang="en">Sub-category split</span></th><th><span data-lang="zh">只模擬</span><span data-lang="en">Sim only</span></th><th><span data-lang="zh">含真機</span><span data-lang="en">Real</span></th><th><span data-lang="zh">腿足/人形</span><span data-lang="en">Legged / humanoid</span></th></tr>
+          <tr class="fw-bi"><td><b>Bi-level</b></td><td>50</td><td>ERL 24 · Surrogate 17 · Other 9</td><td>42</td><td class="ok">8</td><td>11 / 5</td></tr>
+          <tr class="fw-si"><td><b>Single-level</b></td><td>59</td><td>EA 12 · RL 17 · Physics 20 · Diversity 10</td><td>45</td><td class="ok">14</td><td>9 / 2</td></tr>
+          <tr class="fw-ge"><td><b>Generative</b></td><td>19</td><td>Rule 4 · Latent 10 · Large-model 5</td><td>16</td><td class="ok">3</td><td>0 / 0</td></tr>
+          <tr class="fw-op"><td><b>Open-ended</b></td><td>10</td><td>Co-Evo 2 · Developmental 8</td><td>9</td><td class="ok">1</td><td>3 / 0</td></tr>
+          <tr><td><b><span data-lang="zh">合計</span><span data-lang="en">Total</span></b></td><td><b>138</b></td><td>13 <span data-lang="zh">子類</span><span data-lang="en">sub-cats</span></td><td class="bad">112 (81%)</td><td class="ok">26 (19%)</td><td>23 / 7</td></tr>
+        </table></div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">計數依表中「Application」欄(Simulation / Sim&amp;Real / Real-World)與「Agent Type」欄(Legged、Quadrupedal 合併計為腿足)。任務表徵:<mark class="m-result" data-t="RESULT/EVIDENCE">120 列純 task-driven、16 列 hybrid、僅 2 列 task-agnostic</mark>。最常用平台:MuJoCo 23、EvoGym 22、Bullet 17、自訂 14、Taichi 9、Isaac Gym 7。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Counted from the tables&#39; "Application" column (Simulation / Sim&amp;Real / Real-World) and "Agent Type" column (Legged and Quadrupedal merged as legged). Task representation: <mark class="m-result" data-t="RESULT/EVIDENCE">120 rows purely task-driven, 16 hybrid, only 2 task-agnostic</mark>. Most-used platforms: MuJoCo 23, EvoGym 22, Bullet 17, customized 14, Taichi 9, Isaac Gym 7.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">趨勢:每年被收錄的工作數</span><span data-lang="en">Trend: classified works per year</span> <span class="add">[導讀補充]</span></h3>
+        <table class="bars">
+          <tr><td style="width:70px" class="mono">≤2018</td><td><div class="bar" style="width:37.5%"></div></td><td style="width:40px">12</td></tr>
+          <tr><td class="mono">2019</td><td><div class="bar" style="width:21.9%"></div></td><td>7</td></tr>
+          <tr><td class="mono">2020</td><td><div class="bar" style="width:28.1%"></div></td><td>9</td></tr>
+          <tr><td class="mono">2021</td><td><div class="bar" style="width:50%"></div></td><td>16</td></tr>
+          <tr><td class="mono">2022</td><td><div class="bar" style="width:37.5%"></div></td><td>12</td></tr>
+          <tr><td class="mono">2023</td><td><div class="bar" style="width:78.1%"></div></td><td>25</td></tr>
+          <tr><td class="mono">2024</td><td><div class="bar" style="width:100%"></div></td><td>32</td></tr>
+          <tr><td class="mono">2025</td><td><div class="bar part" style="width:78.1%"></div></td><td>25*</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted)">* 2025 為部分年度(arXiv v2 於 2025-12)。Generative 列有 8/19 來自 2025,且 <b>5 篇 LLM/VLM 設計全部是 2025</b>——生成式、尤其大模型路線是最新的成長點。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted)">* 2025 is a partial year (arXiv v2 in Dec 2025). 8/19 generative rows are from 2025, and <b>all 5 LLM/VLM design works are 2025</b>—generative, especially large-model, methods are the newest growth area.</p>
+        <div class="flow">
+          <div class="step"><span class="ph mono">1994</span><b><span data-lang="zh">虛擬生物</span><span data-lang="en">Virtual creatures</span></b><small><span data-lang="zh">Sims:圖形態 + 神經控制共同演化</span><span data-lang="en">Sims: graph bodies + neural control co-evolved</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">2010s</span><b><span data-lang="zh">間接編碼 ER</span><span data-lang="en">Indirect-encoding ER</span></b><small>CPPN-NEAT, VoxCAD soft robots, L-systems</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">2019–21</span><b><span data-lang="zh">演化 + 深度 RL</span><span data-lang="en">Evolution + deep RL</span></b><small>NGE, DERL, Co-Adapt, EvolutionGym, DiffTaichi</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">2022–24</span><b><span data-lang="zh">設計即動作 + GPU 平行</span><span data-lang="en">Design-as-action + GPU parallel</span></b><small>Transform2Act, BodyGen, QD, Isaac Gym legged co-design</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">2025</span><b><span data-lang="zh">大模型當設計者</span><span data-lang="en">Large models as designers</span></b><small>LASeR, RoboMoRe, RoboMorph, VLMgineer</small></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域證據:綜述引用了哪些「已被展示」的結論</span><span data-lang="en">Field evidence: what the survey cites as demonstrated</span></h3>
+        <div class="tablewrap"><table class="tight">
+          <tr><th><span data-lang="zh">結論</span><span data-lang="en">Finding</span></th><th><span data-lang="zh">來源</span><span data-lang="en">Source</span></th><th><span data-lang="zh">證據強度</span><span data-lang="en">Evidence strength</span> <span class="add">[導讀補充]</span></th></tr>
+          <tr><td><span data-lang="zh">在越難環境演化的形態,下游學習效率越高、更穩健</span><span data-lang="en">Bodies evolved in harder environments learn downstream tasks more efficiently and are more robust</span></td><td>DERL [76]</td><td><span data-lang="zh">大規模單一研究,僅模擬</span><span data-lang="en">large-scale single study, sim only</span></td></tr>
+          <tr><td><span data-lang="zh">崎嶇地形 → 更穩、肢體更多;平地 → 較簡單形態</span><span data-lang="en">Rough terrain → more stable, limb-rich bodies; flat ground → simpler forms</span></td><td>[165]–[168]</td><td><span data-lang="zh">多篇 ER 研究一致</span><span data-lang="en">consistent across several ER studies</span></td></tr>
+          <tr><td><span data-lang="zh">複雜/多任務環境的設計遷移到新任務更好</span><span data-lang="en">Designs from complex / multi-task environments transfer better</span></td><td>[76], PreCo [169]</td><td><span data-lang="zh">中等;多任務也帶來新的 brain-body 取捨</span><span data-lang="en">moderate; multi-task adds new brain-body trade-offs</span></td></tr>
+          <tr><td><span data-lang="zh">QD(以形態描述子建檔)比只看目標的 EA 更穩健、多樣</span><span data-lang="en">QD with morphology descriptors is more robust and diverse than objective-only EAs</span></td><td>[287], [289]</td><td><span data-lang="zh">voxel / 模組機器人為主</span><span data-lang="en">mostly voxel / modular robots</span></td></tr>
+          <tr><td><span data-lang="zh">學到的環境演進(POET 式)比手刻課程產生更多形態多樣性、較少早熟</span><span data-lang="en">Learned environment progressions (POET-style) give more morphological diversity than handcrafted curricula, less premature convergence</span></td><td>Stensby et al. [182]</td><td><span data-lang="zh">單篇,腿足模擬</span><span data-lang="en">single study, legged sim</span></td></tr>
+          <tr><td><span data-lang="zh">GNN universal 控制器能跨身體泛化,降低重訓成本</span><span data-lang="en">GNN universal controllers generalize across bodies, cutting retraining cost</span></td><td>NGE [196]</td><td><span data-lang="zh">已被多篇後續沿用</span><span data-lang="en">widely adopted by follow-ups</span></td></tr>
+          <tr><td><span data-lang="zh">可微方法可擴展到數千個設計參數,但行為較簡單</span><span data-lang="en">Differentiable methods scale to thousands of design parameters, but behaviors stay simple</span></td><td>§IV-B3</td><td><span data-lang="zh">定性陳述</span><span data-lang="en">qualitative statement</span></td></tr>
+          <tr><td><span data-lang="zh">co-design 的 agent 優於固定身體的 baseline</span><span data-lang="en">Co-designed agents outperform fixed-body baselines</span></td><td>§VII</td><td class="bad"><span data-lang="zh"><mark class="m-assume" data-t="ASSUMPTION/CLAIM">結論句中的斷言,沒有彙整數據</mark></span><span data-lang="en"><mark class="m-assume" data-t="ASSUMPTION/CLAIM">asserted in the conclusion, no aggregated data</mark></span></td></tr>
+        </table></div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">腿足切片:從 Tables I–VI 挑出的足式工作</span><span data-lang="en">The legged slice: legged entries pulled from Tables I–VI</span></h3>
+        <div class="tablewrap"><table class="tight">
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">框架 → 子類</span><span data-lang="en">Framework → sub</span></th><th><span data-lang="zh">大腦(內層)</span><span data-lang="en">Brain (inner)</span></th><th><span data-lang="zh">身體(外層 · 空間)</span><span data-lang="en">Body (outer · space)</span></th><th><span data-lang="zh">平台</span><span data-lang="en">Platform</span></th></tr>
+          <tr class="fw-bi"><td>Co-Adapt [136] 2020</td><td>Bi · Surrogate</td><td>RL (SAC), Hybrid DNN</td><td>Q-Surro · Continuous (F)</td><td>Sim {Bullet}</td></tr>
+          <tr class="fw-bi"><td>Belmonte-Baeza [141] 2022</td><td>Bi · ERL</td><td>Meta-RL (PPO), Hybrid</td><td>CMA-ES · Continuous (F)</td><td>Sim {RaiSim}</td></tr>
+          <tr class="fw-bi"><td>Fadini [235] 2022</td><td>Bi · Other</td><td>DDP, LQR (Individual)</td><td>CMA-ES · Continuous (F)</td><td>Sim {Bullet}</td></tr>
+          <tr class="fw-bi"><td>Bjelonic [134] 2023</td><td>Bi · Surrogate</td><td>RL (PPO), Hybrid</td><td>Bayesian-Opt · Continuous (F)</td><td class="ok">Sim&amp;Real {ANYmal}</td></tr>
+          <tr class="fw-bi"><td>Chen [135] 2023</td><td>Bi · ERL</td><td>RL (PPO), DNN&amp;Instinct</td><td>PSO · Continuous (F)</td><td>Sim {Isaac Gym}</td></tr>
+          <tr class="fw-bi"><td>SERL [199] 2024</td><td>Bi · ERL</td><td>RL (PPO), Universal</td><td>GA · Continuous (F)</td><td class="ok">Sim&amp;Real {Isaac Gym}</td></tr>
+          <tr class="fw-bi"><td>Text2robot [156] 2024</td><td>Bi · ERL</td><td>RL (PPO), Individual</td><td>GA · Hybrid (F), Mesh+URDF</td><td class="ok">Sim&amp;Real {Isaac Gym}</td></tr>
+          <tr class="fw-bi"><td>Chen [226] 2024</td><td>Bi · Surrogate</td><td>RL (PPO), Hybrid</td><td>Bayesian-Opt · Continuous (F)</td><td>Sim {Isaac Gym}</td></tr>
+          <tr class="fw-si"><td>Spielberg [268] 2017</td><td>Single · Physics</td><td>Traj. Opt. (OL torques)</td><td>NLP solver · Continuous (F)</td><td class="ok">Sim&amp;Real {Drake}</td></tr>
+          <tr class="fw-si"><td>Transform2Act [19] 2022</td><td>Single · RL</td><td>RL (PPO), Hybrid GNN</td><td>RL (PPO) · Hybrid (UF), Graph</td><td>Sim {MuJoCo}</td></tr>
+          <tr class="fw-si"><td>N-LIMB [164] 2022</td><td>Single · RL</td><td>RL (PPO), Universal Transformer</td><td>Policy grad. · Discrete (UF), Grammar</td><td>Sim {Isaac Gym}</td></tr>
+          <tr class="fw-si"><td>BodyGen [22] 2024</td><td>Single · RL</td><td>RL (PPO), Universal Transformer</td><td>RL (PPO) · Hybrid (UF)</td><td>Sim {MuJoCo}</td></tr>
+          <tr class="fw-si"><td>Bravo-Palacios [271] 2024</td><td>Single · Physics</td><td>Grad. Opt., Hybrid torques</td><td>Grad. Opt. · Continuous (F)</td><td class="ok">Sim&amp;Real {CasADi}</td></tr>
+          <tr class="fw-si"><td>Howard [288] 2020</td><td>Single · Diversity</td><td>EA (QD), CPG</td><td>EA (QD) · Hybrid (UF)</td><td>Sim {Bullet}</td></tr>
+          <tr class="fw-op"><td>Stensby [182] 2021</td><td>Open · Co-Evo</td><td>EA (GA), DNN</td><td>EA (GA) · Continuous (F)</td><td>Sim {Gym}</td></tr>
+          <tr class="fw-op"><td>Vujovic [329] 2017</td><td>Open · Developmental</td><td>EA, PID</td><td>EA · Hybrid (F)</td><td class="ok">Real-World</td></tr>
+        </table></div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">F = 固定拓樸,UF = 不固定。讀法:<mark class="m-result" data-t="RESULT/EVIDENCE">所有標 Sim&amp;Real 的腿足工作都是固定拓樸</mark>;會改拓樸的(Transform2Act、N-LIMB、BodyGen、Howard)全在模擬裡。<span class="add">[導讀補充]</span> 表中 Fadini [235] 與 Transform2Act [19] 的 Agent Type 標為「Rigid Robot」而非 Legged,此處依其 locomotion 任務歸入腿足切片。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">F = fixed topology, UF = unfixed. Reading: <mark class="m-result" data-t="RESULT/EVIDENCE">every legged entry marked Sim&amp;Real has a fixed topology</mark>; those that change topology (Transform2Act, N-LIMB, BodyGen, Howard) all stay in simulation. <span class="add">[guide note]</span> The tables label Fadini [235] and Transform2Act [19] as "Rigid Robot" rather than Legged; they are included here because of their locomotion tasks.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">平台、資料集與真機應用(§V)</span><span data-lang="en">Platforms, datasets and real-world applications (§V)</span></h3>
+        <figure class="fig"><img src="figs/WangYX2025/fig4_agents_gallery.jpg" alt="Figure 4 co-designed agents virtual and real">
+          <figcaption data-lang="zh"><b>Fig.4</b> 虛擬(上:virtual creatures / 剛體 / 軟體 / 人形)與真實世界(下)的 co-design 成果。注意比例:真實世界一排裡,剛體腿足只佔少數(<span class="add">[導讀補充]</span> 看起來 (q) 是戶外足式機器人、(y) 是雙足下肢),其餘是模組方塊、桁架、夾爪與軟體致動器——呼應「真機 co-design 多在局部零件」的觀察。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Co-designed agents in virtual (top: virtual creatures / rigid / soft / humanoid) and real-world settings (bottom). Note the proportion: in the real-world rows, rigid legged robots are a minority (<span class="add">[guide note]</span> (q) appears to be an outdoor legged robot and (y) a bipedal lower body); the rest are modular cubes, trusses, grippers and soft actuators—echoing that real-world co-design mostly targets parts.</figcaption></figure>
+        <div class="tablewrap"><table class="tight">
+          <tr><th><span data-lang="zh">類別</span><span data-lang="en">Category</span></th><th><span data-lang="zh">內容</span><span data-lang="en">Content</span></th></tr>
+          <tr><td><b><span data-lang="zh">剛體模擬器</span><span data-lang="en">Rigid-body sims</span></b></td><td><span data-lang="zh">MuJoCo、Bullet、Gazebo、Webots… 原生支援 URDF/MJCF 便於改形態;Isaac Gym 讓<mark class="m-result" data-t="RESULT/EVIDENCE">大量形態變體可同時平行訓練</mark>;可微:Brax、Nimble、Dojo、DiffRedMax;Genesis、MuJoCo Playground 嘗試統一可微 + GPU + 渲染。</span><span data-lang="en">MuJoCo, Bullet, Gazebo, Webots… natively support URDF/MJCF for easy morphology edits; Isaac Gym lets <mark class="m-result" data-t="RESULT/EVIDENCE">many morphological variants train in parallel</mark>; differentiable: Brax, Nimble, Dojo, DiffRedMax; Genesis and MuJoCo Playground aim to unify differentiability + GPU + rendering.</span></td></tr>
+          <tr><td><b><span data-lang="zh">軟體模擬器</span><span data-lang="en">Soft-body sims</span></b></td><td><span data-lang="zh">SOFA、VoxCAD、VoxCraft;<b>EvolutionGym</b>(被廣泛採用的 voxel 軟體機器人任務組);可微:DiffTaichi、ChainQueen、DiffAqua;<b>SoftZoo</b>(多地形 benchmark)。</span><span data-lang="en">SOFA, VoxCAD, VoxCraft; <b>EvolutionGym</b> (widely adopted voxel soft-robot task suite); differentiable: DiffTaichi, ChainQueen, DiffAqua; <b>SoftZoo</b> (multi-terrain benchmark).</span></td></tr>
+          <tr><td><b><span data-lang="zh">具身任務模擬器</span><span data-lang="en">Embodied-task sims</span></b></td><td><span data-lang="zh">iGibson、AI2-THOR、Habitat-Sim、LIBERO——作者視為未來長時程 ECD 的基礎,<mark class="m-limit" data-t="LIMITATION/FUTURE">目前幾乎沒被用在 co-design</mark>。</span><span data-lang="en">iGibson, AI2-THOR, Habitat-Sim, LIBERO—seen as future foundations for long-horizon ECD, <mark class="m-limit" data-t="LIMITATION/FUTURE">barely used for co-design today</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">資料集</span><span data-lang="en">Datasets</span></b></td><td><span data-lang="zh">RoboCrafter-QA(LLM 能否把任務描述連到形態/材料)、RoboDesign1M(百萬筆設計樣本)。</span><span data-lang="en">RoboCrafter-QA (can LLMs link task descriptions to morphology/materials), RoboDesign1M (one million design samples).</span></td></tr>
+          <tr><td><b><span data-lang="zh">真機</span><span data-lang="en">Real world</span></b></td><td><span data-lang="zh">剛體:雙足 [199]、四足 [134][156][233][271][382][385]、微型、輪式;軟體:形變爬行機器人 [163]、VoxCraft;模組:Revolve、RoboGen、Granulobot、EMARGE;空中/水下、手術、人形;以及<mark class="m-result" data-t="RESULT/EVIDENCE">進展最多的機械臂與末端執行器</mark>(作者認為因為全身真機 co-design 仍太難)。</span><span data-lang="en">Rigid: biped [199], quadrupeds [134][156][233][271][382][385], micro, wheeled; soft: shape-changing crawler [163], VoxCraft; modular: Revolve, RoboGen, Granulobot, EMARGE; aerial/aquatic, surgical, humanoid; and <mark class="m-result" data-t="RESULT/EVIDENCE">manipulators and end-effectors, where most progress is</mark> (because full-body real-world co-design remains hard, per the authors).</span></td></tr>
+        </table></div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">Table VII 列了 34 個平台,其中 11 個可微。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Table VII lists 34 platforms, 11 of them differentiable.</p>
+        <p data-lang="zh" style="margin-top:10px"><b>一句話評估:</b>這篇綜述證明了「co-design 已有大量、橫跨多社群的方法,且能被同一套欄位描述」;它<b>沒有</b>證明哪一個框架客觀較好,也沒有量化 co-design 相對於「把同樣算力花在控制器上」的淨收益。</p>
+        <p data-lang="en" style="margin-top:10px"><b>One-line assessment:</b> the survey shows that co-design has a large, multi-community method base describable by one schema; it does <b>not</b> show which framework is objectively better, nor quantify co-design&#39;s net gain over "spending the same compute on the controller."</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">產出 = <b>一張兩層分類地圖(Fig.2)+ 六張逐篇標註表(Tables I–VI,約 138 列)+ 一張平台表(Table VII)+ 真機案例與挑戰清單</b>。全部是定性綜整。</span>
+        <span data-lang="en">Deliverables = <b>a two-layer map (Fig.2) + six per-paper annotated tables (Tables I–VI, ~138 rows) + a platform table (Table VII) + real-world cases and a challenge list</b>. All qualitative synthesis.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">代表性數字</span><span data-lang="en">Representative numbers</span></span>
+        <span data-lang="zh">417 篇參考文獻;138 列分類工作;34 個平台(11 可微);81% 只模擬;87% 純任務獎勵。<span class="add">[導讀補充] 除參考文獻數與平台數外均為導讀者計數;綜述本身沒有任何實驗數據。</span></span>
+        <span data-lang="en">417 references; 138 classified rows; 34 platforms (11 differentiable); 81% sim-only; 87% purely task-driven. <span class="add">[guide note] Apart from the reference and platform totals, these are the guide&#39;s counts; the survey itself reports no experimental numbers.</span></span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">「Sim&amp;Real」不等於「做出新身體」</span><span data-lang="en">"Sim&amp;Real" ≠ "built a new body"</span></div>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 表中標 Sim&amp;Real 的工作,真機驗證的程度差異很大:有的真的製造了最佳化後的機構,有的是在既有機器人上換零件(如彈簧)或只部署控制器。讀原文前別把 26 列都當成完整的硬體 co-design 閉環。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> Entries marked Sim&amp;Real vary widely: some fabricate the optimized mechanism, others swap parts (e.g., springs) on an existing robot or only deploy the controller. Don&#39;t treat all 26 rows as closed-loop hardware co-design without reading the originals.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">模型式 vs RL 式</span><span data-lang="en">model vs RL</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">真機定義</span><span data-lang="en">what is real</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點(綜述本身)</span><span data-lang="en">Contestable points (the survey itself)</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>上層四框架的切分軸不正交</b>:bi-level / single-level 依<b>迴圈結構</b>切,generative 依<b>候選怎麼產生</b>切,open-ended 依<b>目標是否固定</b>切。<mark class="m-limit" data-t="LIMITATION/FUTURE">生成式方法本身仍跑在巢狀或聯合迴圈裡</mark>(RoboGAN 用演化迴圈、LASeR 是 LLM 在演化迴圈裡),同一篇可放兩處,歸類取決於作者強調哪個貢獻。</li>
+          <li data-lang="en"><b>The four upper-layer frameworks are not orthogonal</b>: bi-level / single-level split by <b>loop structure</b>, generative by <b>how candidates are produced</b>, open-ended by <b>whether the objective is fixed</b>. <mark class="m-limit" data-t="LIMITATION/FUTURE">Generative methods still run inside a nested or joint loop</mark> (RoboGAN uses an evolutionary loop; LASeR is an LLM inside an evolutionary loop), so one paper could sit in two places, depending on what the authors emphasize.</li>
+          <li data-lang="zh"><b>模型式腿足 co-design 被拆散</b>:Fadini [235]、Ha [233] 放在 bi-level「Other Methods」,Spielberg [268]、Bravo-Palacios [270][271] 放在 single-level「Physics-Based」。<mark class="m-limit" data-t="LIMITATION/FUTURE">最佳控制派的 co-design(隱函數定理、DDP、隨機規劃)沒有自己的家</mark>,腿足讀者容易看不出這是一條連貫的研究線。</li>
+          <li data-lang="en"><b>Model-based legged co-design is scattered</b>: Fadini [235] and Ha [233] sit under bi-level "Other Methods," Spielberg [268] and Bravo-Palacios [270][271] under single-level "Physics-Based." <mark class="m-limit" data-t="LIMITATION/FUTURE">The optimal-control school of co-design (implicit function theorem, DDP, stochastic programming) has no home of its own</mark>, so legged readers may not see it as one coherent line.</li>
+          <li data-lang="zh"><b>沒有任何定量綜整</b>:沒有算力成本表(GPU-hours)、沒有在共同 benchmark 上的橫向比較、沒有 meta-analysis。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">結論「co-design agent 優於固定身體 baseline」只是斷言</mark>;挑戰章節承認缺 benchmark,但綜述本身也沒嘗試哪怕一張粗略的成本表。</li>
+          <li data-lang="en"><b>No quantitative synthesis at all</b>: no compute-cost table (GPU-hours), no cross-method comparison on shared benchmarks, no meta-analysis. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">The conclusion "co-designed agents outperform fixed-body baselines" is asserted</mark>; the challenge section admits benchmarks are missing, yet the survey does not attempt even a rough cost table.</li>
+          <li data-lang="zh"><b>偏向虛擬生物與 voxel 軟體機器人</b><span class="add">[導讀補充計數]</span>:EvoGym 出現 22 列、81% 只模擬;腿足 23 列 + 人形 7 列,但<mark class="m-limit" data-t="LIMITATION/FUTURE">腿足特有的設計議題幾乎沒談</mark>——致動器/減速比選型、馬達扭矩-轉速與熱限制、質量/慣量分佈、PEA/SEA 柔順、能耗(CoT)、結構強度。全文「actuator」只零星出現。</li>
+          <li data-lang="en"><b>Bias toward virtual creatures and voxel soft robots</b> <span class="add">[guide count]</span>: EvoGym appears in 22 rows, 81% are sim-only; legged 23 rows + humanoid 7, yet <mark class="m-limit" data-t="LIMITATION/FUTURE">legged-specific design issues are barely discussed</mark>—actuator / gear-ratio selection, motor torque-speed and thermal limits, mass/inertia distribution, PEA/SEA compliance, energetics (CoT), structural strength. "Actuator" appears only in passing.</li>
+          <li data-lang="zh"><b>漏掉的腿足 co-design 文獻</b><span class="add">[導讀補充]</span>:參考文獻中找不到例如 Vitruvio 腿部設計最佳化工具箱(2020)、Dinev et al. 2022 動態腿足機器人的 versatile co-design、De Vincenti et al. 2021 control-aware 四足設計、Fadini et al. 2021 腿足的節能尺寸/致動器設計。這些正是最貼近真機的那一角。</li>
+          <li data-lang="en"><b>Missing legged co-design work</b> <span class="add">[guide note]</span>: the reference list lacks, e.g., the Vitruvio leg-design optimization toolbox (2020), Dinev et al. 2022 on versatile co-design for dynamic legged robots, De Vincenti et al. 2021 on control-aware quadruped design, and Fadini et al. 2021 on energy-efficient sizing / actuator design for legged robots—exactly the corner closest to real hardware.</li>
+          <li data-lang="zh"><b>指標說得多、用得少</b>:MC 與 empowerment 被正式定義,但 138 列裡<mark class="m-limit" data-t="LIMITATION/FUTURE">只有 2 列 task-agnostic</mark>;作者自己提出「如何診斷增益來自大腦還是身體」,卻沒給出可操作的評估協定。</li>
+          <li data-lang="en"><b>Metrics defined more than used</b>: MC and empowerment are formalized, but only <mark class="m-limit" data-t="LIMITATION/FUTURE">2 of 138 rows are task-agnostic</mark>; the authors raise "how to diagnose whether gains come from brain or body" yet offer no operational evaluation protocol.</li>
+          <li data-lang="zh"><b>編修瑕疵</b>:Fig.1/Fig.3 的「Agent Brian」;Sims 1994 被重複列為 [79] 與 [241];§V-C 同一串引用中 [271] 出現兩次;「SERL」同時指 [199](雙足 co-design)與 [214](EA+RL 控制方法);Agent Type 標註粗糙(Fadini、Transform2Act 標 Rigid Robot;Legged 與 Quadrupedal 混用);Eq.1 的 \(\pi^*\) 未寫成 \(\pi^*(\omega)\)、Eq.5 只寫單步項。</li>
+          <li data-lang="en"><b>Editorial slips</b>: "Agent Brian" in Fig.1/Fig.3; Sims 1994 listed twice as [79] and [241]; [271] cited twice in one list in §V-C; "SERL" names both [199] (biped co-design) and [214] (an EA+RL control method); coarse Agent Type labels (Fadini and Transform2Act as Rigid Robot; Legged vs Quadrupedal used inconsistently); Eq.1 writes \(\pi^*\) rather than \(\pi^*(\omega)\), and Eq.5 shows only a single-step term.</li>
+          <li data-lang="zh"><b>視角偏向作者自身脈絡</b>:作者群的 CuCo [20]、PreCo [169] 等都是 EvoGym voxel 軟體機器人工作;這不是錯,但解釋了為何軟體 / 模組機器人被寫得最細。</li>
+          <li data-lang="en"><b>Perspective follows the authors&#39; own line</b>: the group&#39;s CuCo [20], PreCo [169] etc. are EvoGym voxel soft-robot works; not wrong, but it explains why soft / modular robots get the most detailed treatment.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">開放問題(§VI)與腿足觀點</span><span data-lang="en">Open problems (§VI) through a legged lens</span></h3>
+        <div class="tablewrap"><table class="tight">
+          <tr><th><span data-lang="zh">作者列的挑戰</span><span data-lang="en">Challenge (authors)</span></th><th><span data-lang="zh">要點</span><span data-lang="en">Gist</span></th><th><span data-lang="zh">腿足觀點</span><span data-lang="en">Legged lens</span> <span class="add">[導讀補充]</span></th></tr>
+          <tr><td><b><span data-lang="zh">效率與擴展</span><span data-lang="en">Efficiency &amp; scalability</span></b></td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">需要又快又準的表現預測器</mark>;課程、表徵、遷移學習已在用但不夠</span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">needs fast, accurate performance predictors</mark>; curricula, representation and transfer learning help but not enough</span></td><td><span data-lang="zh">跨設計分佈預訓練的 universal 步態策略 = 最現成的預測器</span><span data-lang="en">a universal gait policy pre-trained over a design distribution is the readiest predictor</span></td></tr>
+          <tr><td><b><span data-lang="zh">泛化</span><span data-lang="en">Generalization</span></b></td><td><span data-lang="zh">脫離「一機一任務」,設計通才;結構韌性、自我修復、線上 co-adaptation</span><span data-lang="en">move past one-robot-one-task to generalists; structural resilience, self-repair, online co-adaptation</span></td><td><span data-lang="zh">多地形、多步態目標的設計(對照 Bravo-Palacios 的 one-robot-many-tasks)</span><span data-lang="en">design for multi-terrain, multi-gait objectives (cf. Bravo-Palacios one-robot-many-tasks)</span></td></tr>
+          <tr><td><b>Sim-to-real</b></td><td><span data-lang="zh">摩擦、材料、接觸、噪聲、延遲、製造誤差;廉價 surrogate → 高保真/硬體驗證;digital twin、模組硬體</span><span data-lang="en">friction, materials, contact, noise, delays, fabrication error; cheap surrogate → high-fidelity / hardware validation; digital twins, modular hardware</span></td><td><span data-lang="zh">腿足 RL 的 sim-to-real 工具(DR、actuator net)理應直接搬進 co-design 內層</span><span data-lang="en">legged RL sim-to-real tools (DR, actuator nets) should move straight into the co-design inner loop</span></td></tr>
+          <tr><td><b><span data-lang="zh">理論</span><span data-lang="en">Theory</span></b></td><td><span data-lang="zh">缺統一理論解釋 brain-body trade-off;需要基於形態計算的實用指標</span><span data-lang="en">no unified theory of the brain-body trade-off; need practical metrics grounded in morphological computation</span></td><td><span data-lang="zh">模型派的敏感度分析(隱函數定理)其實是現成的局部理論</span><span data-lang="en">model-based sensitivity analysis (implicit function theorem) is a ready-made local theory</span></td></tr>
+          <tr><td><b>Benchmarks</b></td><td><span data-lang="zh">EvolutionGym、SoftZoo 只是第一步;需要反映形態-控制耦合的多元指標</span><span data-lang="en">EvolutionGym and SoftZoo are first steps; need multi-metric benchmarks reflecting morphology-control coupling</span></td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">沒有腿足 co-design benchmark</mark>——這是明顯的空缺</span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">there is no legged co-design benchmark</mark>—an obvious gap</span></td></tr>
+        </table></div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><b>未來趨勢(作者)</b>:① Human-AI 協作 ECD(LLM/VLM 當共同設計者,人提供安全與領域判斷);② 多智能體協作 ECD(形態 / 致動 / 控制 / 製造各一個 agent);③ open-ended + 終身學習 ECD,讓 co-design 成為「持續的創造生態」。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><b>Future trends (authors)</b>: ① human-AI collaborative ECD (LLMs/VLMs as co-designers, humans supply safety and domain judgment); ② multi-agent collaborative ECD (one agent each for morphology / actuation / control / fabrication); ③ open-ended + lifelong ECD, turning co-design into a "persistent creative ecology."</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>算力歸一化</b>:若以「達到同樣任務回報所需的 GPU-hours」比較,co-design 真的勝過把同樣算力拿去訓一個更強的控制器、配手工設計的身體嗎?綜述沒有回答。</li>
+          <li data-lang="en"><b>Compute normalization</b>: measured as "GPU-hours to reach a given task return," does co-design really beat spending the same compute on a stronger controller for a hand-designed body? The survey doesn&#39;t say.</li>
+          <li data-lang="zh"><b>聯合最佳化的偏差</b>:bi-level 與 single-level 理論上同一最佳解;single-level 同步更新時,是否系統性偏好「早期容易學」的身體?有沒有任何工作量化過?</li>
+          <li data-lang="en"><b>Joint-optimization bias</b>: bi-level and single-level share the same optimum in principle; does simultaneous updating systematically favor bodies that are "easy to learn early"? Has any work measured this?</li>
+          <li data-lang="zh"><b>模型式 vs RL 式</b>:對約 10 個連續參數的固定拓樸腿足機器人,ERL/BO + RL 內層,與梯度式模型 co-design(Fadini、Bravo-Palacios)誰更好?需要共同 benchmark 才能回答。</li>
+          <li data-lang="en"><b>Model-based vs RL-based</b>: for a fixed-topology legged robot with ~10 continuous parameters, is ERL/BO with an RL inner loop better than gradient-based model co-design (Fadini, Bravo-Palacios)? Only a shared benchmark could tell.</li>
+          <li data-lang="zh"><b>「真機」的定義</b>:真的製造了新機構,還是在既有機器人上換彈簧/只部署控制器?綜述的 Sim&amp;Real 標籤是否該再細分?</li>
+          <li data-lang="en"><b>What counts as "real"</b>: fabricating a new mechanism, or swapping springs / only deploying a controller on an existing robot? Should the survey&#39;s Sim&amp;Real label be split further?</li>
+          <li data-lang="zh"><b>LLM 設計的可行性</b>:沒有物理 critic 的情況下,LLM 產生的設計能滿足扭矩限制、可製造性嗎?作者點出風險但沒給評估方法。</li>
+          <li data-lang="en"><b>Feasibility of LLM designs</b>: without a physics critic, can LLM-generated designs satisfy torque limits and manufacturability? The authors flag the risk but give no evaluation method.</li>
+          <li data-lang="zh"><b>MC / empowerment 的預測力</b>:在真實腿足機器人上,這些資訊指標能預測下游可學性嗎?還是只在 voxel 世界有效?</li>
+          <li data-lang="en"><b>Predictive power of MC / empowerment</b>: on real legged robots, do these information metrics predict downstream learnability, or do they only work in voxel worlds?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把分類法讀成<b>排名</b>,或把「co-design 優於固定身體」讀成已被證實的定律。這篇是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">定性地圖</mark>:它告訴你有哪些路、各自的取捨,但沒有任何一張表比較不同框架在同一任務上的表現或成本。</span>
+        <span data-lang="en">Reading the taxonomy as a <b>ranking</b>, or "co-design beats fixed bodies" as an established law. This is a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">qualitative map</mark>: it tells you which roads exist and their trade-offs, but no table compares frameworks on the same task in performance or cost.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">涵蓋面廣(417 篇);每篇都用<b>同一組欄位</b>(大腦/身體/環境 × design space/representation、平台、程式碼連結)標註,這種一致性在綜述裡少見;三種形式化視角與 BipedalWalker 範例讓新手很快上手;附公開 GitHub 清單。</span>
+        <span data-lang="en">Broad coverage (417 refs); every entry annotated with the <b>same fields</b> (brain/body/env × design space/representation, platform, code link)—rare consistency for a survey; the three formal views and the BipedalWalker example onboard newcomers quickly; a public GitHub list accompanies it.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">對作者的建議</span><span data-lang="en">Suggestion to the authors</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 把上層改成兩個正交軸會更清楚:<b>迴圈結構</b>(巢狀 / 聯合 / 開放式)×<b>候選來源</b>(搜尋算子 / 學到的生成器 / 大模型),再加一欄「內層成本」。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> The upper layer would be cleaner as two orthogonal axes: <b>loop structure</b> (nested / joint / open-ended) × <b>candidate source</b> (search operator / learned generator / large model), plus an "inner-loop cost" column.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">足式機器人研究者怎麼用這篇</span><span data-lang="en">How a legged-robot researcher should use this survey</span> <span class="add">[導讀補充]</span></h3>
+        <div class="tablewrap"><table class="tight">
+          <tr><th><span data-lang="zh">你的問題長這樣…</span><span data-lang="en">If your problem looks like…</span></th><th><span data-lang="zh">對應框架</span><span data-lang="en">Framework</span></th><th><span data-lang="zh">從這幾篇開始</span><span data-lang="en">Start with</span></th></tr>
+          <tr><td><span data-lang="zh">在既有平台上調連續參數(腿段長、PEA/SEA 彈簧、減速比),內層是 RL 步態</span><span data-lang="en">Tune continuous parameters of an existing platform (segment lengths, PEA/SEA springs, gear ratios) with an RL gait inner loop</span></td><td>Bi-level · Surrogate / ERL <span data-lang="zh">+ hybrid/universal 策略</span><span data-lang="en">+ hybrid/universal policy</span></td><td>Bjelonic [134] · Belmonte-Baeza [141] · Chen [226] · SERL [199]</td></tr>
+          <tr><td><span data-lang="zh">你信任剛體模型與接觸排程,要物理可解釋的最佳解與穩健性</span><span data-lang="en">You trust the rigid-body model and contact schedule and want physically interpretable optima and robustness</span></td><td>Bi-level · Other (TO/DDP) <span data-lang="zh">或</span><span data-lang="en">or</span> Single · Physics</td><td>Fadini [235] · Ha [385] · Spielberg [268] · Bravo-Palacios [270][271]</td></tr>
+          <tr><td><span data-lang="zh">在模擬中探索拓樸(腿的數量與排列)</span><span data-lang="en">Explore topology (number and arrangement of limbs) in simulation</span></td><td>Single · RL-based (design-as-action)</td><td>Transform2Act [19] · N-LIMB [164] · BodyGen [22]</td></tr>
+          <tr><td><span data-lang="zh">從文字規格快速原型、可 3D 列印</span><span data-lang="en">Rapid prototyping from a text spec, 3D-printable</span></td><td>Bi · ERL (text-to-mesh) / Large-model</td><td>Text2robot [156] · RoboMoRe [27]</td></tr>
+          <tr><td><span data-lang="zh">要一整個多樣的候選設計目錄供工程師挑</span><span data-lang="en">Want a diverse catalog of candidate designs for engineers</span></td><td>Single · Diversity (QD)</td><td>Howard [288] · 3B-QD [294]</td></tr>
+          <tr><td><span data-lang="zh">要求跨地形分佈的穩健性</span><span data-lang="en">Need robustness across terrain distributions</span></td><td><span data-lang="zh">可修改環境 / Open-ended</span><span data-lang="en">Modifiable env / open-ended</span></td><td>DERL [76] · Stensby [182]</td></tr>
+        </table></div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">建議閱讀清單(依優先序)</span><span data-lang="en">Reading list (in priority order)</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:1.9">
+          <li data-lang="zh"><b>本綜述 §II + §III + Fig.3</b>——先學會「填表」與三種形式化。</li>
+          <li data-lang="en"><b>This survey §II + §III + Fig.3</b>—learn to "fill in the form" and the three formal views.</li>
+          <li data-lang="zh"><b>DERL</b> [76](Nat. Commun. 2021)——環境難度與 Baldwin effect 的大規模證據,bi-level ERL 的標竿。</li>
+          <li data-lang="en"><b>DERL</b> [76] (Nat. Commun. 2021)—large-scale evidence on environment difficulty and the Baldwin effect; the bi-level ERL benchmark.</li>
+          <li data-lang="zh"><b>Transform2Act</b> [19](ICLR 2022)——單層 MDP 視角的原型:設計動作 + 控制動作同一策略。</li>
+          <li data-lang="en"><b>Transform2Act</b> [19] (ICLR 2022)—the prototype of the single-level MDP view: design and control actions in one policy.</li>
+          <li data-lang="zh"><b>Belmonte-Baeza et al.</b> [141](RA-L 2022)——用 meta-RL 攤提內層的四足腿部設計。</li>
+          <li data-lang="en"><b>Belmonte-Baeza et al.</b> [141] (RA-L 2022)—quadruped leg design with meta-RL amortizing the inner loop.</li>
+          <li data-lang="zh"><b>Bjelonic et al.</b> [134](RA-L 2023)——universal 策略 + BO 調 PEA 彈簧並上 ANYmal 真機。</li>
+          <li data-lang="en"><b>Bjelonic et al.</b> [134] (RA-L 2023)—universal policy + BO on PEA springs, validated on ANYmal.</li>
+          <li data-lang="zh"><b>Fadini et al.</b> [235](RA-L 2022)與 <b>Bravo-Palacios et al.</b> [270][271]——模型式 co-design 的穩健性與多任務版本。</li>
+          <li data-lang="en"><b>Fadini et al.</b> [235] (RA-L 2022) and <b>Bravo-Palacios et al.</b> [270][271]—robust and multi-task model-based co-design.</li>
+          <li data-lang="zh"><b>Ha et al.</b> [385](RSS 2017)——用隱函數定理聯合最佳化設計與運動參數。</li>
+          <li data-lang="en"><b>Ha et al.</b> [385] (RSS 2017)—joint design and motion optimization via the implicit function theorem.</li>
+          <li data-lang="zh"><b>Co-Adapt</b> [136](CoRL 2020)——Q-function 當形態 surrogate 的經典。</li>
+          <li data-lang="en"><b>Co-Adapt</b> [136] (CoRL 2020)—the classic Q-function-as-morphology-surrogate.</li>
+          <li data-lang="zh"><b>Text2robot</b> [156](ICRA 2025)——文字到可列印四足的端到端流程。</li>
+          <li data-lang="en"><b>Text2robot</b> [156] (ICRA 2025)—end-to-end text to printable quadruped.</li>
+          <li data-lang="zh"><b>Censi</b> [171] / <b>Zardini et al.</b> [172]——monotone co-design,把成本與約束形式化的另一種數學框架。</li>
+          <li data-lang="en"><b>Censi</b> [171] / <b>Zardini et al.</b> [172]—monotone co-design, a different mathematical framework for costs and constraints.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What&#39;s worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇的…</span><span data-lang="en">Cite this survey for…</span></th></tr>
+          <tr><td><span data-lang="zh">「co-design 是 bi-level / 巢狀最佳化,評估成本來自內層」</span><span data-lang="en">"Co-design is bi-level / nested; evaluation cost comes from the inner loop"</span></td><td><span data-lang="zh">§II-A Eq.1 與 §IV-A 的動機</span><span data-lang="en">§II-A Eq.1 and the motivation of §IV-A</span></td></tr>
+          <tr><td><span data-lang="zh">「本工作屬於 X 類 co-design」</span><span data-lang="en">"Our work belongs to co-design category X"</span></td><td><span data-lang="zh">Fig.2 的兩層分類與 Tables I–VI 的欄位</span><span data-lang="en">The two-layer taxonomy of Fig.2 and the fields of Tables I–VI</span></td></tr>
+          <tr><td><span data-lang="zh">「領域缺乏標準 benchmark 與 sim-to-real 驗證」</span><span data-lang="en">"The field lacks standard benchmarks and sim-to-real validation"</span></td><td><span data-lang="zh">§VI-A 的挑戰 3 與 5</span><span data-lang="en">Challenges 3 and 5 in §VI-A</span></td></tr>
+          <tr><td><span data-lang="zh">「形態計算可用條件互資訊量化」</span><span data-lang="en">"Morphological computation can be quantified by conditional MI"</span></td><td><span data-lang="zh">§III-F Eq.6–7(但要引原始出處)</span><span data-lang="en">§III-F Eq.6–7 (but also cite the original sources)</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">這篇綜述把 brain-body co-design 整理成「<b>三元件 × 四框架</b>」的共同語言,是目前最完整的查表地圖;但它是定性的、偏虛擬與軟體機器人的。對足式研究者,正確用法是:<b>用它定位自己、找鄰居、借工具</b>(universal 策略、surrogate、QD、生成式先驗),而腿足特有的致動、能耗與可製造性,仍要回到模型派與真機 co-design 文獻自己補。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">This survey turns brain-body co-design into a shared language of "<b>three components × four frameworks</b>"—the most complete look-up map to date—but it is qualitative and leans toward virtual and soft robots. For legged researchers the right use is: <b>locate yourself, find neighbors, borrow tools</b> (universal policies, surrogates, QD, generative priors), while legged-specific actuation, energetics and manufacturability must still come from the model-based and hardware co-design literature.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">相關工作在這張地圖上的位置</span><span data-lang="en">Where related work sits on this map</span></span>
+        <span data-lang="zh"><b>Transform2Act</b> → Single-level · RL-based(設計即動作,GNN 策略,不固定拓樸)。<b>Fadini 2022</b> → Bi-level · Other(DDP/LQR 內層 + CMA-ES 外層)。<b>PEA co-design(Bjelonic 2023)</b> → Bi-level · Surrogate-Assisted(BO + 預訓練 universal 策略,真機)。<b>Meta-RL 腿部設計(Belmonte-Baeza 2022)</b> → Bi-level · Evolutionary RL(meta-RL hybrid 策略 + CMA-ES)。</span>
+        <span data-lang="en"><b>Transform2Act</b> → Single-level · RL-based (design-as-action, GNN policy, unfixed topology). <b>Fadini 2022</b> → Bi-level · Other (DDP/LQR inner + CMA-ES outer). <b>PEA co-design (Bjelonic 2023)</b> → Bi-level · Surrogate-Assisted (BO + pre-trained universal policy, real robot). <b>Meta-RL leg design (Belmonte-Baeza 2022)</b> → Bi-level · Evolutionary RL (meta-RL hybrid policy + CMA-ES).</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">DERL</span><span class="chip">Transform2Act</span><span class="chip">NGE</span>
+          <span class="chip">EvolutionGym</span><span class="chip">SoftZoo</span><span class="chip">RoboGrammar</span>
+          <span class="chip">POET</span><span class="chip">MAP-Elites</span><span class="chip">Monotone co-design</span>
+          <a class="chip" href="Wensing2022_OptControlSurvey.html">Wensing 2022 OC survey</a>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論或自行計數(例如 138 列、81% 只模擬),其餘事實均出自原綜述(arXiv 2512.04770 v2)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences or own counts (e.g., 138 rows, 81% sim-only); all other facts come from the original survey (arXiv 2512.04770 v2).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Wang et al. 2025 (Embodied Co-Design Survey) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Embodied co-design reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

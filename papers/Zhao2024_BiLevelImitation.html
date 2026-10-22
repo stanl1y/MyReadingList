@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Bi-Level Motion Imitation (Zhao 2024) — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Bi-Level Motion Imitation for Humanoid Robots","authors":"Wenshuai Zhao, Yi Zhao, Joni Pajarinen, Michael Muehlebach","year":"2024","venue":"CoRL","tags":["Legged Robotics","Humanoid","Motion Imitation","Reinforcement Learning","Bi-Level Optimization","Motion Retargeting","Latent Dynamics"],"tldr":"人類 MoCap 經運動學 retarget 後常對人形機器人物理不可行;BMI 先以自洽自編碼器 (SCAE) 學出稀疏、週期性的 latent 動作空間,再交替更新 RL 追蹤策略與產生參考動作的 decoder,讓參考朝機器人做得到的方向修正、同時以 latent 一致性錨定原始動作模式——在 MIT Humanoid 模擬中改善 kick 等困難動作。","tldr_en":"Kinematically retargeted human MoCap is often physically infeasible for humanoids; BMI learns a sparse, periodic latent motion space with a self-consistent auto-encoder, then alternately updates the RL tracking policy and the reference-generating decoder so the references bend toward what the robot can actually do while a latent-consistency term anchors the original motion patterns - improving hard motions such as kicking on a simulated MIT Humanoid."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:120px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+  .algo{counter-reset:a; list-style:none; padding:0; margin:6px 0 0; font-size:14px}
+  .algo li{position:relative; padding:7px 0 7px 34px; border-bottom:1px dashed var(--line)}
+  .algo li:last-child{border:none}
+  .algo li:before{counter-increment:a; content:counter(a); position:absolute; left:0; top:7px;
+    width:22px; height:22px; background:#efe9da; color:var(--navy); border-radius:6px;
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700}
+  a.xref{color:var(--c-method); text-decoration:none; border-bottom:1px dotted var(--c-method)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">人類 MoCap 經運動學 retargeting 後,對關節自由度與扭力都受限的人形機器人常常<mark class="m-problem" data-t="PROBLEM/GAP">物理上做不到</mark>;硬拿來追蹤會拖累 RL 策略。BMI 的解法是<b>不再把參考動作當成固定答案</b>:先用<mark class="m-method" data-t="METHOD/IDEA">自洽自編碼器 SCAE</mark> 學出稀疏、週期性的 latent 動作空間,再以<mark class="m-method" data-t="METHOD/IDEA">bi-level 交替最佳化</mark>同時更新「追蹤策略」與「產生參考動作的 decoder」——decoder 被拉向機器人實際跑得出來的軌跡,另以 latent 一致性項把它錨在原始動作模式附近。在 MIT Humanoid 模擬中,<mark class="m-result" data-t="RESULT/EVIDENCE">kick 的踢腿時間比例由 64.4% 提升到 71.3%</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Kinematically retargeted human MoCap is often <mark class="m-problem" data-t="PROBLEM/GAP">physically infeasible</mark> for humanoids with limited joints and torques, and tracking it drags the RL policy down. BMI stops <b>treating the reference motion as a fixed answer</b>: it first learns a sparse, periodic latent motion space with a <mark class="m-method" data-t="METHOD/IDEA">self-consistent auto-encoder (SCAE)</mark>, then runs a <mark class="m-method" data-t="METHOD/IDEA">bi-level alternating optimization</mark> that updates both the tracking policy and the decoder that generates references — the decoder is pulled toward trajectories the robot actually produces, while a latent-consistency term anchors it to the original motion patterns. On a simulated MIT Humanoid, <mark class="m-result" data-t="RESULT/EVIDENCE">the kicking-time ratio rises from 64.4% to 71.3%</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Zhao2024/fig2_bmi.png" alt="Figure 2: bi-level motion fine-tuning">
+        <figcaption data-lang="zh"><b>Fig.2</b> 整篇論文的核心迴圈。中間:從 latent sampler \(z_t\sim p_z(z)\) 取樣 → 正弦重建 \(\hat z_t\) → decoder 解出參考 \(\hat\tau_t\)。右邊:policy \(\pi\) 拿 latent 參數 \(\phi_t,\theta_t\) 當目標資訊,在模擬器裡追 \(\hat s_t\)。<b>注意兩條紅色雙箭頭</b>——它們就是 decoder 的兩個損失:「參考 vs 機器人實際狀態」與「取樣 latent vs 參考再編碼回去的 latent」。綠色箭頭(左側 encoder 迴路)只在 bi-level fine-tuning 階段才啟用。</figcaption>
+        <figcaption data-lang="en"><b>Fig.2</b> The core loop of the paper. Middle: sample \(z_t\sim p_z(z)\) → sinusoidal reconstruction \(\hat z_t\) → the decoder emits the reference \(\hat\tau_t\). Right: the policy \(\pi\) receives the latent parameters \(\phi_t,\theta_t\) as goal information and tracks \(\hat s_t\) in simulation. <b>Watch the two red double arrows</b> — they are the decoder's two losses: "reference vs the robot's actual state" and "sampled latent vs the latent of the re-encoded reference." The green arrows (the encoder loop on the left) are only active during bi-level fine-tuning.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 人與機器人的形態不同(關節自由度、力矩上限),所以<mark class="m-problem" data-t="PROBLEM/GAP">運動學 retarget 後的 MoCap 常物理不可行</mark>;把它們放進訓練集會讓策略學壞。既有做法要嘛靠已知動力學做軌跡最佳化(複雜、需領域知識),要嘛直接把做不到的動作過濾掉、或只追上半身。</li>
+          <li data-lang="en"><b>Problem</b> — Humans and robots differ in morphology (degrees of freedom, force limits), so <mark class="m-problem" data-t="PROBLEM/GAP">kinematically retargeted MoCap is often physically infeasible</mark>, and including it hurts the policy. Existing fixes either run trajectory optimization with a known dynamics model (complex, domain-specific) or simply filter out infeasible clips / track only the upper body.</li>
+          <li data-lang="zh"><b>方法</b> — 三階段:(i) <mark class="m-method" data-t="METHOD/IDEA">SCAE</mark>:在 FLD 上加「latent 重建誤差」,讓「解碼後再編碼」回到同一個 latent;(ii) 從 latent 取樣、解碼出參考,用 PPO 預訓練追蹤策略;(iii) <mark class="m-method" data-t="METHOD/IDEA">bi-level fine-tuning</mark>:凍結 encoder,交替更新 policy(追 decoder 的參考)與 decoder(貼近機器人軌跡 + latent 一致性)。</li>
+          <li data-lang="en"><b>Method</b> — Three stages: (i) <mark class="m-method" data-t="METHOD/IDEA">SCAE</mark>: add a "latent reconstruction error" to FLD so that decode-then-encode returns the same latent; (ii) sample latents, decode references, and pre-train a tracking policy with PPO; (iii) <mark class="m-method" data-t="METHOD/IDEA">bi-level fine-tuning</mark>: freeze the encoder and alternate between updating the policy (track the decoder's reference) and the decoder (move toward robot trajectories + latent consistency).</li>
+          <li data-lang="zh"><b>結果</b> — SCAE 的 latent 重建誤差遠低於 FLD,動作重建精度相當;kick 時間 64.4%→71.3%、踢腿高度 0.157→0.164 m、站立腳更穩;jump 時間 FLD 32.5% → SCAE 36.2% / BMI 35.2%。<mark class="m-limit" data-t="LIMITATION/FUTURE">全部在 Isaac Gym 模擬中;spin-kick、cross-over 仍失敗</mark>。</li>
+          <li data-lang="en"><b>Results</b> — SCAE has far lower latent reconstruction error than FLD with comparable motion reconstruction; kick time 64.4%→71.3%, kick height 0.157→0.164 m, a steadier standing foot; jump time FLD 32.5% → SCAE 36.2% / BMI 35.2%. <mark class="m-limit" data-t="LIMITATION/FUTURE">All in Isaac Gym simulation; spin-kick and cross-over still fail</mark>.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">用人類 MoCap 當參考軌跡訓練人形機器人有兩條主線:一是 <mark class="m-method" data-t="METHOD/IDEA">GAIL / AMP 式的對抗風格模仿</mark>——不用定義「像不像」的距離,但 min-max 訓練<mark class="m-problem" data-t="PROBLEM/GAP">不穩、樣本效率差</mark>;二是 <mark class="m-method" data-t="METHOD/IDEA">DeepMimic 式的直接追蹤</mark>——穩定好訓,但成敗取決於參考品質,而 retarget 後的參考<mark class="m-problem" data-t="PROBLEM/GAP">常帶雜訊、對機器人物理上不可行</mark>。</p>
+        <p data-lang="en">There are two main lines for training humanoids on human MoCap references: <mark class="m-method" data-t="METHOD/IDEA">GAIL / AMP-style adversarial style imitation</mark> — no need to define a similarity distance, but min-max training is <mark class="m-problem" data-t="PROBLEM/GAP">unstable and sample-inefficient</mark>; and <mark class="m-method" data-t="METHOD/IDEA">DeepMimic-style direct tracking</mark> — stable and easy to train, but only as good as the reference, and retargeted references are <mark class="m-problem" data-t="PROBLEM/GAP">often noisy and physically infeasible for the robot</mark>.</p>
+        <p data-lang="zh">動畫領域在 AMASS 等大資料集上的大規模追蹤很成功,但作者指出那部分歸功於<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不真實的模擬角色</mark>:多達 69 DoF、力矩無上限、甚至有 residual force 外力輔助——原則上什麼參考都追得到。真實人形機器人則 under-actuated、扭力受限。「參考不可行」傳統上屬於 <b>motion retargeting</b> 的問題:IK retargeting 看起來對、但不保證物理可行;物理式 retargeting 用軌跡最佳化 + 已知動力學(例如 DOC 的可微最佳控制,本身也是 bi-level),但需要動力學模型與人工接觸約束,<mark class="m-problem" data-t="PROBLEM/GAP">難以推廣到不同機器人</mark>。</p>
+        <p data-lang="en">Large-scale tracking on datasets like AMASS works well in animation, but the authors note this is partly owed to <mark class="m-assume" data-t="ASSUMPTION/CLAIM">unrealistic simulated characters</mark>: up to 69 DoF, unlimited force, even assistive residual forces — able, in principle, to track any reference. Real humanoids are under-actuated and torque-limited. "Infeasible references" is classically a <b>motion retargeting</b> problem: IK retargeting looks right but guarantees no physical feasibility; physics-based retargeting uses trajectory optimization with known dynamics (e.g., DOC, differentiable optimal control, itself bi-level), but needs a dynamics model and hand-specified contact constraints, so it is <mark class="m-problem" data-t="PROBLEM/GAP">hard to generalize across robots</mark>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px"><span class="add">[導讀補充]</span> BMI 的精神是<b>把 retargeting 從「RL 之前的前處理」搬進「RL 迴圈之內」</b>:不寫動力學方程,而是讓在模擬器裡跑的策略本身充當「物理可行性的 oracle」——機器人跑得出來的軌跡,本來就是可行的。代價是:可行性的定義從「滿足機器人動力學」變成「這個 policy 在這個模擬器裡追得到」。</p>
+          <p data-lang="en" style="margin-top:6px"><span class="add">[guide note]</span> BMI's spirit is to <b>move retargeting from "pre-processing before RL" into "inside the RL loop"</b>: instead of writing dynamics equations, the policy running in simulation serves as the physical-feasibility oracle — whatever the robot actually executes is feasible by construction. The price: feasibility shifts from "satisfies the robot's dynamics" to "this policy can track it in this simulator."</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">這篇值得帶走的不是 kick 多了幾個百分點,而是下面這幾個觀念轉變:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What is worth taking away is not a few extra kick percentage points, but these shifts in mindset:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">參考動作是可協商的。</b> 傳統管線把 retarget 後的參考當成「標準答案」;BMI 把它當成<mark class="m-method" data-t="METHOD/IDEA">可學習的變數,與策略共同最佳化</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">The reference motion is negotiable.</b> Classic pipelines treat the retargeted reference as the answer key; BMI treats it as <mark class="m-method" data-t="METHOD/IDEA">a learnable variable co-optimized with the policy</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">機器人 rollout = 免費的「可行」樣本。</b> decoder 往機器人實際軌跡 \(s_t\) 靠,等於往可行域靠——<mark class="m-method" data-t="METHOD/IDEA">不需要顯式動力學模型或人訂約束</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Robot rollouts are free "feasible" samples.</b> Pulling the decoder toward the robot's actual trajectory \(s_t\) means pulling it toward the feasible set — <mark class="m-method" data-t="METHOD/IDEA">no explicit dynamics model or hand-made constraints needed</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">但要防「老師抄學生」。</b> 只最小化 \(|\hat s_t-s_t|^2\) 的話,decoder 最省事的解就是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">直接複製機器人目前(可能很爛)的動作</mark>;latent 一致性項 \(\beta|\hat{\bar z}_t-\hat z_t|^2\) 才是讓參考保有原始動作模式的錨。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">But guard against "the teacher copying the student."</b> Minimizing only \(|\hat s_t-s_t|^2\), the decoder's laziest solution is to <mark class="m-assume" data-t="ASSUMPTION/CLAIM">copy whatever (possibly poor) motion the robot currently makes</mark>; the latent-consistency term \(\beta|\hat{\bar z}_t-\hat z_t|^2\) is the anchor that keeps the original motion patterns.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">錨要有效,latent 空間得「自洽」。</b> SCAE 讓 \(\mathrm{enc}\circ\mathrm{dec}\) 在 latent 上近似恆等,latent 距離才成為有意義的「動作模式距離」,且<mark class="m-result" data-t="RESULT/EVIDENCE">不犧牲動作重建精度</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">For the anchor to work, the latent space must be self-consistent.</b> SCAE makes \(\mathrm{enc}\circ\mathrm{dec}\) approximately the identity in latent space, so latent distance becomes a meaningful "motion-pattern distance" — <mark class="m-result" data-t="RESULT/EVIDENCE">without sacrificing motion reconstruction</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">表徵本身就會影響策略學習。</b> 作者自己也意外:只換成 SCAE latent(還沒 bi-level)就讓 <mark class="m-result" data-t="RESULT/EVIDENCE">jump 時間 32.5%→36.2%</mark>,且是三者最佳——稀疏的目標條件讓 policy 更好學。換句話說,<b>不是所有增益都來自 bi-level</b>。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">The representation itself shapes policy learning.</b> To the authors' own surprise, merely switching to the SCAE latent (before any bi-level step) lifts <mark class="m-result" data-t="RESULT/EVIDENCE">jump time 32.5%→36.2%</mark>, the best of the three — a sparser goal conditioning is easier to learn from. In other words, <b>not all the gain comes from bi-level</b>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Bi-Level Motion Imitation for Humanoid Robots</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Wenshuai Zhao, Yi Zhao, Joni Pajarinen, Michael Muehlebach</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Aalto University (Finland) · Max Planck Institute for Intelligent Systems (Germany)</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2024 · CoRL (8th, Munich) · arXiv:2410.01968</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Humanoid Imitation Learning</span>
+          <b><span data-lang="zh">專案頁</span><span data-lang="en">Project</span></b><span>sites.google.com/view/bmi-corl2024 <small style="color:var(--muted)"><span data-lang="zh">(論文未列程式碼連結)</span><span data-lang="en">(no code link in the paper)</span></small></span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">人形機器人要從人類資料學技能,「人做得到」不等於「機器人做得到」是繞不開的鴻溝。BMI 提供一條<b>不寫動力學、不丟資料</b>的路:讓參考在訓練中自己變得可做,同時保住原本的動作意圖。</span>
+        <span data-lang="en">For humanoids to learn skills from human data, "humans can do it" does not mean "the robot can do it" is an unavoidable gap. BMI offers a route that <b>writes no dynamics and discards no data</b>: let the reference become feasible during training while preserving the original motion intent.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">家譜位置</span><span data-lang="en">Lineage</span></span>
+        <span data-lang="zh"><a class="xref" href="Peng2020_MotionImitation.html">Peng 2020(動物動作模仿)</a>:IK retarget 出<b>固定</b>參考 → RL 追蹤。BMI 保留同樣的追蹤範式(資料甚至源自 DeepMimic),但<mark class="m-method" data-t="METHOD/IDEA">把參考本身變成最佳化變數</mark>。詳見 06 TAKEAWAY。</span>
+        <span data-lang="en"><a class="xref" href="Peng2020_MotionImitation.html">Peng 2020 (imitating animals)</a>: IK-retarget a <b>fixed</b> reference → RL tracking. BMI keeps the same tracking paradigm (its data even originates from DeepMimic) but <mark class="m-method" data-t="METHOD/IDEA">turns the reference itself into an optimization variable</mark>. See 06 TAKEAWAY.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">MoCap</span><span class="chip">Motion Retargeting</span>
+          <span class="chip">FLD / PAE</span><span class="chip">Self-Consistent AE</span>
+          <span class="chip">Bi-Level Optimization</span><span class="chip">PPO</span>
+          <span class="chip">MIT Humanoid</span><span class="chip">Isaac Gym</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">對抗式風格模仿</span><span data-lang="en">Adversarial style imitation</span></b><br><small>GAIL, AMP, HumanMimic</small></td><td><span data-lang="zh">不需定義相似度,但 <mark class="m-problem" data-t="PROBLEM/GAP">min-max 訓練不穩、樣本效率差</mark>。</span><span data-lang="en">No similarity metric needed, but <mark class="m-problem" data-t="PROBLEM/GAP">min-max training is unstable and sample-inefficient</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">直接追蹤參考</span><span data-lang="en">Direct reference tracking</span></b><br><small>DeepMimic, FLD</small></td><td><span data-lang="zh">參考常帶雜訊、因形態差異(力矩、關節極限)<mark class="m-problem" data-t="PROBLEM/GAP">物理不可行</mark>;把它們放進資料集會讓策略退化。</span><span data-lang="en">References are noisy and, due to embodiment gaps (force and joint limits), <mark class="m-problem" data-t="PROBLEM/GAP">physically infeasible</mark>; including them degrades the policy.</span></td></tr>
+          <tr><td><b><span data-lang="zh">動畫角色大規模追蹤</span><span data-lang="en">Large-scale character tracking</span></b><br><small>PHC, PULSE + AMASS</small></td><td><span data-lang="zh">角色 69 DoF、力矩無上限、有 residual force 輔助——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">能否轉移到真實機器人不明</mark>。</span><span data-lang="en">Characters with 69 DoF, unlimited torque, residual-force assistance — <mark class="m-assume" data-t="ASSUMPTION/CLAIM">unclear whether it transfers to realistic robots</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">物理式 retargeting</span><span data-lang="en">Physics-based retargeting</span></b><br><small><span data-lang="zh">軌跡最佳化,例:DOC</span><span data-lang="en">trajectory optimization, e.g. DOC</span></small></td><td><span data-lang="zh">需已知機器人動力學與人工接觸約束,問題複雜、<mark class="m-problem" data-t="PROBLEM/GAP">難跨機器人泛化</mark>。</span><span data-lang="en">Needs known robot dynamics and manual contact constraints; complex and <mark class="m-problem" data-t="PROBLEM/GAP">hard to generalize across robots</mark>.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>能否在<mark class="m-method" data-t="METHOD/IDEA">不依賴顯式動力學模型</mark>的前提下,讓參考動作自己變得物理可行,同時不失去人類 MoCap 裡想要的動作模式?</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>can reference motions be made physically consistent <mark class="m-method" data-t="METHOD/IDEA">without an explicit dynamics model</mark>, while keeping the desired motion patterns of the human MoCap?</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,BMI 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how BMI fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">如何處理不可行參考</span><span data-lang="en">How it handles infeasible refs</span></th><th><span data-lang="zh">BMI 的回應</span><span data-lang="en">BMI&#39;s answer</span></th></tr>
+          <tr>
+            <td><b>H2O</b> [4]</td>
+            <td><span data-lang="zh">用 privileged 模擬 imitator <mark class="m-problem" data-t="PROBLEM/GAP">把做不到的動作過濾掉</mark>——資料直接丟棄。</span><span data-lang="en">A privileged simulated imitator <mark class="m-problem" data-t="PROBLEM/GAP">filters out infeasible motions</mark> — the data is thrown away.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">把不可行動作「修」成可行</mark>,保留資料價值。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Repair infeasible motions into feasible ones</mark>, keeping the data.</span></td>
+          </tr>
+          <tr>
+            <td><b>ExBody</b> [20]</td>
+            <td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">只模仿上半身</mark>,下半身改追 base 前進速度。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Imitates only the upper body</mark>; the lower body tracks a base forward velocity.</span></td>
+            <td><span data-lang="zh">全身參考一起修正,下半身動作(kick、jump)仍是模仿目標。</span><span data-lang="en">Whole-body references are corrected together; lower-body skills (kick, jump) remain imitation targets.</span></td>
+          </tr>
+          <tr>
+            <td><b>FLD</b> [8]</td>
+            <td><span data-lang="zh">參考離訓練分佈太遠時 <mark class="m-problem" data-t="PROBLEM/GAP">fallback 回預設動作</mark>;latent 對細節雜訊敏感、不自洽。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Falls back to default motions</mark> when a reference is far from training data; its latent is sensitive to nuance/noise and not self-consistent.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">SCAE 自洽 latent</mark> + decoder 微調。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Self-consistent SCAE latent</mark> + decoder fine-tuning.</span></td>
+          </tr>
+          <tr>
+            <td><b>DOC</b> [15]</td>
+            <td><span data-lang="zh">同為 bi-level:交替最佳化 retargeting 參數與機器人軌跡,但<mark class="m-problem" data-t="PROBLEM/GAP">需動力學模型與人訂接觸約束</mark>。</span><span data-lang="en">Also bi-level: alternates retargeting parameters and robot trajectories, but <mark class="m-problem" data-t="PROBLEM/GAP">needs a dynamics model and hand-defined contact constraints</mark>.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">純資料驅動</mark>:RL policy 的模擬 rollout 取代動力學模型。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Purely data-driven</mark>: simulated RL rollouts replace the dynamics model.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px"><span class="add">[導讀補充]</span> 注意 BMI 的「物理可行」是<b>操作性定義</b>:能被「目前這個 policy、在這個模擬器裡」追到的軌跡。它比軌跡最佳化的「滿足動力學方程與扭力約束」便宜得多,但也把參考綁定在特定 policy 與特定模擬器上——這是後面 CRITIQUE 的伏筆。</p>
+          <p data-lang="en" style="margin-top:6px"><span class="add">[guide note]</span> Note that BMI&#39;s "physically consistent" is an <b>operational definition</b>: trajectories that "this policy, in this simulator" can track. That is far cheaper than trajectory optimization&#39;s "satisfies the dynamics equations and torque limits," but it ties the reference to a specific policy and simulator — a seed for the CRITIQUE tab.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把 BMI 讀成「一個把 MoCap 修成物理可行的 retargeting 工具」,然後把修好的參考拿去給別的控制器用。修出來的參考是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">與特定 policy、特定模擬器共同演化</mark>的產物;論文也<b>沒有</b>獨立驗證修正後參考的物理可行性(例如用軌跡最佳化或另一個模擬器檢查)。</span>
+        <span data-lang="en">Do not read BMI as "a retargeting tool that makes MoCap physically feasible" and hand its references to another controller. The repaired references <mark class="m-assume" data-t="ASSUMPTION/CLAIM">co-evolve with one specific policy in one specific simulator</mark>; the paper does <b>not</b> independently verify their feasibility (e.g., via trajectory optimization or another simulator).</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">過濾法(H2O)與上半身法(ExBody)都是「退一步」:放棄一部分人類資料或一部分身體。BMI 想要的是「<b>全身、全資料,但改成做得到的版本</b>」——方向正確,但證據還很初步(見 04)。</span>
+        <span data-lang="en">Filtering (H2O) and upper-body-only (ExBody) both "step back," giving up part of the data or part of the body. BMI wants "<b>whole body, all data, but in a doable version</b>" — the right direction, though the evidence is still preliminary (see 04).</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">參考漂移多少</span><span data-lang="en">ref drift</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">模擬器依賴</span><span data-lang="en">simulator tie</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">三階段管線</span><span data-lang="en">The three-stage pipeline</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STAGE 0</span><b>MoCap + IK retarget</b><small data-lang="zh">FLD 的資料集(源自 DeepMimic),人工 retarget 到 MIT Humanoid;13 種動作。</small><small data-lang="en">FLD&#39;s dataset (originally from DeepMimic), manually retargeted to the MIT Humanoid; 13 motions.</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STAGE 1</span><b>SCAE</b><small data-lang="zh">FLD + latent 重建誤差,學稀疏、自洽的週期性 latent 動態模型。</small><small data-lang="en">FLD + latent reconstruction error: a sparse, self-consistent periodic latent dynamics model.</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STAGE 2</span><b>Policy pre-training</b><small data-lang="zh">從 latent 取樣、解碼成參考,PPO 訓練追蹤策略(不管可不可行)。</small><small data-lang="en">Sample latents, decode references, train a tracking policy with PPO (feasible or not).</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STAGE 3</span><b>Bi-level fine-tuning</b><small data-lang="zh">凍結 encoder;交替更新 policy 與 decoder,讓參考變可行、又不離原模式。</small><small data-lang="en">Freeze the encoder; alternate policy and decoder updates so references become feasible yet stay on-pattern.</small></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">預備知識:FLD 的週期性 latent 動態</span><span data-lang="en">Preliminaries: FLD&#39;s periodic latent dynamics</span></h3>
+        <p data-lang="zh">輸入是長度 \(H\) 的軌跡片段 \(\tau_t=(s_{t-H+1},\dots,s_t)\in\mathbb{R}^{d\times H}\)。encoder 把它嵌入 \(c\) 個 latent channel \(z_t\in\mathbb{R}^{c\times H}\);沿襲 PAE(DeepPhase),用<mark class="m-method" data-t="METHOD/IDEA">可微分 FFT 層</mark>取出每個 channel 的頻率 \(f_t\)、振幅 \(a_t\)、偏移 \(b_t\),相位 \(\phi_t\) 則由 FC 層 + atan2 算出:</p>
+        <p data-lang="en">The input is a trajectory segment of length \(H\): \(\tau_t=(s_{t-H+1},\dots,s_t)\in\mathbb{R}^{d\times H}\). The encoder embeds it into \(c\) latent channels \(z_t\in\mathbb{R}^{c\times H}\); following PAE (DeepPhase), a <mark class="m-method" data-t="METHOD/IDEA">differentiable FFT layer</mark> extracts each channel&#39;s frequency \(f_t\), amplitude \(a_t\) and offset \(b_t\), while the phase \(\phi_t\) comes from an FC layer + atan2:</p>
+        <div class="eq">$$z_t=\mathrm{enc}(\tau_t),\qquad(\phi_t,f_t,a_t,b_t)=p(z_t),\qquad \phi_t,f_t,a_t,b_t\in\mathbb{R}^{c}$$</div>
+        <p data-lang="zh">latent 再用正弦函數重建(\(T\) 是含 \(H\) 個等距取樣的已知時間窗):</p>
+        <p data-lang="en">The latent is then reconstructed by a sinusoid (\(T\) is a known time window with \(H\) evenly spaced samples):</p>
+        <div class="eq">$$\hat z_t=\hat p(\phi_t,f_t,a_t,b_t)=a_t\sin\!\big(2\pi(f_tT+\phi_t)\big)+b_t$$</div>
+        <p data-lang="zh">FLD 的貢獻是<mark class="m-method" data-t="METHOD/IDEA">多步前向預測</mark>:假設接下來 \(N\) 個片段共享同一組 \((f_t,a_t,b_t)\),只有相位依 \(\phi_{t+i}\approx\phi_t+if_t\Delta t\) 前進,於是</p>
+        <p data-lang="en">FLD&#39;s contribution is <mark class="m-method" data-t="METHOD/IDEA">multi-step forward prediction</mark>: assume the next \(N\) segments share the same \((f_t,a_t,b_t)\) and only the phase advances as \(\phi_{t+i}\approx\phi_t+if_t\Delta t\), so</p>
+        <div class="eq">$$\hat z'_{t+i}=\hat p(\phi_t+if_t\Delta t,\,f_t,a_t,b_t),\qquad \hat\tau'_{t+i}=\mathrm{dec}(\hat z'_{t+i}),\qquad L^{N}_{\text{FLD}}=\sum_{i=0}^{N}\alpha^{i}\,\big|\hat\tau'_{t+i}-\tau_{t+i}\big|^{2}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(\alpha\) 是衰減係數(本文取 \(\alpha=1.0\)),\(|\cdot|\) 是歐氏距離。直覺:一段動作被壓成「每個 channel 一個正弦波」,而「時間推進」只是在轉相位——這就是 <b>latent dynamics</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(\alpha\) is a decay factor (\(\alpha=1.0\) here) and \(|\cdot|\) the Euclidean distance. Intuition: a motion is compressed into "one sinusoid per channel," and "advancing time" just rotates the phase — that is the <b>latent dynamics</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Stage 1 — SCAE:讓 latent「解碼再編碼」回到自己</span><span data-lang="en">Stage 1 — SCAE: make the latent survive decode-then-encode</span></h3>
+        <figure class="fig"><img src="figs/Zhao2024/fig1_scae.png" alt="Figure 1: self-consistent auto-encoder">
+          <figcaption data-lang="zh"><b>Fig.1</b> SCAE 結構。左半是標準 FLD/PAE:\(\tau_t\to\) enc \(\to z_t\to\) (FC+BN+atan2, FFT) \(\to\hat z_t\to\) dec \(\to\hat\tau_t\)。<b>關鍵在中間那一欄</b>:把重建出的 \(\hat\tau_t\) 再丟回 encoder,得到 \(\hat{\bar z}_t\),並用紅色雙箭頭要求它等於 \(\hat z_t\)。右半是多步預測(\(L_1,\dots,L_N\)):相位往前轉 \(N\) 步後同樣做動作與 latent 兩種重建。</figcaption>
+          <figcaption data-lang="en"><b>Fig.1</b> SCAE structure. The left half is standard FLD/PAE: \(\tau_t\to\) enc \(\to z_t\to\) (FC+BN+atan2, FFT) \(\to\hat z_t\to\) dec \(\to\hat\tau_t\). <b>The key is the middle column</b>: the reconstruction \(\hat\tau_t\) is fed back into the encoder to get \(\hat{\bar z}_t\), and the red double arrow requires it to equal \(\hat z_t\). The right half is multi-step prediction (\(L_1,\dots,L_N\)): after rolling the phase \(N\) steps, both motion and latent reconstruction are applied again.</figcaption></figure>
+        <p data-lang="zh">作者觀察到 FLD 的一個毛病:<mark class="m-problem" data-t="PROBLEM/GAP">動作重建誤差小,不代表解碼後的動作在 latent 空間仍接近原 latent</mark>——latent 過度貼合細節與雜訊。這對 BMI 很要命:fine-tuning 時這些細節本來就會被改掉(為了變可行),若 latent 對它們敏感,latent 錨就錨不住。SCAE 的解法是加一項 latent 重建誤差:</p>
+        <p data-lang="en">The authors spot a flaw in FLD: <mark class="m-problem" data-t="PROBLEM/GAP">small motion-reconstruction error does not mean the decoded motion maps back close to the original latent</mark> — the latent overfits nuances and noise. That is fatal for BMI: fine-tuning is supposed to change exactly those nuances (to become feasible), so a latent sensitive to them cannot serve as an anchor. SCAE adds a latent reconstruction error:</p>
+        <div class="eq">$$L^{N}_{\text{SCAE}}=\sum_{i=0}^{N}\alpha^{i}\Big(\underbrace{\big|\hat\tau'_{t+i}-\tau_{t+i}\big|^{2}}_{\text{motion reconstruction}}+\beta\,\underbrace{\big|\hat{\bar z}'_{t+i}-\hat z'_{t+i}\big|^{2}}_{\text{latent reconstruction}}\Big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(\hat{\bar z}'_{t+i}\) 是把 \(\hat\tau'_{t+i}\) 再經 encoder、FFT 層、正弦重建層得到的 latent。SCAE 訓練時 <mark class="m-method" data-t="METHOD/IDEA">\(\beta=1\)</mark>,在整個資料集上評估此損失。完美 decoder 會讓 latent 誤差為零,但實務上達不到;而且<mark class="m-result" data-t="RESULT/EVIDENCE">只最小化動作誤差時,latent 誤差並不會跟著被壓低</mark>(見 04 的 Fig.3)。類似想法曾用於 VAE(AVAE),但作者稱尚未用在動作生成的確定性 AE。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(\hat{\bar z}'_{t+i}\) is obtained by passing \(\hat\tau'_{t+i}\) through the encoder, the FFT layer and the sinusoidal reconstruction layer. SCAE uses <mark class="m-method" data-t="METHOD/IDEA">\(\beta=1\)</mark> and evaluates the loss over the whole dataset. A perfect decoder would zero the latent error, which is unachievable in practice; and <mark class="m-result" data-t="RESULT/EVIDENCE">minimizing only the motion error does not drive the latent error down</mark> (see Fig.3 in tab 04). A similar idea exists for VAEs (AVAE), but the authors say it had not been used in deterministic auto-encoders for motion generation.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Stage 2 — 預訓練追蹤策略</span><span data-lang="en">Stage 2 — Pre-training the tracking policy</span></h3>
+        <p data-lang="zh">不直接從原始資料集抽軌跡,而是<mark class="m-method" data-t="METHOD/IDEA">從 SCAE 訓練時收集的 latent buffer \(p_z(z)\) 取樣</mark>,經 FC/FFT 得到 \((\phi_t,f_t,a_t,b_t)\)。相位不用學到的 \(\phi_t\),而是從固定範圍均勻抽一個初相 \(\phi_0\in\mathbb{R}^c\),再依 latent 動態推進;整個 episode 維持同一組 \(\theta=(f,a,b)\):</p>
+        <p data-lang="en">Instead of sampling trajectories from the raw dataset, it <mark class="m-method" data-t="METHOD/IDEA">samples from the latent buffer \(p_z(z)\) collected during SCAE training</mark> and obtains \((\phi_t,f_t,a_t,b_t)\) through the FC/FFT layers. Rather than the learned \(\phi_t\), an initial phase \(\phi_0\in\mathbb{R}^c\) is sampled uniformly from a fixed range and advanced by the latent dynamics; \(\theta=(f,a,b)\) stays fixed for the episode:</p>
+        <div class="eq">$$\phi_t=\phi_{t-1}+f_{t-1}\Delta t,\qquad \theta_t=\{f_t,a_t,b_t\}=\theta_{t-1},\qquad \{\hat s_{t-H+1},\dots,\hat s_t\}=\hat\tau_t=\mathrm{dec}\big(\hat p(f_t,a_t,b_t,\phi_t)\big)$$</div>
+        <p data-lang="zh">最新一幀 \(\hat s_t\) 就是當下的追蹤目標,用 PPO 訓練。policy 的觀測是 63 維本體感知(base 線/角速度、重力投影、18 個關節角與角速度、上一個動作)加上 <mark class="m-method" data-t="METHOD/IDEA">latent 參數 \(\sin\phi,\cos\phi,f,a,b\)(各 8 維)當作目標資訊</mark>,共 103 維;動作是 18 個關節的 PD 目標角。獎勵 \(r=r_T+r_R\):</p>
+        <p data-lang="en">The latest frame \(\hat s_t\) is the tracking target at the current step; training uses PPO. The policy observes 63-D proprioception (base linear/angular velocity, projected gravity, 18 joint positions and velocities, last action) plus <mark class="m-method" data-t="METHOD/IDEA">the latent parameters \(\sin\phi,\cos\phi,f,a,b\) (8-D each) as goal information</mark>, 103-D in total; actions are PD targets for 18 joints. The reward is \(r=r_T+r_R\):</p>
+        <div class="eq">$$r_T=w_v r_v+w_w r_w+w_g r_g+w_{q_{\text{leg}}}r_{q_{\text{leg}}}+w_{q_{\text{arm}}}r_{q_{\text{arm}}},\qquad r_i=e^{-\sigma_i|\hat d_i-d_i|^2}$$</div>
+        <div class="eq">$$r_R=w_{ar}\,|a'-a|^2+w_{qa}\,\Big|\frac{\dot q'-\dot q}{\Delta t}\Big|^2+w_{qT}\,|T|^2$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">追蹤權重全為 1.0;溫度 \(\sigma_v=\sigma_w=0.2\)、\(\sigma_g=\sigma_{q_{\text{leg}}}=\sigma_{q_{\text{arm}}}=1.0\);正則權重 \(w_{ar}=-0.01\)、\(w_{qa}=-2.5\times10^{-7}\)、\(w_{qT}=-10^{-5}\)(動作變化率、關節加速度、扭力)。<span class="add">[導讀補充]</span> 注意追蹤項只有 base 速度、重力方向與關節角——<b>沒有 base 位置、也沒有足端位置項</b>;而結果卻用足端高度來評估 kick。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">All tracking weights are 1.0; temperatures \(\sigma_v=\sigma_w=0.2\), \(\sigma_g=\sigma_{q_{\text{leg}}}=\sigma_{q_{\text{arm}}}=1.0\); regularization weights \(w_{ar}=-0.01\), \(w_{qa}=-2.5\times10^{-7}\), \(w_{qT}=-10^{-5}\) (action rate, joint acceleration, torque). <span class="add">[guide note]</span> The tracking terms cover only base velocities, gravity direction and joint angles — <b>no base position and no foot position term</b> — yet the kick is evaluated by foot height.</p>
+        <p data-lang="zh">作者認為用 latent 當目標有兩個好處:(i) 可在 latent 內插出動作過渡與新動作;(ii) latent 目標<mark class="m-assume" data-t="ASSUMPTION/CLAIM">更精簡、聚焦主要模式而非細節,對策略學習有利</mark>。</p>
+        <p data-lang="en">The authors argue latent goals help in two ways: (i) interpolating latents yields transitions and new motions; (ii) a latent goal is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">more concise, focusing on essential patterns rather than nuances, which helps policy learning</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Stage 3 — Bi-level fine-tuning(本文的技術核心)</span><span data-lang="en">Stage 3 — Bi-level fine-tuning (the technical core)</span></h3>
+        <p data-lang="zh">凍結 convolutional encoder 與 FC、BN 層,只讓 <b>decoder</b> 與 <b>policy</b> 交替更新。上層(decoder)要讓參考貼近機器人「最佳回應策略」下的實際狀態,並受 latent 一致性約束;下層(policy)照常學追蹤:</p>
+        <p data-lang="en">The convolutional encoder and the FC, BN layers are frozen; only the <b>decoder</b> and the <b>policy</b> are updated, alternately. The upper level (decoder) pulls the reference toward the robot&#39;s actual states under its best-response policy, subject to latent consistency; the lower level (policy) learns tracking as usual:</p>
+        <div class="eq">$$\begin{aligned}\textbf{upper:}\quad &amp;\min_{\theta_{\text{dec}}}\;\mathbb{E}_{z_t\sim p_z(z),\;s_t\sim\pi_{\theta_\pi^{*}}}\Big[\,|\hat s_t-s_t|^{2}+\beta\,|\hat{\bar z}_t-\hat z_t|^{2}\Big]\\[4pt] \textbf{lower:}\quad &amp;\theta_\pi^{*}\in\arg\min_{\theta_\pi}\;\mathbb{E}_{z_t\sim p_z(z),\;s_t\sim\pi_{\theta_\pi}}\Big[\,|\hat s_t-s_t|^{2}\Big]\end{aligned}$$</div>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>\(|\hat s_t-s_t|^2\)(上層)</b>:機器人狀態 \(s_t\) 是在模擬器裡真的跑出來的,<mark class="m-method" data-t="METHOD/IDEA">「依設計就是物理一致」</mark>;decoder 往它靠 = 參考往可行方向修。</li>
+          <li data-lang="en"><b>\(|\hat s_t-s_t|^2\) (upper)</b>: the robot state \(s_t\) is actually executed in simulation, so it is <mark class="m-method" data-t="METHOD/IDEA">"physically consistent by design"</mark>; moving the decoder toward it = moving the reference toward feasibility.</li>
+          <li data-lang="zh"><b>\(\beta|\hat{\bar z}_t-\hat z_t|^2\)(上層)</b>:修改後的參考再經(凍結的)encoder 編回 latent,必須仍等於原本取樣的 \(\hat z_t\)。作者稱這<mark class="m-assume" data-t="ASSUMPTION/CLAIM">防止 decoder 退化成「直接複製機器人」的平凡解</mark>。</li>
+          <li data-lang="en"><b>\(\beta|\hat{\bar z}_t-\hat z_t|^2\) (upper)</b>: the modified reference, re-encoded by the (frozen) encoder, must still equal the originally sampled \(\hat z_t\). The authors claim this <mark class="m-assume" data-t="ASSUMPTION/CLAIM">prevents the decoder from collapsing to the trivial solution of copying the robot</mark>.</li>
+          <li data-lang="zh"><b>下層</b>寫成最小化追蹤誤差,實作上就是用 PPO 最大化上面的指數核追蹤獎勵。</li>
+          <li data-lang="en"><b>The lower level</b> is written as tracking-error minimization; in practice it is PPO maximizing the exponential-kernel tracking reward above.</li>
+        </ul>
+        <p data-lang="zh" style="margin-top:12px"><b>演算法 1(BMI)</b>——外圈 \(k=1..K\):</p>
+        <p data-lang="en" style="margin-top:12px"><b>Algorithm 1 (BMI)</b> — outer loop \(k=1..K\):</p>
+        <ol class="algo">
+          <li data-lang="zh"><b>Policy learning(\(M_1\) 次)</b>:取樣 latent 目標 \(z_i\sim p_z(z)\),解碼出目標狀態 \(\hat\tau_t\),rollout 機器人軌跡 \(\tau_i\)。</li>
+          <li data-lang="en"><b>Policy learning (\(M_1\) times)</b>: sample latent targets \(z_i\sim p_z(z)\), decode target states \(\hat\tau_t\), roll out robot trajectories \(\tau_i\).</li>
+          <li data-lang="zh">把 \((z_i,\tau_i)\) 配對存進 buffer \(D\);用 PPO 依下層目標更新 \(\pi_{\theta_\pi}\)。</li>
+          <li data-lang="en">Store \((z_i,\tau_i)\) pairs in buffer \(D\); update \(\pi_{\theta_\pi}\) with PPO under the lower objective.</li>
+          <li data-lang="zh"><b>Decoder update(\(M_2\) 次)</b>:從 \(D\) 取樣 latent 與機器人軌跡,依上層目標以梯度更新 decoder。</li>
+          <li data-lang="en"><b>Decoder update (\(M_2\) times)</b>: sample latents and robot trajectories from \(D\); gradient-update the decoder under the upper objective.</li>
+        </ol>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:10px">BMI 超參數:<mark class="m-method" data-t="METHOD/IDEA">\(\beta=200\)</mark>(為了讓 latent 與動作兩項量級相當,比 SCAE 的 \(\beta=1\) 大得多)、decoder 學習率 \(10^{-5}\)(低於 SCAE 訓練)、decoder 2 個 mini-batch / 1 epoch、<b>最多 50 次 iteration</b>、4096 個平行環境。作者坦言<mark class="m-limit" data-t="LIMITATION/FUTURE">只試了少數幾組超參數</mark>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:10px">BMI hyper-parameters: <mark class="m-method" data-t="METHOD/IDEA">\(\beta=200\)</mark> (to balance the latent and motion terms; far larger than SCAE&#39;s \(\beta=1\)), decoder learning rate \(10^{-5}\) (lower than in SCAE training), 2 decoder mini-batches / 1 epoch, <b>at most 50 iterations</b>, 4096 parallel environments. The authors admit <mark class="m-limit" data-t="LIMITATION/FUTURE">only a few hyper-parameter configurations were tried</mark>.</p>
+        <figure class="fig"><img src="figs/Zhao2024/fig2_bmi.png" alt="Figure 2: bi-level fine-tuning detail">
+          <figcaption data-lang="zh"><b>Fig.2(再看一次)</b> 對照上式讀:<b>中→右</b>的藍線是下層(policy 追 \(\hat\tau_t\) 並得到獎勵 \(r_t\));<b>Target 與 Robot state 之間的紅箭頭</b>是上層第一項;<b>左側綠色 encoder 迴路 + 兩個 sinusoidal reconstruction 間的紅箭頭</b>是上層第二項(latent 錨)。預訓練階段只用沒有綠箭頭的部分。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2 (again)</b> Read it against the equation: the blue lines <b>middle→right</b> are the lower level (the policy tracks \(\hat\tau_t\) and receives reward \(r_t\)); the <b>red arrow between Target and Robot state</b> is the first upper-level term; the <b>green encoder loop on the left + the red arrow between the two sinusoidal reconstructions</b> is the second upper-level term (the latent anchor). Pre-training uses only the parts without green arrows.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\tau_t,\ s_t\)</td><td><span data-lang="zh">長度 \(H=51\) 的軌跡片段;\(s_t\) 是時刻 \(t\) 的狀態(latent 模型用 27 維:base 線/角速度、重力投影、18 個關節角)。在 bi-level 式中 \(s_t\) 指<b>機器人實際狀態</b>。</span><span data-lang="en">A trajectory segment of length \(H=51\); \(s_t\) is the state at time \(t\) (27-D for the latent model: base linear/angular velocity, projected gravity, 18 joint angles). In the bi-level equation \(s_t\) is the <b>robot&#39;s actual state</b>.</span></td></tr>
+          <tr><td>\(\hat\tau_t,\ \hat s_t\)</td><td><span data-lang="zh">decoder 產生的參考片段與其最新一幀(當下的追蹤目標)。</span><span data-lang="en">The decoder&#39;s reference segment and its latest frame (the current tracking target).</span></td></tr>
+          <tr><td>\(z_t,\ \hat z_t\)</td><td><span data-lang="zh">encoder 輸出的 latent(\(c=8\) channel)與其正弦重建版本。</span><span data-lang="en">The encoder&#39;s latent (\(c=8\) channels) and its sinusoidal reconstruction.</span></td></tr>
+          <tr><td>\(\hat{\bar z}_t\)</td><td><span data-lang="zh">把解碼出的 \(\hat\tau_t\) <b>再編碼</b>回去得到的 latent;與 \(\hat z_t\) 的差就是「自洽誤差」。</span><span data-lang="en">The latent obtained by <b>re-encoding</b> the decoded \(\hat\tau_t\); its gap to \(\hat z_t\) is the "self-consistency error."</span></td></tr>
+          <tr><td>\(\phi_t,\ \theta_t=(f_t,a_t,b_t)\)</td><td><span data-lang="zh">每個 channel 的相位,以及頻率、振幅、偏移;\(\theta\) 在一個 episode 內固定,只有相位轉動。</span><span data-lang="en">Per-channel phase, and frequency, amplitude, offset; \(\theta\) is fixed within an episode and only the phase rotates.</span></td></tr>
+          <tr><td>\(p,\ \hat p\)</td><td><span data-lang="zh">latent → 週期參數(FFT + FC/atan2),與週期參數 → latent(正弦重建)。</span><span data-lang="en">Latent → periodic parameters (FFT + FC/atan2), and periodic parameters → latent (sinusoidal reconstruction).</span></td></tr>
+          <tr><td>\(p_z(z)\)</td><td><span data-lang="zh">SCAE 訓練時收集的「原始動作 latent」buffer,是取樣目標動作的來源。</span><span data-lang="en">The buffer of original-motion latents collected during SCAE training; the source of sampled target motions.</span></td></tr>
+          <tr><td>\(N,\ \alpha,\ \beta\)</td><td><span data-lang="zh">多步預測長度(50)、衰減(1.0)、latent 重建權重(SCAE 為 1,BMI 為 200)。</span><span data-lang="en">Multi-step prediction length (50), decay (1.0), latent-reconstruction weight (1 in SCAE, 200 in BMI).</span></td></tr>
+          <tr><td>\(\theta_{\text{dec}},\ \theta_\pi\)</td><td><span data-lang="zh">decoder 與 policy 的參數——bi-level 的上、下層變數。</span><span data-lang="en">Decoder and policy parameters — the upper- and lower-level variables.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">老師(decoder)出題、學生(policy)作答;每一輪老師看學生<b>實際做得到什麼</b>,把題目改得「可做」一點——但不准改到偏離原本的課綱(latent 錨)。</span>
+        <span data-lang="en">The teacher (decoder) sets the exercises, the student (policy) attempts them; each round the teacher looks at <b>what the student can actually do</b> and makes the exercises a bit more doable — but may not stray from the original syllabus (the latent anchor).</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何要凍結 encoder?</span><span data-lang="en">Why freeze the encoder?</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> encoder 定義了「動作模式的座標系」。若它也能動,encoder 與 decoder 可以聯手讓任何動作都「看起來一致」,latent 錨就被鑽漏洞了。凍結它,latent 一致性才是有意義的約束。反過來說:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">凡是 encoder 不敏感的細節,decoder 都可以自由修改</mark>——而 SCAE 正是被設計成對細節不敏感。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> The encoder defines the "coordinate system of motion patterns." If it could move, encoder and decoder could collude to make any motion "look consistent," gaming the latent anchor. Freezing it keeps latent consistency a meaningful constraint. Conversely: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">any detail the encoder is insensitive to, the decoder may change freely</mark> — and SCAE is designed precisely to be insensitive to details.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意:「bi-level」其實是交替最佳化</span><span data-lang="en">Note: "bi-level" is really alternating optimization</span></div>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 上層的 \(\pi_{\theta_\pi^{*}}\) 在實作中只是「目前的 policy」;decoder 用 buffer \(D\) 裡的機器人軌跡當<b>固定目標</b>做梯度下降,沒有對 \(\arg\min\) 求 hypergradient,也沒有考慮 policy 會如何回應新的參考。所以它是 alternating best-response 的啟發式,論文<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有收斂性或穩定性分析</mark>。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> In practice the upper level&#39;s \(\pi_{\theta_\pi^{*}}\) is just "the current policy"; the decoder descends on robot trajectories in buffer \(D\) as <b>fixed targets</b>, with no hypergradient through the \(\arg\min\) and no account of how the policy will respond to the new reference. It is an alternating best-response heuristic, and the paper offers <mark class="m-limit" data-t="LIMITATION/FUTURE">no convergence or stability analysis</mark>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">網路規模與設定</span><span data-lang="en">Network sizes &amp; setup</span></span>
+        <span data-lang="zh">encoder / decoder:各 3 層 Conv1d(64→64→8 / 64→64→27,kernel 51,BN+ELU);phase encoder 為 Linear+BN+atan2。policy 與 value:MLP(3 層、每層 128)、ELU。PPO:4096 環境、50 Hz、3000 iterations、\(\gamma=0.99\)、clip 0.2。PD 增益下肢 (30, 5)、上肢 (40, 5)。有 domain randomization(觀測雜訊、質量擾動、推擠)。</span>
+        <span data-lang="en">Encoder / decoder: 3 Conv1d layers each (64→64→8 / 64→64→27, kernel 51, BN+ELU); the phase encoder is Linear+BN+atan2. Policy and value: MLP (3 layers of 128), ELU. PPO: 4096 envs, 50 Hz, 3000 iterations, \(\gamma=0.99\), clip 0.2. PD gains (30, 5) lower body, (40, 5) upper body. Domain randomization (observation noise, mass perturbation, pushes).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實驗設定</span><span data-lang="en">Setup</span></h3>
+        <p data-lang="zh"><b>機器人</b>:MIT Humanoid,在 Isaac Gym 中<mark class="m-assume" data-t="ASSUMPTION/CLAIM">保留原本的關節與力矩上限</mark>(18 個致動關節)。<b>資料</b>:沿用 FLD 的資料集(原出自 DeepMimic、人工 retarget),再加入 jump、kick、spin-kick、cross-over 四種困難動作,共 13 種動作、每種 10 條軌跡、每條 240 步,即 \(13\times10\times240=31200\) 個資料點。<b>對照組</b>:FLD(同樣的 reward),以及自己的 SCAE 預訓練(無 bi-level)。</p>
+        <p data-lang="en"><b>Robot</b>: MIT Humanoid in Isaac Gym, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">keeping its joint and force limits unchanged</mark> (18 actuated joints). <b>Data</b>: FLD&#39;s dataset (originally DeepMimic, manually retargeted) plus four hard motions — jump, kick, spin-kick, cross-over — 13 motions, 10 trajectories each, 240 steps each: \(13\times10\times240=31200\) data points. <b>Comparisons</b>: FLD (same reward) and the authors&#39; own SCAE pre-training (no bi-level).</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">評估指標刻意<b>不用</b>對參考的 MSE——因為參考本身可能不可行——改用動作專屬量(踢腿時間比例、踢腿高度、跳躍時間比例)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The metric deliberately <b>avoids</b> MSE to the reference — the reference itself may be infeasible — using motion-specific quantities instead (kick-time ratio, kick height, jump-time ratio).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果表 — 兩個困難動作(Table 1)</span><span data-lang="en">Main results — two hard motions (Table 1)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">動作(指標)</span><span data-lang="en">Motion (metric)</span></th><th>FLD</th><th>SCAE (Ours)</th><th>BMI (Ours)</th></tr>
+          <tr><td>Kick (Time %) ↑</td><td>64.4</td><td>61.2</td><td class="win">71.3</td></tr>
+          <tr><td>Kick (Height m) ↑</td><td>0.157</td><td>0.152</td><td class="win">0.164</td></tr>
+          <tr><td>Jump (Time %) ↑</td><td>32.5</td><td class="win">36.2</td><td>35.2</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">BMI 在 <mark class="m-result" data-t="RESULT/EVIDENCE">kick 的時間與高度上最好</mark>;但 jump 最好的是 <b>SCAE 預訓練</b>,BMI 反而略降(36.2→35.2)。也注意 SCAE 在 kick 上其實<b>輸給</b> FLD(61.2 vs 64.4)——kick 的增益幾乎全部發生在 bi-level 階段。表中無標準差、無 seed 數。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">BMI is <mark class="m-result" data-t="RESULT/EVIDENCE">best on kick time and height</mark>; but the best jump comes from <b>SCAE pre-training</b>, and BMI slightly drops it (36.2→35.2). Note also that SCAE actually <b>trails</b> FLD on kick (61.2 vs 64.4) — the kick gain happens almost entirely in the bi-level stage. No standard deviations or seed counts are reported.</p>
+        <figure class="fig"><img src="figs/Zhao2024/fig6_kick.png" alt="Figure 6: kicking and standing foot heights">
+          <figcaption data-lang="zh"><b>Fig.6</b> 一條 kick 軌跡(含多次踢腿)中的足端高度。左:踢腿腳——紅(BMI)與藍(SCAE)每次踢都有明顯高峰(約 0.2–0.25 m),綠(FLD)幾乎貼在 0.12–0.15 m 平坦帶,等於<b>沒真的踢</b>。右:站立腳——FLD 的站立腳反覆離地(尖峰到約 0.13 m,代表在跳/失衡),BMI 與 SCAE 穩定貼在約 0.04–0.05 m。<span class="add">[導讀補充:數值為讀圖估計]</span></figcaption>
+          <figcaption data-lang="en"><b>Fig.6</b> Foot heights over one kick trajectory (several kicks). Left: kicking foot — red (BMI) and blue (SCAE) show clear peaks each kick (~0.2–0.25 m), while green (FLD) stays in a flat 0.12–0.15 m band, i.e., <b>not really kicking</b>. Right: standing foot — FLD&#39;s standing foot repeatedly leaves the ground (spikes to ~0.13 m, hopping/losing balance), whereas BMI and SCAE stay at ~0.04–0.05 m. <span class="add">[guide note: values read off the plot]</span></figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Latent 動態模型:自洽、稀疏、結構化</span><span data-lang="en">Latent dynamics model: self-consistent, sparse, structured</span></h3>
+        <figure class="fig"><img src="figs/Zhao2024/fig3_recon.png" alt="Figure 3: latent and motion reconstruction errors">
+          <figcaption data-lang="zh"><b>Fig.3</b> 這張圖是 SCAE 的主要證據。(a) latent 重建誤差:FLD(藍)停在約 4,SCAE(紅)很早就壓到接近 0;(b) 動作重建誤差:兩條曲線幾乎重疊。也就是<mark class="m-result" data-t="RESULT/EVIDENCE">自洽性「免費」得到,不犧牲重建</mark>。也印證了「只最小化動作誤差,latent 誤差不會自己變小」。<span class="add">[導讀補充:數值為讀圖估計]</span></figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> The main evidence for SCAE. (a) Latent reconstruction error: FLD (blue) plateaus around 4, while SCAE (red) drops near 0 early on; (b) motion reconstruction error: the two curves almost overlap. Self-consistency comes <mark class="m-result" data-t="RESULT/EVIDENCE">"for free," without sacrificing reconstruction</mark>, confirming that minimizing motion error alone does not shrink the latent error. <span class="add">[guide note: values read off the plot]</span></figcaption></figure>
+        <figure class="fig"><img src="figs/Zhao2024/fig4_phase.png" alt="Figure 4: learned latent phases">
+          <figcaption data-lang="zh"><b>Fig.4</b> 四種動作(由上而下:run、jog、step fast、jump)的 8 個 latent channel;圓半徑 = 振幅,黑棒 = 相位。<b>看右邊 SCAE 有多少 channel 縮成小點</b>:同一動作只用 2–3 個主要頻率成分,而 FLD 幾乎每個 channel 都有大圓。這是「稀疏表徵」說法的直接依據。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Eight latent channels for four motions (top to bottom: run, jog, step fast, jump); circle radius = amplitude, black bar = phase. <b>Count how many SCAE channels on the right shrink to dots</b>: each motion uses only 2–3 dominant frequency components, whereas FLD has large circles in nearly every channel. This is the direct basis for the "sparse representation" claim.</figcaption></figure>
+        <p data-lang="zh">Fig.5(未截圖)以 PCA 視覺化 13 種動作的 latent 流形:原始動作的主成分雜亂;FLD 呈螺旋但結構不一;<mark class="m-result" data-t="RESULT/EVIDENCE">SCAE 在 13 種動作間呈現最一致的同心環結構</mark>——每個動作一個主要週期圓,半徑反映速度、頻率等高階特徵。附錄 Fig.9 在全部 13 種動作上重複了 Fig.4 的稀疏性觀察,Fig.10 顯示兩者的動作重建都很準。</p>
+        <p data-lang="en">Fig.5 (not cropped) visualizes the latent manifolds of the 13 motions via PCA: principal components of the raw motions are tangled; FLD forms spirals with inconsistent structure; <mark class="m-result" data-t="RESULT/EVIDENCE">SCAE shows the most consistent concentric-ring structure across all 13 motions</mark> — one primary period circle per motion, with radius reflecting high-level features such as velocity and frequency. Appendix Fig.9 repeats Fig.4&#39;s sparsity observation over all 13 motions, and Fig.10 shows both reconstruct motions accurately.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融解讀</span><span data-lang="en">Reading the ablations</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">拿掉 / 改變什麼</span><span data-lang="en">What is removed / changed</span></th><th><span data-lang="zh">代價</span><span data-lang="en">Cost</span></th><th><span data-lang="zh">證明了什麼</span><span data-lang="en">What it proves</span></th></tr>
+          <tr><td><span data-lang="zh">latent 重建項(\(\beta=0\),即 FLD)</span><span data-lang="en">Latent term (\(\beta=0\), i.e. FLD)</span></td><td class="bad"><span data-lang="zh">latent 誤差 \(\approx 4\) vs \(\approx 0\)</span><span data-lang="en">latent error \(\approx 4\) vs \(\approx 0\)</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">自洽性來自這一項</mark>,動作重建不變。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Self-consistency comes from this term</mark>; motion reconstruction unchanged.</span></td></tr>
+          <tr><td><span data-lang="zh">\(\beta\) 掃描:0.1 / 1 / 5 / 10(Fig.8)</span><span data-lang="en">\(\beta\) sweep: 0.1 / 1 / 5 / 10 (Fig.8)</span></td><td><span data-lang="zh">僅 \(\beta=10\) 時動作誤差略升</span><span data-lang="en">only \(\beta=10\) slightly raises motion error</span></td><td><span data-lang="zh">\(\beta=0.1\) 就足以改善 latent;\(\beta\in[0.1,5]\) 動作重建與 FLD 相當——<mark class="m-result" data-t="RESULT/EVIDENCE">SCAE 對 \(\beta\) 不敏感</mark>。</span><span data-lang="en">\(\beta=0.1\) already improves the latent; \(\beta\in[0.1,5]\) matches FLD&#39;s motion reconstruction — <mark class="m-result" data-t="RESULT/EVIDENCE">SCAE is robust to \(\beta\)</mark>.</span></td></tr>
+          <tr><td><span data-lang="zh">拿掉 bi-level(BMI → SCAE)</span><span data-lang="en">Remove bi-level (BMI → SCAE)</span></td><td class="bad"><span data-lang="zh">kick 71.3→61.2%,0.164→0.152 m</span><span data-lang="en">kick 71.3→61.2%, 0.164→0.152 m</span></td><td><span data-lang="zh">bi-level 對 kick 有幫助;但 jump 反而 35.2→36.2%,<mark class="m-limit" data-t="LIMITATION/FUTURE">不是一致性的提升</mark>。</span><span data-lang="en">Bi-level helps kick; but jump goes 35.2→36.2% without it — <mark class="m-limit" data-t="LIMITATION/FUTURE">not a uniform gain</mark>.</span></td></tr>
+          <tr><td><span data-lang="zh">換回 FLD latent(SCAE → FLD)</span><span data-lang="en">Swap back to FLD latent (SCAE → FLD)</span></td><td><span data-lang="zh">jump 36.2→32.5%;kick 61.2→64.4%</span><span data-lang="en">jump 36.2→32.5%; kick 61.2→64.4%</span></td><td><span data-lang="zh">latent 表徵本身會改變策略學習,但方向因動作而異。</span><span data-lang="en">The latent representation itself changes policy learning, but the direction varies by motion.</span></td></tr>
+          <tr><td><span data-lang="zh"><span class="add">[導讀補充]</span> bi-level 但 \(\beta=0\)(無 latent 錨)</span><span data-lang="en"><span class="add">[guide note]</span> bi-level with \(\beta=0\) (no latent anchor)</span></td><td>—</td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">未做</mark>:「防止 decoder 複製機器人」這個關鍵主張沒有實驗支持。</span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">Not run</mark>: the key claim "the anchor prevents the decoder from copying the robot" has no experimental support.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">只在專案網站上的證據</span><span data-lang="en">Evidence only on the project website</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh">兩個 zero-shot sim-to-sim 實驗:機器人額外加 5 kg 質量塊,策略仍可運作。</li>
+          <li data-lang="en">Two zero-shot sim-to-sim experiments: the policy still works with an extra 5 kg mass block on the robot.</li>
+          <li data-lang="zh">bi-level 前後解碼參考的對比影片:fine-tuned 的 stride 動作<mark class="m-result" data-t="RESULT/EVIDENCE">手臂擺幅變大</mark>,作者解讀為更符合機器人動力學。<b>這是論文中唯一關於「參考被改成什麼樣」的描述,且只有定性。</b></li>
+          <li data-lang="en">Videos of decoded references before and after bi-level fine-tuning: the fine-tuned stride shows <mark class="m-result" data-t="RESULT/EVIDENCE">larger arm swing</mark>, read by the authors as better consistency with robot dynamics. <b>This is the paper&#39;s only description of how the reference changed, and it is qualitative.</b></li>
+          <li data-lang="zh">在 latent 振幅、頻率之間內插,可生成運動學上一致的新動作。cross-over、stride、step 等動作的改善也只以影片呈現。</li>
+          <li data-lang="en">Interpolating latent amplitude and frequency generates new kinematically consistent motions. Improvements on cross-over, stride, step are also shown only in videos.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實驗證明了什麼、沒證明什麼</span><span data-lang="en">What the experiments do and do not prove</span></h3>
+        <p data-lang="zh"><b>證明了</b>:(1) latent 重建項能在不傷重建的前提下讓 latent 自洽、稀疏、結構化;(2) 在 MIT Humanoid 模擬中,BMI 讓 kick 從「沒真的踢」變成「踢得起來、站得穩」。</p>
+        <p data-lang="en"><b>Proven</b>: (1) the latent-reconstruction term makes the latent self-consistent, sparse and structured without hurting reconstruction; (2) in the MIT Humanoid simulation, BMI turns the kick from "not really kicking" into "kicking with a stable stance."</p>
+        <p data-lang="zh"><b>沒證明</b>:修正後的參考<mark class="m-limit" data-t="LIMITATION/FUTURE">離原始 MoCap 多遠、是否真的「物理可行」</mark>(沒有量化);增益是否來自 decoder 更新而非單純多訓練 policy;latent 錨是否真的必要;在其他機器人、其他模擬器或實機上是否成立。</p>
+        <p data-lang="en"><b>Not proven</b>: <mark class="m-limit" data-t="LIMITATION/FUTURE">how far the repaired references drift from the MoCap, and whether they are truly "physically feasible"</mark> (never quantified); whether the gain comes from decoder updates rather than simply more policy training; whether the latent anchor is actually necessary; whether any of it holds on other robots, other simulators, or hardware.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">SCAE 的 latent 品質提升證據<b>扎實</b>(曲線清楚);BMI 的策略提升證據<b>單薄</b>:兩個動作、三個數字、無變異數,kick 進步明確、jump 沒有。</span>
+        <span data-lang="en">The evidence for SCAE&#39;s latent quality is <b>solid</b> (clean curves); the evidence for BMI&#39;s policy gains is <b>thin</b>: two motions, three numbers, no variance — a clear kick gain, no jump gain.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">指標沒定義清楚</span><span data-lang="en">Under-defined metrics</span></div>
+        <span data-lang="zh">「Kick (Time %)」「Jump (Time %)」的精確定義(門檻高度?雙腳離地的判定?)論文<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有寫</mark>;kick 高度 0.157 vs 0.164 m 只差 7 mm。沒有 seed 與標準差,很難判斷差異是否顯著。</span>
+        <span data-lang="en">The exact definitions of "Kick (Time %)" and "Jump (Time %)" (height threshold? what counts as both feet airborne?) are <mark class="m-limit" data-t="LIMITATION/FUTURE">not given</mark>; kick height 0.157 vs 0.164 m differs by 7 mm. With no seeds or standard deviations, significance cannot be judged.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得注意的設計</span><span data-lang="en">Notable design choice</span></span>
+        <span data-lang="zh">fine-tuning 只跑<b>最多 50 次 iteration</b>(預訓練是 3000 次)。如果這麼短就能把 kick 從 61.2% 拉到 71.3%,那「只多訓 policy 50 次」的對照組就特別重要——見 Q2。</span>
+        <span data-lang="en">Fine-tuning runs <b>at most 50 iterations</b> (vs 3000 in pre-training). If so little lifts kick from 61.2% to 71.3%, a "train the policy 50 more iterations only" control becomes especially important — see Q2.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">算力對齊?</span><span data-lang="en">compute-matched?</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">沒有錨會怎樣</span><span data-lang="en">no anchor?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>只在模擬中評估,且「可行」由模擬器定義</b>:所有結果都在 Isaac Gym;sim-to-sim 實驗只是加 5 kg 質量。由於 decoder 是往「這個 policy 在這個模擬器裡跑出的軌跡」靠,修正後的參考<mark class="m-limit" data-t="LIMITATION/FUTURE">可能適應的是模擬器的接觸模型與 PD 特性,而非真實硬體</mark>。論文標題講 humanoid robots,但沒有任何實機或跨模擬器驗證;作者把 sim-to-real 列為未來工作。</li>
+          <li data-lang="en"><b>Simulation-only, with "feasible" defined by the simulator</b>: all results are in Isaac Gym; the sim-to-sim tests only add a 5 kg mass. Because the decoder is pulled toward trajectories "this policy produces in this simulator," the repaired references <mark class="m-limit" data-t="LIMITATION/FUTURE">may adapt to the simulator&#39;s contact model and PD behavior rather than to real hardware</mark>. The title says humanoid robots, but there is no hardware or cross-simulator validation; sim-to-real is listed as future work.</li>
+          <li data-lang="zh"><b>參考被允許漂移多遠?完全沒量化</b>:BMI 的賣點是「變可行、又保留原始模式」,但<mark class="m-problem" data-t="PROBLEM/GAP">沒有任何數字</mark>報告修正前後參考在關節空間或 latent 空間的距離、也沒有在 BMI 階段掃 \(\beta\)(只用 \(\beta=200\))。而 latent 錨用的是凍結的 SCAE encoder——它被刻意設計成對「細節」不敏感,因此<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「latent 接近」不等於「人類看來動作沒變」</mark>。唯一證據是「stride 手臂擺幅變大」的影片。</li>
+          <li data-lang="en"><b>How far may the reference drift? Never quantified</b>: BMI&#39;s selling point is "become feasible yet keep the original patterns," but there are <mark class="m-problem" data-t="PROBLEM/GAP">no numbers</mark> on the distance between pre- and post-fine-tuning references in joint or latent space, and no \(\beta\) sweep in the BMI stage (only \(\beta=200\)). The anchor uses the frozen SCAE encoder — deliberately insensitive to "nuances" — so <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"close in latent" does not mean "looks unchanged to a human"</mark>. The only evidence is a video showing larger arm swing in stride.</li>
+          <li data-lang="zh"><b>缺關鍵對照組</b>:(a) 算力對齊的「只微調 policy、decoder 凍結」;(b) bi-level 但 \(\beta=0\)(驗證 latent 錨的必要性);(c) BMI 階段的 \(\beta\) 掃描。沒有 (a),<mark class="m-assume" data-t="ASSUMPTION/CLAIM">kick 的提升可能部分只是多訓練</mark>;沒有 (b),「防止退化」只是主張。</li>
+          <li data-lang="en"><b>Missing key controls</b>: (a) a compute-matched "fine-tune the policy only, decoder frozen"; (b) bi-level with \(\beta=0\) (to test whether the anchor is needed); (c) a \(\beta\) sweep in the BMI stage. Without (a), <mark class="m-assume" data-t="ASSUMPTION/CLAIM">part of the kick gain may just be extra training</mark>; without (b), "prevents collapse" remains a claim.</li>
+          <li data-lang="zh"><b>Baseline 太窄</b>:只比 FLD(與自家 SCAE)。沒有比直接追 retarget 原始片段的 DeepMimic 式追蹤、AMP 類對抗模仿、H2O 式過濾、或 DOC 類物理 retargeting 後再追——而這些正是 Related Work 裡被批評的對象。</li>
+          <li data-lang="en"><b>Baselines are narrow</b>: only FLD (and their own SCAE). No DeepMimic-style tracking of the raw retargeted clips, no AMP-style adversarial imitation, no H2O-style filtering, no DOC-style physics retargeting followed by tracking — exactly the approaches criticized in Related Work.</li>
+          <li data-lang="zh"><b>量化證據單薄</b>:13 種動作中只有 2 種有數字(3 個數);指標定義不明、無 seed / 標準差;BMI 在 jump 上沒有勝過 SCAE。其餘「改善」只在網站影片。</li>
+          <li data-lang="en"><b>Thin quantitative evidence</b>: of 13 motions only 2 get numbers (3 values); metrics under-defined, no seeds / std; BMI does not beat SCAE on jump. Other "improvements" live only in website videos.</li>
+          <li data-lang="zh"><b>人形機器人的選擇</b>:值得肯定——MIT Humanoid 保留真實力矩與關節上限、18 個致動關節,比動畫的 69 DoF 角色誠實得多。但<mark class="m-limit" data-t="LIMITATION/FUTURE">只有一台機器人、一個資料集</mark>(資料與機器人都來自 FLD 的設定),因此「相對最佳控制法更易跨機器人推廣」的主張未被測試。</li>
+          <li data-lang="en"><b>Choice of humanoid</b>: commendable — the MIT Humanoid keeps realistic torque and joint limits with 18 actuated joints, far more honest than 69-DoF animation characters. But <mark class="m-limit" data-t="LIMITATION/FUTURE">one robot and one dataset only</mark> (both inherited from FLD&#39;s setup), so the claim of being easier to generalize across robots than optimal control is untested.</li>
+          <li data-lang="zh"><b>擴展性主張無根據</b>:結論稱 BMI「可擴展到大規模 MoCap」,但實驗只有 31,200 幀、13 種動作;AMASS 被列為未來工作。</li>
+          <li data-lang="en"><b>Unsupported scalability claim</b>: the conclusion says BMI "is scalable to large-scale human MoCap datasets," yet experiments use 31,200 frames and 13 motions; AMASS is listed as future work.</li>
+          <li data-lang="zh"><b>「老師被學生帶偏」風險</b>:<span class="add">[導讀補充]</span> 上層讓參考靠向 policy 目前的行為;對 policy 根本追不上的動作(spin-kick),參考可能被「降級」成 policy 已會的保守版本。作者自承方法<mark class="m-limit" data-t="LIMITATION/FUTURE">依賴一個不錯的預訓練 policy</mark>,Fig.13 的失敗案例也符合這個擔憂。</li>
+          <li data-lang="en"><b>Risk of the teacher being led by the student</b>: <span class="add">[guide note]</span> the upper level pulls references toward the policy&#39;s current behavior; for motions the policy cannot track at all (spin-kick), the reference may be "downgraded" to a conservative version the policy already does. The authors admit the method <mark class="m-limit" data-t="LIMITATION/FUTURE">relies on a decent pre-trained policy</mark>, and the Fig.13 failures fit this concern.</li>
+        </ul>
+        <figure class="fig"><img src="figs/Zhao2024/fig13_failures.png" alt="Figure 13: unsatisfying motions learned by BMI">
+          <figcaption data-lang="zh"><b>Fig.13</b> 作者自己列出的失敗:(a) spin-kick——機器人<b>幾乎沒有抬起踢腿</b>,轉身多於踢;(b) cross-over——雙腿<b>沒有真正交叉</b>。作者解釋 policy 選擇「保持平衡」優先於「複製動作」。讀圖時想一想:bi-level 有沒有讓這些參考也被改成「不踢、不交叉」?論文沒有回答。</figcaption>
+          <figcaption data-lang="en"><b>Fig.13</b> Failures the authors themselves show: (a) spin-kick — the robot <b>barely lifts the kicking foot</b>, turning more than kicking; (b) cross-over — the legs <b>never fully cross</b>. The authors explain that the policy prioritizes balance over replicating the pattern. Ask yourself: did bi-level also rewrite these references into "no kick, no cross"? The paper does not say.</figcaption></figure>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>漂移量</b>:fine-tuning 後的參考與原始 MoCap 在關節空間差多少?把 \(\beta=200\) 換成 20 或 2000,kick 指標與「動作像不像」如何取捨?</li>
+          <li data-lang="en"><b>Drift</b>: how far are fine-tuned references from the original MoCap in joint space? With \(\beta=200\) replaced by 20 or 2000, how do the kick metrics trade off against "does it still look like the motion"?</li>
+          <li data-lang="zh"><b>算力對齊</b>:decoder 凍結、只讓 policy 多訓 50 次 iteration,kick 是否也能從 61.2% 升到接近 71.3%?</li>
+          <li data-lang="en"><b>Compute matching</b>: with the decoder frozen and the policy trained 50 more iterations, does kick also rise from 61.2% toward 71.3%?</li>
+          <li data-lang="zh"><b>沒有錨會怎樣</b>:\(\beta=0\) 的 bi-level 真的會退化成「複製機器人」嗎?退化多快?這是全文核心主張,卻沒有實驗。</li>
+          <li data-lang="en"><b>No anchor</b>: does bi-level with \(\beta=0\) really collapse into "copying the robot"? How fast? This is the paper&#39;s central claim, yet untested.</li>
+          <li data-lang="zh"><b>模擬器依賴</b>:把修正後的參考與 policy 搬到 MuJoCo 或實機,參考是否仍「可行」?還是只是學會了 Isaac Gym 的接觸特性?</li>
+          <li data-lang="en"><b>Simulator dependence</b>: moving the repaired references and policy to MuJoCo or hardware — are the references still "feasible," or did they just learn Isaac Gym&#39;s contact quirks?</li>
+          <li data-lang="zh"><b>失敗動作的目標降級</b>:對 spin-kick,bi-level 是否把參考拉向「不踢」?要怎麼設計才能讓參考變可行、卻不降低動作的「野心」?</li>
+          <li data-lang="en"><b>Goal downgrading on failures</b>: for spin-kick, does bi-level pull the reference toward "no kick"? How would one make references feasible without lowering their ambition?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 BMI 讀成「bi-level 讓所有動作都變好」。實際上:kick 的增益來自 bi-level,jump 的最佳反而是<b>沒有</b> bi-level 的 SCAE;而「參考變得物理一致」這件事<mark class="m-assume" data-t="ASSUMPTION/CLAIM">從未被直接量測</mark>,只是由 policy 指標間接推論。</span>
+        <span data-lang="en">Reading BMI as "bi-level makes every motion better." In fact: the kick gain comes from bi-level, while the best jump comes from SCAE <b>without</b> bi-level; and "the references became physically consistent" is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">never measured directly</mark>, only inferred from policy metrics.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">保留真實的關節與力矩上限(不像動畫角色作弊);附錄完整列出網路結構、獎勵與全部超參數;主動展示失敗案例(Fig.13);坦承「追蹤指標該怎麼定義」是開放問題、超參數只試了少數幾組。作為 CoRL 的初步研究,定位是誠實的。</span>
+        <span data-lang="en">Realistic joint and torque limits are kept (no animation-style cheating); the appendix fully lists architectures, rewards and all hyper-parameters; failures are shown proactively (Fig.13); and the authors admit that how to define the tracking metric is open and that few hyper-parameter settings were tried. As an initial CoRL study, the framing is honest.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>參考是可協商的</b>:做 motion imitation(四足或人形)時,與其花大力氣做物理 retargeting 或丟掉做不到的片段,可以考慮讓「參考生成器」在 RL 迴圈中被 policy rollout 微調——但<b>一定要配一個風格錨</b>,並量化漂移。</li>
+          <li data-lang="en"><b>References are negotiable</b>: in motion imitation (quadruped or humanoid), instead of heavy physics retargeting or discarding infeasible clips, consider letting the reference generator be fine-tuned by policy rollouts inside the RL loop — but <b>always pair it with a style anchor</b> and quantify the drift.</li>
+          <li data-lang="zh"><b>自洽 AE 是可借用的小技巧</b>:任何需要「在 latent 空間量距離」的場合(風格保留、條件生成、latent 正則),加一項「解碼再編碼」的 latent 重建誤差,讓 \(\mathrm{enc}\circ\mathrm{dec}\) 在 latent 上近似恆等;本文顯示它幾乎不傷重建。</li>
+          <li data-lang="en"><b>The self-consistent AE is a borrowable trick</b>: whenever you need to "measure distance in latent space" (style preservation, conditional generation, latent regularization), add a decode-then-encode latent reconstruction error so \(\mathrm{enc}\circ\mathrm{dec}\) is near-identity in latent space; this paper shows it barely hurts reconstruction.</li>
+          <li data-lang="zh"><b>評估的教訓</b>:當參考本身不可行,對參考的 MSE 就不再是好指標;需要任務專屬指標(足端高度、離地時間)——作者也承認這是開放問題。設計自己的實驗時,記得同時報「像不像原動作」與「做得好不好」兩種量。</li>
+          <li data-lang="en"><b>An evaluation lesson</b>: once the reference itself is infeasible, MSE to it stops being a good metric; task-specific quantities (foot height, airborne time) are needed — an open problem the authors acknowledge. In your own experiments, report both "how close to the original motion" and "how well executed."</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">家譜位置:從固定參考到共同最佳化的參考</span><span data-lang="en">Lineage: from fixed references to co-optimized references</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">工作</span><span data-lang="en">Work</span></th><th><span data-lang="zh">參考從哪來</span><span data-lang="en">Where the reference comes from</span></th><th><span data-lang="zh">不可行時怎麼辦</span><span data-lang="en">What happens when it is infeasible</span></th></tr>
+          <tr><td><b>DeepMimic</b> (2018)</td><td><span data-lang="zh">MoCap,固定</span><span data-lang="en">MoCap, fixed</span></td><td><span data-lang="zh">角色多半追得到(動畫角色)</span><span data-lang="en">Characters can mostly track it (animation)</span></td></tr>
+          <tr><td><b><a class="xref" href="Peng2020_MotionImitation.html">Peng 2020</a></b></td><td><span data-lang="zh">狗 MoCap → IK retarget,<b>固定</b></span><span data-lang="en">Dog MoCap → IK retarget, <b>fixed</b></span></td><td><span data-lang="zh">靠 RL + 動態隨機化 + latent 域適應硬追;參考本身不改</span><span data-lang="en">Track it hard with RL + dynamics randomization + latent adaptation; the reference never changes</span></td></tr>
+          <tr><td><b>DOC</b> (2023)</td><td><span data-lang="zh">物理式 retargeting(可微最佳控制)</span><span data-lang="en">Physics-based retargeting (differentiable OC)</span></td><td><span data-lang="zh">在 RL 前用動力學模型 + 人訂約束修成可行</span><span data-lang="en">Repair it before RL with a dynamics model + hand constraints</span></td></tr>
+          <tr><td><b>H2O / ExBody</b> (2024)</td><td><span data-lang="zh">大規模 retarget MoCap</span><span data-lang="en">Large-scale retargeted MoCap</span></td><td><span data-lang="zh">過濾掉 / 只追上半身</span><span data-lang="en">Filter out / track upper body only</span></td></tr>
+          <tr><td class="win"><b>BMI</b> (2024)</td><td class="win"><span data-lang="zh">SCAE decoder 產生,<b>可學習</b></span><span data-lang="en">Generated by the SCAE decoder, <b>learnable</b></span></td><td class="win"><span data-lang="zh">在 RL 迴圈內與 policy 共同最佳化,以 latent 錨保風格</span><span data-lang="en">Co-optimized with the policy inside the RL loop, style kept by a latent anchor</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><span class="add">[導讀補充]</span> 有趣的對照:Peng 2020 與 BMI 都用了 latent,但用途相反——Peng 2020 的 latent 編碼<b>動態參數</b>(讓 policy 適應不同物理),BMI 的 latent 編碼<b>動作模式</b>(約束參考可以怎麼改)。前者讓「機器人去適應參考」,後者讓「參考去適應機器人」。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><span class="add">[guide note]</span> An interesting contrast: both Peng 2020 and BMI use a latent, for opposite purposes — Peng 2020&#39;s latent encodes <b>dynamics parameters</b> (so the policy adapts to different physics), BMI&#39;s latent encodes <b>motion patterns</b> (constraining how the reference may change). The former makes "the robot adapt to the reference"; the latter makes "the reference adapt to the robot."</p>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What is worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「retarget 後的人類動作對真實人形機器人常物理不可行」</span><span data-lang="en">"Retargeted human motion is often physically infeasible for realistic humanoids"</span></td><td><span data-lang="zh">問題陳述與對動畫角色(69 DoF、無限力)不真實性的討論。</span><span data-lang="en">The problem statement and its discussion of unrealistic animation characters (69 DoF, unlimited force).</span></td></tr>
+          <tr><td><span data-lang="zh">「參考動作可與策略在 RL 迴圈內共同最佳化」</span><span data-lang="en">"Reference motions can be co-optimized with the policy inside the RL loop"</span></td><td><span data-lang="zh">作為資料驅動、無需動力學模型的 bi-level 範例(對照 DOC)。</span><span data-lang="en">A data-driven, dynamics-model-free bi-level example (contrast with DOC).</span></td></tr>
+          <tr><td><span data-lang="zh">「自洽 latent 正則讓動作表徵更稀疏、結構化」</span><span data-lang="en">"Self-consistent latent regularization yields sparser, structured motion representations"</span></td><td><span data-lang="zh">SCAE 的 Fig.3 / Fig.4 / Fig.5 證據。</span><span data-lang="en">SCAE&#39;s Fig.3 / Fig.4 / Fig.5 evidence.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:8px">不建議引用來支持:實機可行性、大規模資料可擴展性、或「bi-level 一致性地提升追蹤」——論文沒有這些證據。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:8px">Do not cite it as support for: hardware feasibility, scalability to large datasets, or "bi-level consistently improves tracking" — the paper has no such evidence.</p>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">BMI 把「參考動作」從固定的標準答案變成與策略共同最佳化的變數:機器人自己的 rollout 提供可行性、自洽的 SCAE latent 提供風格錨。想法乾淨且值得借用,但目前的證據只到「模擬中、一台機器人、kick 明顯變好」——參考漂移多少、錨是否必要、能否上實機,都還等著被回答。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">BMI turns the reference motion from a fixed answer key into a variable co-optimized with the policy: the robot&#39;s own rollouts supply feasibility, and the self-consistent SCAE latent supplies the style anchor. The idea is clean and worth borrowing, but the evidence so far reaches only "in simulation, on one robot, the kick clearly improves" — how far references drift, whether the anchor is necessary, and whether it works on hardware all remain open.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">DeepMimic</span>
+          <span class="chip">AMP</span>
+          <span class="chip">FLD (Fourier Latent Dynamics)</span>
+          <span class="chip">DeepPhase / PAE</span>
+          <span class="chip">DOC</span>
+          <span class="chip">H2O</span>
+          <span class="chip">ExBody</span>
+          <span class="chip">PHC</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">同庫相關導讀</span><span data-lang="en">Related guides here</span></span>
+        <span data-lang="zh"><a class="xref" href="Peng2020_MotionImitation.html">Peng 2020 — Learning Agile Robotic Locomotion Skills by Imitating Animals</a>:固定參考 + latent 域適應的前身路線。</span>
+        <span data-lang="en"><a class="xref" href="Peng2020_MotionImitation.html">Peng 2020 — Learning Agile Robotic Locomotion Skills by Imitating Animals</a>: the predecessor route of fixed references + latent domain adaptation.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論或讀圖估計,其餘事實與數據均出自原論文(含附錄)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences or plot readings; all other facts and figures come from the original paper (including its appendix).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Zhao et al. 2024 (Bi-Level Motion Imitation) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Bi-Level Motion Imitation reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

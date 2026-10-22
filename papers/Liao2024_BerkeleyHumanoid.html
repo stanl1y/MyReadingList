@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Berkeley Humanoid — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Berkeley Humanoid: A Research Platform for Learning-based Control","authors":"Qiayuan Liao, Bike Zhang, Xuanyu Huang, Xiaoyu Huang, Zhongyu Li, Koushil Sreenath","year":"2024","venue":"ICRA 2025","tags":["Legged Robotics","Humanoid","Robot Hardware","Actuator Design","Quasi-Direct Drive","Sim-to-Real","Reinforcement Learning"],"tldr":"UC Berkeley 自研 16 kg、0.85 m 的中型人形(目前只有雙腿,各 6 DoF),把縮小 sim-to-real gap 當成硬體設計規格:12 顆自製 9:1 行星減速 QDD 致動器直接當關節、拿掉彈簧阻尼與閉鏈、EtherCAT 低延遲、用 CAD 取轉子慣量並實測摩擦,只做小範圍可辨識的 domain randomization;一個不吃歷史、無相位、無參考動作的 MLP PPO 策略即零樣本上實機,戶外走 364 m、爬碎石坡、被踢不倒、單腳跳,速度追蹤誤差模擬 0.051 對實機 0.058 m/s;零件成本約 1 萬美元。","tldr_en":"An in-house 16 kg, 0.85 m mid-scale humanoid from UC Berkeley (legs only, 6 DoF each) that treats a narrow sim-to-real gap as a hardware spec: twelve custom 9:1 planetary QDD actuators mounted directly as joints, no springs, dampers or closed chains, low-latency EtherCAT, CAD rotor inertia plus measured friction, and only narrow, identifiable domain randomization. A memoryless MLP PPO policy with no history, phase or reference motion transfers zero-shot: 364 m of campus walking, a steep unpaved trail, kick recovery and single-leg hopping, with sim vs real velocity-tracking error of 0.051 vs 0.058 m/s, for about USD 10K in parts."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  .cols > div, .cols > aside{min-width:0}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  a.chip{text-decoration:none}
+  a.chip:hover{background:#e6dcc4}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+  .derived td{background:#fbf3df; font-size:12.5px}
+  .tscroll{overflow-x:auto}
+  .tight td,.tight th{padding:7px 7px; font-size:12.5px}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:110px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">Berkeley Humanoid 是 UC Berkeley 自研的 <b>16 kg、0.85 m 中型人形研究平台</b>(本文只有雙腿,各 6 DoF)。它的核心主張是:<mark class="m-method" data-t="METHOD/IDEA">把「縮小 sim-to-real gap」當成硬體設計規格</mark>——12 顆自製 9:1 行星減速 QDD 致動器直接當關節、拿掉所有彈簧/阻尼與閉鏈、EtherCAT 低延遲通訊、從 CAD 取轉子慣量並逐顆實測摩擦——於是只需<mark class="m-assume" data-t="ASSUMPTION/CLAIM">小範圍、可辨識的 domain randomization</mark>,一個<b>不吃歷史、沒有相位訊號、沒有參考動作</b>的 MLP PPO 策略就能零樣本上實機:<mark class="m-result" data-t="RESULT/EVIDENCE">戶外 10 分鐘走 364 m、爬陡峭碎石小徑、被踢能恢復、雙腳與單腳跳躍;前進速度追蹤誤差模擬 0.051 vs 實機 0.058 m/s</mark>。整機(不含手臂)零件成本約 1 萬美元。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Berkeley Humanoid is an in-house <b>16 kg, 0.85 m mid-scale humanoid research platform</b> from UC Berkeley (legs only in this paper, 6 DoF each). Its core thesis: <mark class="m-method" data-t="METHOD/IDEA">treat "a narrow sim-to-real gap" as a hardware design spec</mark>—twelve custom 9:1 planetary QDD actuators mounted directly as joints, no springs, dampers or closed chains, low-latency EtherCAT, rotor inertia from CAD and per-actuator measured friction. Then only <mark class="m-assume" data-t="ASSUMPTION/CLAIM">narrow, identifiable domain randomization</mark> is needed, and a <b>memoryless</b> MLP PPO policy (<b>no history, no phase signal, no reference motion</b>) transfers zero-shot: <mark class="m-result" data-t="RESULT/EVIDENCE">364 m of campus walking in 10 minutes, a steep unpaved trail, kick recovery, double- and single-leg hopping; sagittal velocity-tracking error 0.051 m/s in sim vs 0.058 m/s on hardware</mark>. Parts cost about USD 10K (without arms).</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Liao2024/fig1_overview.jpg" alt="Figure 1 overview">
+        <figcaption data-lang="zh"><b>Fig.1</b> 整篇論文的論點就藏在兩支箭頭裡:CAD 設計 →「<b>Low Simulation Complexity</b>」→ Isaac Lab 大量平行訓練 →「<b>Narrow Sim-to-real Gap</b>」→ 實機部署(實驗室、碎石步道、木棧橋、Sather Tower 前的人群)。注意 (a) 的 CAD 有手臂,但實驗用的機器人<b>沒有裝手臂</b>。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> The paper's whole argument lives in two arrows: CAD design → "<b>Low Simulation Complexity</b>" → massively parallel training in Isaac Lab → "<b>Narrow Sim-to-real Gap</b>" → hardware deployment (lab, gravel trail, boardwalk, a crowd in front of Sather Tower). Note the CAD in (a) has arms, but the robot used in all experiments <b>has no arms</b>.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 全尺寸人形<mark class="m-problem" data-t="PROBLEM/GAP">重、危險、需吊架與一整組人</mark>;為 model-based 控制設計的彈簧/連桿/諧波傳動<mark class="m-problem" data-t="PROBLEM/GAP">在大規模平行模擬器裡又慢又難準</mark>;RL 社群只好用歷史輸入、teacher-student、寬 domain randomization 去補 gap,<mark class="m-problem" data-t="PROBLEM/GAP">換來複雜度與保守策略</mark>。</li>
+          <li data-lang="en"><b>Problem</b> — Full-scale humanoids are <mark class="m-problem" data-t="PROBLEM/GAP">heavy, dangerous, and need a gantry plus a team</mark>; springs/linkages/harmonic drives designed for model-based control are <mark class="m-problem" data-t="PROBLEM/GAP">slow and hard to simulate accurately in massively parallel simulators</mark>; RL then patches the gap with history inputs, teacher-student, and wide domain randomization, <mark class="m-problem" data-t="PROBLEM/GAP">paying in complexity and conservative policies</mark>.</li>
+          <li data-lang="zh"><b>方法</b> — 以四個設計原則造機器人:<mark class="m-method" data-t="METHOD/IDEA">Simulation-Friendly、Reliable &amp; Low-Cost、Experiment-Friendly、Anthropomorphic</mark>;再配上一個<mark class="m-method" data-t="METHOD/IDEA">「極簡組成」的 RL 控制器</mark>(只吃當下狀態的 MLP + PPO + Isaac Lab)與<mark class="m-method" data-t="METHOD/IDEA">「設計賦能的精準 DR」</mark>。</li>
+          <li data-lang="en"><b>Method</b> — Build the robot around four principles: <mark class="m-method" data-t="METHOD/IDEA">Simulation-Friendly, Reliable &amp; Low-Cost, Experiment-Friendly, Anthropomorphic</mark>; pair it with a <mark class="m-method" data-t="METHOD/IDEA">"minimally composed" RL controller</mark> (a memoryless MLP + PPO in Isaac Lab) and <mark class="m-method" data-t="METHOD/IDEA">"design-enabled accurate DR."</mark></li>
+          <li data-lang="zh"><b>結果</b> — 全向行走、8 類地形、平均約 \(20^\circ\) 的碎石坡、4 cm 石階、被踢恢復;10 分鐘 364 m;雙腳/單腳跳;模擬與實機速度追蹤誤差相近;整個專案<mark class="m-result" data-t="RESULT/EVIDENCE">跌倒 38 次,硬體幾乎無損</mark>(僅兩次螺絲/膠鬆脫);BOM <b>USD 9,955</b>。</li>
+          <li data-lang="en"><b>Results</b> — Omnidirectional walking, 8 terrain types, a trail averaging about 20 degrees, 4 cm rocky stairs, kick recovery; 364 m in 10 minutes; double- and single-leg hopping; similar sim and real tracking errors; <mark class="m-result" data-t="RESULT/EVIDENCE">38 recorded falls with essentially no hardware damage</mark> (only two loose-screw/glue failures); BOM <b>USD 9,955</b>.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">論文把電動人形分三級:<b>全尺寸</b>(成人大小)、<b>中型</b>(兒童大小)、<b>迷你</b>(遠小於人)。全尺寸研究平台(TORO、LOLA、WALK-MAN)多用<mark class="m-method" data-t="METHOD/IDEA">高減速比 Harmonic Drive</mark>;Cassie/Digit 在高負載關節用 cycloidal 減速再配<mark class="m-method" data-t="METHOD/IDEA">彈簧與連桿</mark>,這讓 reduced-order、step-to-step 的 model-based 控制器好設計,但作者認為<mark class="m-problem" data-t="PROBLEM/GAP">對近年的 learning-based 演算法反而不利</mark>。另一支是 <mark class="m-method" data-t="METHOD/IDEA">Quasi-Direct-Drive(QDD)</mark>:Unitree H1、ARTEMIS、MIT Humanoid、Unitree G1、HECTOR、BRUCE 都用低減速比行星齒輪,更適合動態動作,但中型/迷你平台<mark class="m-problem" data-t="PROBLEM/GAP">多數腿只有 5 DoF</mark>(缺踝關節 roll)。</p>
+        <p data-lang="en">The paper sorts electric humanoids into <b>full-scale</b> (adult size), <b>mid-scale</b> (child size), and <b>miniature</b>. Full-scale research platforms (TORO, LOLA, WALK-MAN) mostly use <mark class="m-method" data-t="METHOD/IDEA">high-ratio Harmonic Drives</mark>; Cassie/Digit use cycloidal drives on high-load joints combined with <mark class="m-method" data-t="METHOD/IDEA">springs and linkages</mark>, which makes reduced-order, step-to-step model-based controllers easy—but, the authors argue, <mark class="m-problem" data-t="PROBLEM/GAP">hurts modern learning-based training and deployment</mark>. The other branch is <mark class="m-method" data-t="METHOD/IDEA">Quasi-Direct-Drive (QDD)</mark>: Unitree H1, ARTEMIS, MIT Humanoid, Unitree G1, HECTOR, BRUCE all use low-ratio planetaries suited to dynamic motion, yet <mark class="m-problem" data-t="PROBLEM/GAP">most mid-scale/miniature ones have only 5-DoF legs</mark> (no ankle roll).</p>
+        <p data-lang="zh">控制端,RL 已讓人形做到崎嶇地形、抗擾、跑步、parkour,但這些工作<mark class="m-problem" data-t="PROBLEM/GAP">常靠複雜網路、狀態-動作歷史做線上適應,或寬分布的 DR</mark>去抵銷「傳動複雜、模型不準」帶來的 gap。中型人形又多一層難度:重心低、慣量小 → 小力就造成大運動;腿短 → 步幅小、抗擾要踏多步;步頻高 → 需要快又準的致動。</p>
+        <p data-lang="en">On the control side, RL has given humanoids rough-terrain walking, disturbance rejection, running, even parkour—but these works <mark class="m-problem" data-t="PROBLEM/GAP">often rely on complex networks, state-action history for online adaptation, or wide DR distributions</mark> to offset the gap caused by complex transmissions and imprecise models. Mid-scale humanoids add difficulty: low CoG and low inertia → small forces produce large motions; short legs → short strides, multiple steps to recover; high step frequency → fast, precise actuation is required.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這是一篇 <b>hardware–learning co-design</b> 論文。與其「讓策略對一台難模擬的機器人夠 robust」,不如「<b>把機器人做成容易被模擬</b>」。sim-to-real 的負擔從演算法(歷史編碼器、adaptation module、寬 DR)搬到了機構設計(致動器即關節、無彈簧、低延遲匯流排)。控制器刻意做得極簡,正是為了讓硬體成為唯一的「解釋變數」。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">This is a <b>hardware–learning co-design</b> paper. Instead of "making the policy robust to a hard-to-simulate robot," it "<b>makes the robot easy to simulate</b>." The sim-to-real burden moves from the algorithm (history encoders, adaptation modules, wide DR) to mechanism design (actuator-as-joint, no springs, a low-latency bus). The controller is deliberately minimal precisely so that hardware is the only "explanatory variable." <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是「又一台人形」,而是這幾個設計觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not "yet another humanoid" but these design ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">「可模擬性」是一個硬體規格。</b> 彈簧、阻尼、閉鏈、複雜傳動不只增加製造難度,也增加<mark class="m-problem" data-t="PROBLEM/GAP">模擬成本與建模誤差</mark>;在 RL 時代,它們的代價要重新記帳。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">"Simulatability" is a hardware spec.</b> Springs, dampers, closed chains and complex transmissions add not only build difficulty but <mark class="m-problem" data-t="PROBLEM/GAP">simulation cost and modeling error</mark>; in the RL era their price must be re-accounted.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">致動器就是關節。</b> 交叉滾子軸承讓致動器直接承受關節負載;模擬時只要在關節質量矩陣對角線加上 armature(轉子反射慣量 \(N^2J_r\))+ 摩擦 + 力矩源,<mark class="m-method" data-t="METHOD/IDEA">不必模擬致動器內部動力學</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">The actuator is the joint.</b> A crossed-roller bearing lets each actuator carry the joint load directly; in simulation you add armature (reflected rotor inertia \(N^2J_r\)) to the mass-matrix diagonal + friction + an ideal torque source—<mark class="m-method" data-t="METHOD/IDEA">no internal actuator dynamics to simulate</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">低延遲 + 高頻寬 = 不必模擬延遲。</b> EtherCAT 最大延遲 0.5–2 ms、力矩控制頻寬 1 kHz,讓致動器可被當成<mark class="m-assume" data-t="ASSUMPTION/CLAIM">無延遲的力矩源</mark>。對照 ANYmal 需要學一個 actuator network <span class="add">[導讀補充]</span>,這裡是「把致動器設計到不需要學模型」。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Low latency + high bandwidth = no latency to simulate.</b> EtherCAT max latency of 0.5–2 ms and 1 kHz torque bandwidth let the actuator be treated as an <mark class="m-assume" data-t="ASSUMPTION/CLAIM">ideal, delay-free torque source</mark>. Contrast ANYmal, which needed a learned actuator network <span class="add">[guide note]</span>: here the actuator is designed so no learned model is needed.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">「精準 DR」取代「寬 DR」。</b> 機器人本體參數只在可辨識的小範圍內擾動(armature \(\times[1.0,1.05]\)、摩擦與連桿質量 \(\pm10\%\)),環境接觸才寬擾動(地面摩擦 \([0.2,1.25]\));<mark class="m-method" data-t="METHOD/IDEA">刻意不隨機化 motor strength 與 PD gains</mark>,作者稱之為「lazy approach」。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">"Accurate DR" instead of "wide DR."</b> Robot parameters are perturbed only in small, identifiable ranges (armature \(\times[1.0,1.05]\), friction and link masses \(\pm10\%\)); only environment contact is randomized widely (ground friction \([0.2,1.25]\)). <mark class="m-method" data-t="METHOD/IDEA">Motor strength and PD gains are deliberately not randomized</mark>—the authors call that a "lazy approach."</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">極簡控制器是一支「探針」。</b> 沒有歷史就無法線上辨識系統;因此若它在實機表現接近模擬,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">就間接說明模擬 MDP 與真實 MDP 很接近</mark>——同時也是平台的 baseline。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">The minimal controller is a "probe."</b> Without history it cannot identify the system online; so if it performs on hardware close to simulation, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">that indirectly shows the sim MDP matches the real MDP</mark>—and it doubles as the platform baseline.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">學習讓便宜感測器可用,輕量讓實驗變快。</b> 手機等級 IMU 晶片 &lt; 1 美元(模組 50 美元)取代約 1000 美元的 IMU;16 kg 一人即可操作,<mark class="m-result" data-t="RESULT/EVIDENCE">跌倒後 3–5 秒即可重啟策略</mark>——研究吞吐量本身就是設計目標。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Learning makes cheap sensors viable; light weight makes experiments fast.</b> A phone-grade IMU chip under 1 USD (50 USD module) replaces roughly 1,000 USD IMUs; at 16 kg one person can operate it, and <mark class="m-result" data-t="RESULT/EVIDENCE">the policy is resumed 3–5 s after a fall</mark>—research throughput is itself a design target.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Berkeley Humanoid: A Research Platform for Learning-based Control</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Qiayuan Liao, Bike Zhang, Xuanyu Huang, Xiaoyu Huang, Zhongyu Li, Koushil Sreenath</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span><span data-lang="zh">UC Berkeley(Sreenath 的 Hybrid Robotics 實驗室);The AI Institute 部分資助</span><span data-lang="en">UC Berkeley (Sreenath&#39;s Hybrid Robotics lab); partly funded by The AI Institute</span></span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span><span data-lang="zh">arXiv:2407.21781(2024/07)· ICRA 2025 <span class="add">[導讀補充] 刊登出處由會議論文索引查得</span></span><span data-lang="en">arXiv:2407.21781 (Jul 2024) · ICRA 2025 <span class="add">[guide note] venue from proceedings index</span></span></span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Humanoid Hardware + RL</span>
+          <b><span data-lang="zh">網站</span><span data-lang="en">Website</span></b><span>berkeley-humanoid.com</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span><span data-lang="zh">論文承諾「接受後」開源 Isaac Lab 訓練程式碼(硬體未承諾開源)</span><span data-lang="en">Paper promises to open-source the Isaac Lab training code "upon acceptance" (no hardware release promised)</span></span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它給了一個<b>存在性證明</b>:一台實驗室自造、約 1 萬美元的人形,配上最陽春的 PPO + MLP,就能在戶外做動態行走與單腳跳。並把「sim-to-real 是演算法問題」重新框成「<b>sim-to-real 也是機構設計問題</b>」。<span class="add">[導讀補充] 同實驗室 2025 年的 Berkeley Humanoid Lite 延續這條「平價研究平台」路線。</span></span>
+        <span data-lang="en">It gives an <b>existence proof</b>: a lab-built humanoid at about USD 10K, with the plainest PPO + MLP, can do dynamic outdoor walking and single-leg hopping. And it reframes "sim-to-real is an algorithm problem" into "<b>sim-to-real is also a mechanism-design problem</b>." <span class="add">[guide note] The same lab continued this affordable-platform line with Berkeley Humanoid Lite in 2025.</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Quasi-Direct Drive</span><span class="chip">9:1 planetary</span>
+          <span class="chip">Actuator-as-joint</span><span class="chip">Armature</span>
+          <span class="chip">EtherCAT</span><span class="chip">Isaac Lab</span>
+          <span class="chip">PPO</span><span class="chip">Accurate DR</span>
+          <span class="chip">Mid-scale humanoid</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">硬體規格速查</span><span data-lang="en">Spec sheet</span></span>
+        <table style="font-size:12.5px">
+          <tr><td><span data-lang="zh">身高</span><span data-lang="en">Height</span></td><td><span data-lang="zh">0.85 m(標稱站姿),約 5 歲兒童</span><span data-lang="en">0.85 m (nominal stance), ~a 5-year-old</span></td></tr>
+          <tr><td><span data-lang="zh">大腿 / 小腿</span><span data-lang="en">Thigh / calf</span></td><td>220 mm / 180 mm</td></tr>
+          <tr><td><span data-lang="zh">質量</span><span data-lang="en">Mass</span></td><td><span data-lang="zh">16 kg(無手臂;兩隻 4-DoF 手臂估 +6 kg)</span><span data-lang="en">16 kg (no arms; two 4-DoF arms est. +6 kg)</span></td></tr>
+          <tr><td>DoF</td><td><span data-lang="zh">12(每腿 6:HR、HAA、HFE、KFE、FFE、FAA)</span><span data-lang="en">12 (6 per leg: HR, HAA, HFE, KFE, FFE, FAA)</span></td></tr>
+          <tr><td><span data-lang="zh">致動器</span><span data-lang="en">Actuators</span></td><td><span data-lang="zh">4 型自製,全為 9:1 行星 QDD</span><span data-lang="en">4 custom types, all 9:1 planetary QDD</span></td></tr>
+          <tr><td><span data-lang="zh">通訊</span><span data-lang="en">Bus</span></td><td>EtherCAT, 1–4 kHz</td></tr>
+          <tr><td><span data-lang="zh">電腦</span><span data-lang="en">Computer</span></td><td>Intel i7-1255U</td></tr>
+          <tr><td>IMU</td><td><span data-lang="zh">ICM42688(晶片 &lt; 1 美元,模組 50 美元)</span><span data-lang="en">ICM42688 (chip &lt; 1 USD, module 50 USD)</span></td></tr>
+          <tr><td><span data-lang="zh">電池</span><span data-lang="en">Battery</span></td><td><span data-lang="zh">DJI TB50 兩顆(可快速更換)</span><span data-lang="en">two DJI TB50 (quick-swap)</span></td></tr>
+          <tr><td><span data-lang="zh">成本</span><span data-lang="en">Cost</span></td><td><span data-lang="zh">USD 9,955(無手臂;含手臂估 15K)</span><span data-lang="en">USD 9,955 (no arms; ~15K with arms)</span></td></tr>
+          <tr><td><span data-lang="zh">模擬速度</span><span data-lang="en">Sim speed</span></td><td><span data-lang="zh">&gt; 90,000 steps/s(NVIDIA A4500)</span><span data-lang="en">&gt; 90,000 steps/s (NVIDIA A4500)</span></td></tr>
+        </table>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">全尺寸人形</span><span data-lang="en">Full-scale humanoids</span></b><br><small>TORO, LOLA, WALK-MAN, H1, Digit</small></td><td><span data-lang="zh">Table 1 全尺寸機 35–132 kg、高扭矩致動器約 300 Nm 等級 → <mark class="m-problem" data-t="PROBLEM/GAP">實驗危險、需吊架與 2–3 人搬運</mark>;實驗場地與地形布置都昂貴。</span><span data-lang="en">full-scale robots in Table 1 weigh 35–132 kg, with high-torque actuators around 300 Nm → <mark class="m-problem" data-t="PROBLEM/GAP">dangerous experiments, gantries, 2–3 people to handle</mark>; test spaces and terrain setups are costly.</span></td></tr>
+          <tr><td><b><span data-lang="zh">為 model-based 設計的傳動</span><span data-lang="en">Transmissions designed for model-based control</span></b><br><small><span data-lang="zh">Cassie/Digit 的彈簧+連桿、諧波/擺線減速</span><span data-lang="en">Cassie/Digit springs + linkages, harmonic/cycloidal drives</span></small></td><td><span data-lang="zh">單向彈簧與閉鏈要<mark class="m-problem" data-t="PROBLEM/GAP">額外解動力學方程、平行化成本高</mark>;許多模擬器只能在關節空間施力,致動器的限幅、雜訊、摩擦、轉子與連桿慣量<mark class="m-problem" data-t="PROBLEM/GAP">很難精確映射到關節空間並隨機化</mark>;延遲與致動器動力學還要更小的時間步。</span><span data-lang="en">Unilateral springs and closed chains require <mark class="m-problem" data-t="PROBLEM/GAP">extra dynamics equations and parallelize poorly</mark>; many simulators only apply joint-space torques, so actuator limits, noise, friction, rotor and linkage inertia are <mark class="m-problem" data-t="PROBLEM/GAP">hard to map into joint space and randomize accurately</mark>; delays and actuator dynamics demand smaller time steps.</span></td></tr>
+          <tr><td><b><span data-lang="zh">商用人形</span><span data-lang="en">Commercial humanoids</span></b><br><small>Optimus, Atlas, Unitree</small></td><td><span data-lang="zh">設計精良,但<mark class="m-problem" data-t="PROBLEM/GAP">多數買不到,或不開放修改底層系統</mark>;精細硬體參數(轉子慣量、摩擦)難以取得。</span><span data-lang="en">Well engineered, but <mark class="m-problem" data-t="PROBLEM/GAP">mostly unavailable, or closed at the low level</mark>; detailed hardware parameters (rotor inertia, friction) are hard to obtain.</span></td></tr>
+          <tr><td><b><span data-lang="zh">演算法端補 gap</span><span data-lang="en">Closing the gap in the algorithm</span></b><br><small><span data-lang="zh">歷史、teacher-student、寬 DR</span><span data-lang="en">history, teacher-student, wide DR</span></small></td><td><span data-lang="zh">網路與訓練管線變複雜;<mark class="m-problem" data-t="PROBLEM/GAP">過度 DR 會讓學習失敗或策略過度保守</mark>;隨機化「motor strength / PD gains」的範圍只能靠經驗猜。</span><span data-lang="en">Networks and pipelines get complex; <mark class="m-problem" data-t="PROBLEM/GAP">excessive DR can prevent learning or yield over-conservative policies</mark>; ranges for "motor strength / PD gains" randomization are guessed heuristically.</span></td></tr>
+          <tr><td><b><span data-lang="zh">迷你人形(伺服馬達+大腳板)</span><span data-lang="en">Miniature humanoids (servos + big flat feet)</span></b></td><td><span data-lang="zh">好控制但<mark class="m-problem" data-t="PROBLEM/GAP">動態能力有限</mark>(如踢足球的迷你人形)。</span><span data-lang="en">Easy to control but <mark class="m-problem" data-t="PROBLEM/GAP">limited dynamic capability</mark> (e.g., the soccer-playing miniature humanoid).</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「能不能把機器人本身設計成『好模擬、耐摔、便宜、一個人就能做實驗』,讓最陽春的 RL 控制器也能零樣本、窄 gap 地上實機?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"Can the robot itself be designed to be easy to simulate, fall-tolerant, cheap and one-person-operable, so that even the plainest RL controller transfers zero-shot with a narrow gap?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">定位:與其他電動人形比較(Table 1 節選)</span><span data-lang="en">Positioning vs other electric humanoids (Table 1, selected)</span></h3>
+        <div class="tscroll">
+        <table class="tight">
+          <tr><th>Robot</th><th><span data-lang="zh">尺寸</span><span data-lang="en">Size</span></th><th><span data-lang="zh">平均腿段 (m)</span><span data-lang="en">Avg leg (m)</span></th><th><span data-lang="zh">腿 DoF</span><span data-lang="en">Leg DoF</span></th><th><span data-lang="zh">重量 (kg)</span><span data-lang="en">Mass (kg)</span></th><th><span data-lang="zh">價格 (USD)</span><span data-lang="en">Price (USD)</span></th><th><span data-lang="zh">致動</span><span data-lang="en">Act.</span></th><th>HFE / KFE (Nm)</th><th><span data-lang="zh">KFE 指標 <span class="add">[導讀補充]</span></span><span data-lang="en">KFE index <span class="add">[guide note]</span></span></th></tr>
+          <tr><td>Unitree H1</td><td>F</td><td>0.4</td><td>5</td><td>47</td><td>90K</td><td>P</td><td>270 / 360</td><td>0.98</td></tr>
+          <tr><td>Digit</td><td>F</td><td>0.5</td><td>6</td><td>50</td><td>250K</td><td>C, H</td><td>200 / 230</td><td>0.47</td></tr>
+          <tr><td>Cassie</td><td>F</td><td>0.5</td><td>5</td><td>35</td><td>250K</td><td>C, H</td><td>195 / 195</td><td>0.57</td></tr>
+          <tr><td>MIT Humanoid</td><td>M</td><td>0.28</td><td>5</td><td>24</td><td>–</td><td>P</td><td>72 / 144</td><td>1.09</td></tr>
+          <tr><td>Unitree G1</td><td>M</td><td>0.3</td><td>6</td><td>35</td><td>16K</td><td>P</td><td>88 / 139</td><td>0.67</td></tr>
+          <tr><td>HECTOR</td><td>M</td><td>0.22</td><td>5</td><td>16</td><td>–</td><td>P</td><td>33.5 / 51.9</td><td>0.75</td></tr>
+          <tr><td>iCub</td><td>M</td><td>0.2</td><td>6</td><td>24</td><td>300K</td><td>H</td><td>40 / 40</td><td>0.42</td></tr>
+          <tr><td>BRUCE</td><td>S</td><td>0.17</td><td>5</td><td>3.3</td><td>6.5K</td><td>P</td><td>10.5 / 10.5</td><td>0.95</td></tr>
+          <tr><td class="win">Berkeley Humanoid</td><td class="win">M</td><td class="win">0.2</td><td class="win">6</td><td class="win"><span data-lang="zh">16(無臂)</span><span data-lang="en">16 (no arms)</span></td><td class="win"><span data-lang="zh">10K(無臂)</span><span data-lang="en">10K (no arms)</span></td><td class="win">P</td><td class="win">62.6 / 81.1</td><td class="win"><span data-lang="zh">1.29(含臂估 0.94)</span><span data-lang="en">1.29 (0.94 with arms est.)</span></td></tr>
+        </table>
+        </div>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted)">F/M/S = 全尺寸/中型/迷你;H/P/C = 諧波/行星/擺線。最後一欄是導讀者自算的<b>無因次膝扭矩指標</b> \(\tau_{\text{KFE}}/(m\,g\,L)\),其中腿長 \(L\) 取「平均腿段 \(\times 2\)」,粗略衡量「膝蓋能否撐起全身重量的力臂」。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">本機以 16 kg 無手臂入表</mark>,其他機器人多含手臂;若加上估計的 6 kg 手臂,指標由 1.29 降到 0.94,仍屬前段但不再遙遙領先。<span class="add">[導讀補充]</span></p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted)">F/M/S = full/mid/small; H/P/C = harmonic/planetary/cycloidal. The last column is the guide author&#39;s own <b>dimensionless knee-torque index</b> \(\tau_{\text{KFE}}/(m\,g\,L)\) with leg length \(L\) taken as "avg leg segment \(\times 2\)"—a crude measure of whether the knee can hold the full body weight at the leg&#39;s lever arm. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">This robot enters the table at 16 kg without arms</mark>, while most others include arms; adding the estimated 6 kg of arms drops the index from 1.29 to 0.94—still near the top, but no longer far ahead. <span class="add">[guide note]</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,Berkeley Humanoid 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how Berkeley Humanoid fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">前作</span><span data-lang="en">Prior work</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">本文如何補上</span><span data-lang="en">How this paper fills it</span></th></tr>
+          <tr>
+            <td><b>Cassie / Digit</b></td>
+            <td><span data-lang="zh">彈簧、閉鏈、擺線/諧波傳動;每台約 25 萬美元。</span><span data-lang="en">Springs, closed chains, cycloidal/harmonic drives; about USD 250K each.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">移除所有彈性/吸能元件與閉鏈</mark>,致動器直接當關節;唯一例外是 KFE–FFE 的<b>線性</b>耦合連桿。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Remove every flexible/energy-absorbing element and closed chain</mark>; actuators are the joints. The only exception is a <b>linear</b> KFE–FFE coupling linkage.</span></td>
+          </tr>
+          <tr>
+            <td><b>TORO / LOLA / WALK-MAN</b></td>
+            <td><span data-lang="zh">高減速比諧波傳動、68–132 kg。</span><span data-lang="en">High-ratio harmonic drives, 68–132 kg.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">9:1 行星 QDD</mark>,摩擦不確定性小、可反驅;整機 16 kg,一人可操作。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">9:1 planetary QDD</mark> with small friction uncertainty and backdrivability; 16 kg total, one-person operation.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">商用平台</span><span data-lang="en">Commercial platforms</span></b></td>
+            <td><span data-lang="zh">底層封閉、參數未知。</span><span data-lang="en">Closed low level, unknown parameters.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">幾乎全部自製</mark>(致動器、驅動板、IMU、EtherCAT 從站、電源板)→ CAD 慣量與逐顆摩擦量測可得。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Almost everything in-house</mark> (actuators, drivers, IMU, EtherCAT clients, power board) → CAD inertia and per-actuator friction measurements are available.</span></td>
+          </tr>
+          <tr>
+            <td><b>RMA / Li et al. 2024 / [48,66]</b></td>
+            <td><span data-lang="zh">歷史編碼、teacher-student、motor strength / PD gain 隨機化。</span><span data-lang="en">History encoders, teacher-student, motor-strength / PD-gain randomization.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">只吃當下狀態的 MLP</mark> + 只隨機化可辨識參數的<mark class="m-method" data-t="METHOD/IDEA">精準 DR</mark>。</span><span data-lang="en">A <mark class="m-method" data-t="METHOD/IDEA">memoryless MLP</mark> + <mark class="m-method" data-t="METHOD/IDEA">accurate DR</mark> randomizing only identifiable parameters.</span></td>
+          </tr>
+          <tr>
+            <td><b>HECTOR / MIT / H1 / Cassie</b></td>
+            <td><span data-lang="zh">腿只有 5 DoF(無踝 roll)。</span><span data-lang="en">5-DoF legs (no ankle roll).</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">每腿 6 DoF 含 FAA</mark>,關節範圍對齊人體,靜態姿勢更穩、可望單腳平衡。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">6 DoF per leg including FAA</mark>, joint ranges matched to humans; more stable static poses and potential one-foot balance.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意作者對彈簧連桿設計的批評是「對 learning <b>不友善</b>」,不是「性能差」——Cassie 的彈簧本來是為了儲能與吸收衝擊。本文其實是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">用被動柔順性換可模擬性</mark>,並賭在 16 kg 這個尺度下,剛性傳動 + 鋁合金 + 鋼齒輪也扛得住跌倒衝擊。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">Note the critique of spring-linkage designs is that they are <b>unfriendly to learning</b>, not that they perform badly—Cassie&#39;s springs exist to store energy and absorb impacts. The paper effectively <mark class="m-assume" data-t="ASSUMPTION/CLAIM">trades passive compliance for simulatability</mark>, betting that at 16 kg a rigid drivetrain + aluminum + steel gears can survive falls anyway. <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把「中型」讀成「玩具級、比較好控制」。作者論證剛好相反:質量與慣量小 → 對擾動更敏感;腿短 → 抗擾要踏更多步;步頻高 → 致動器與策略都要更快更準。<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「小」換來的是實驗便利,不是控制簡單</mark>。</span>
+        <span data-lang="en">Don&#39;t read "mid-scale" as "toy-like and easier to control." The authors argue the opposite: low mass and inertia → more sensitive to disturbances; short legs → more recovery steps; high step frequency → faster, more precise actuation and policy. <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"Small" buys experimental convenience, not easier control</mark>.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">對多數實驗室,「買不起、修不起、不敢摔」比「演算法不夠好」更限制人形研究的迭代速度。把一台可動態行走的人形降到 1 萬美元、16 kg、一人可操作,等於直接放大可做的實驗次數。</span>
+        <span data-lang="en">For most labs, "can&#39;t afford it, can&#39;t repair it, don&#39;t dare drop it" limits humanoid iteration speed more than algorithms do. Bringing a dynamically walking humanoid down to USD 10K, 16 kg and one-person operation directly multiplies the number of experiments one can run.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">反事實對照</span><span data-lang="en">counterfactual</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">成本口徑</span><span data-lang="en">cost basis</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method: Design for Learning</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">整體管線:從機構到策略</span><span data-lang="en">Pipeline: from mechanism to policy</span></h3>
+        <div class="flow">
+          <div class="step"><div class="ph mono">STEP 1</div><b><span data-lang="zh">四原則設計</span><span data-lang="en">Four design principles</span></b><small><span data-lang="zh">好模擬、耐用便宜、實驗友善、擬人</span><span data-lang="en">sim-friendly, reliable/cheap, experiment-friendly, anthropomorphic</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 2</div><b><span data-lang="zh">致動器即關節</span><span data-lang="en">Actuator-as-joint</span></b><small><span data-lang="zh">armature + 摩擦 + 無延遲力矩源</span><span data-lang="en">armature + friction + delay-free torque source</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 3</div><b><span data-lang="zh">參數辨識</span><span data-lang="en">Identification</span></b><small><span data-lang="zh">CAD 取轉子慣量;逐顆量摩擦</span><span data-lang="en">rotor inertia from CAD; friction per actuator</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 4</div><b><span data-lang="zh">精準 DR</span><span data-lang="en">Accurate DR</span></b><small><span data-lang="zh">本體窄、環境寬</span><span data-lang="en">narrow on robot, wide on environment</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 5</div><b><span data-lang="zh">極簡 PPO</span><span data-lang="en">Minimal PPO</span></b><small><span data-lang="zh">MLP、無歷史,Isaac Lab</span><span data-lang="en">MLP, no history, Isaac Lab</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 6</div><b><span data-lang="zh">零樣本部署</span><span data-lang="en">Zero-shot deploy</span></b><small><span data-lang="zh">50 Hz 策略 · 25 kHz PD</span><span data-lang="en">50 Hz policy · 25 kHz PD</span></small></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">系統總覽</span><span data-lang="en">System overview</span></h3>
+        <figure class="fig"><img src="figs/Liao2024/fig2_design.png" alt="Figure 2 design overview">
+          <figcaption data-lang="zh"><b>Fig.2</b> (a) 軀幹內:電腦、電源管理板、IMU、兩顆電池(在保護艙內)、外部介面;「Perception (not used yet)」說明<b>全文實驗都沒用視覺</b>。(b) 關節命名由上而下 HR → HAA → HFE → KFE → FFE → FAA,身高 0.85 m、大腿 0.22 m、小腿 0.18 m,腳板約 \(0.16\times0.06\) m。(c) 重點:<b>KFE 與 FFE 的致動器(\(\theta_{\text{KFE}},\theta_{\text{FFE}}\))都裝在大腿上端</b>,再經連桿帶動膝與踝——這是「致動器即關節」原則唯一的例外,好處是把質量移向髖部、降低小腿慣量。<span class="add">[導讀補充] 最後一點為導讀者推論</span></figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> (a) In the torso: computer, power manager, IMU, two batteries (in a protected bay), external interfaces; "Perception (not used yet)" signals that <b>no vision is used in any experiment</b>. (b) Joint naming top-down HR → HAA → HFE → KFE → FFE → FAA; height 0.85 m, thigh 0.22 m, calf 0.18 m, foot about \(0.16\times0.06\) m. (c) Key detail: <b>the KFE and FFE actuators (\(\theta_{\text{KFE}},\theta_{\text{FFE}}\)) both sit at the top of the thigh</b> and drive knee and ankle through linkages—the single exception to "actuator = joint," which moves mass toward the hip and lowers shank inertia. <span class="add">[guide note] the last point is the guide author&#39;s inference</span></figcaption></figure>
+        <p data-lang="zh">16 kg 全電動;軀幹 + 兩條 6-DoF 腿;兩隻 4-DoF 手臂已設計但<mark class="m-limit" data-t="LIMITATION/FUTURE">為專注行走而未安裝</mark>。為因應各關節不同扭矩需求,做了 <b>4 型致動器</b>(以馬達尺寸命名:5013、8513、8518、10413)與 2 型馬達驅動板。<mark class="m-method" data-t="METHOD/IDEA">自製 EtherCAT 從站</mark>(馬達驅動板與 IMU)與機上 PC 的 EtherCAT master 以 1–4 kHz 通訊;軀幹內另有路由器提供有線/無線除錯,並保留 USB/乙太網給深度相機、光達等外接感測器。</p>
+        <p data-lang="en">16 kg, fully electric; a torso + two 6-DoF legs; two 4-DoF arms were designed but <mark class="m-limit" data-t="LIMITATION/FUTURE">left off to focus on locomotion</mark>. To meet different joint torque needs there are <b>4 actuator types</b> (named by motor size: 5013, 8513, 8518, 10413) and 2 motor-driver types. <mark class="m-method" data-t="METHOD/IDEA">Custom EtherCAT clients</mark> (motor drivers and IMU) talk to the onboard PC&#39;s EtherCAT master at 1–4 kHz; a router in the torso gives wired/wireless debugging, and USB/Ethernet are left for external sensors such as depth cameras or lidar.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">自製 QDD 致動器</span><span data-lang="en">The custom QDD actuator</span></h3>
+        <figure class="fig"><img src="figs/Liao2024/fig3_actuator.png" alt="Figure 3 actuator">
+          <figcaption data-lang="zh"><b>Fig.3</b> (a) 爆炸圖:馬達驅動板直接整合在背蓋、定子/轉子、行星減速器、交叉滾子軸承、中空軸。(b) 剖面:轉子帶 sun gear,planet 軸即輸出銷,外圈為 ring gear;編碼器靶在底部。注意兩件事:<b>交叉滾子軸承</b>能承受彎矩,所以致動器可以直接當關節、不需額外軸承座;<b>中空軸</b>讓電源與訊號線從關節中心穿過,減少線材隨關節擺動而磨損。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> (a) Exploded view: motor driver integrated on the back cover, stator/rotor, planetary reducer, crossed-roller bearing, hollow shaft. (b) Cross-section: the rotor drives the sun gear, the planet axes are the output pins, the ring gear is outermost; the encoder target sits at the bottom. Notice two things: the <b>crossed-roller bearing</b> carries moment loads, so the actuator can be the joint without extra bearing housings; the <b>hollow shaft</b> routes power and signal cables through the joint axis, cutting wear from joint motion.</figcaption></figure>
+        <p data-lang="zh">四型致動器<mark class="m-method" data-t="METHOD/IDEA">全部 9:1 行星減速</mark>,峰值扭矩 9.7–81.1 Nm,質量 251–1011 g(完整規格見 04 RESULTS)。若是 ring 固定、sun 輸入、carrier 輸出的單級行星,減速比為</p>
+        <p data-lang="en">All four types use a <mark class="m-method" data-t="METHOD/IDEA">9:1 planetary reduction</mark>, with peak torque 9.7–81.1 Nm and mass 251–1011 g (full specs in 04 RESULTS). For a single-stage planetary with fixed ring, sun input and carrier output, the ratio is</p>
+        <div class="eq">$$N = 1+\frac{Z_{\text{ring}}}{Z_{\text{sun}}}=9 \;\;\Rightarrow\;\; Z_{\text{ring}} = 8\,Z_{\text{sun}}$$</div>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted)"><span class="add">[導讀補充]</span> 論文只給 9:1 與剖面圖,齒數與是否單級未明說;此式為標準行星齒輪關係。QDD 的關鍵是 \(N\) 夠小:輸出端看到的轉子慣量與摩擦都隨 \(N\) 放大(見下),\(N\) 小才「透明」、可反驅,並可用電流估扭矩。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted)"><span class="add">[guide note]</span> The paper gives only 9:1 and the cross-section; tooth counts and stage count are not stated—this is the standard planetary relation. The point of QDD is a small \(N\): rotor inertia and friction seen at the output scale with \(N\) (below), so small \(N\) means "transparent," backdrivable actuation whose torque can be estimated from current.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">原則 1 · Simulation-Friendly(全文主角)</span><span data-lang="en">Principle 1 · Simulation-Friendly (the protagonist)</span></h3>
+        <p data-lang="zh"><b>動機。</b>主流 RL 用大規模平行模擬器;<mark class="m-problem" data-t="PROBLEM/GAP">帶單向彈簧的連桿、閉鏈傳動要解額外方程,模擬貴</mark>,而且致動器/傳動造成的限幅、雜訊、摩擦、轉子與連桿慣量<mark class="m-problem" data-t="PROBLEM/GAP">很難精準又有效率地在關節空間建模與隨機化</mark>;要模擬通訊延遲、致動器動力學、不準的執行頻率,又得更小的時間步。</p>
+        <p data-lang="en"><b>Motivation.</b> Mainstream RL uses massively parallel simulators; <mark class="m-problem" data-t="PROBLEM/GAP">linkages with unilateral springs and closed-chain transmissions require extra equations and are expensive to simulate</mark>, and the limits, noise, friction, rotor and linkage inertia they induce are <mark class="m-problem" data-t="PROBLEM/GAP">hard to model and randomize accurately and efficiently in joint space</mark>; simulating communication delay, actuator dynamics and inaccurate execution rates needs even smaller time steps.</p>
+        <p data-lang="zh"><b>做法。</b><mark class="m-method" data-t="METHOD/IDEA">移除所有彈簧/阻尼與閉鏈</mark>,用最簡單的致動器-關節傳動;每顆致動器帶交叉滾子軸承、直接當關節。於是模擬器裡每個關節就是一般的剛體關節動力學,只多一項 armature:</p>
+        <p data-lang="en"><b>Approach.</b> <mark class="m-method" data-t="METHOD/IDEA">Remove all springs/dampers and closed chains</mark>, use the simplest actuator-to-joint transmission; each actuator has a crossed-roller bearing and is mounted directly as the joint. Every joint in the simulator is then ordinary rigid-body joint dynamics plus one armature term:</p>
+        <div class="eq">$$\big(M(q)+\operatorname{diag}(I_{a})\big)\,\ddot q + h(q,\dot q) = \tau - \tau_f(\dot q) + J_c(q)^{\!\top}\lambda,\qquad I_{a,j}=N^2 J_{r,j}$$</div>
+        <p data-lang="zh" style="font-size:14px">\(M\):關節空間質量矩陣;\(h\):科氏/離心 + 重力;\(\tau_f\):關節摩擦;\(J_c^\top\lambda\):接觸力。論文的原話是「把轉子慣量以 armature 加到關節質量矩陣的對角線」;\(I_a=N^2J_r\) 是反射慣量的標準關係 <span class="add">[導讀補充]</span>。以 10413 為例:\(81\times1.5\times10^{-4}\approx1.2\times10^{-2}\,\mathrm{kg\,m^2}\)。</p>
+        <p data-lang="en" style="font-size:14px">\(M\): joint-space mass matrix; \(h\): Coriolis/centrifugal + gravity; \(\tau_f\): joint friction; \(J_c^\top\lambda\): contact forces. The paper says rotor inertia is "added as armature to the diagonal of the joint mass matrix"; \(I_a=N^2J_r\) is the standard reflected-inertia relation <span class="add">[guide note]</span>. For the 10413: \(81\times1.5\times10^{-4}\approx1.2\times10^{-2}\,\mathrm{kg\,m^2}\).</p>
+        <p data-lang="zh"><b>唯一例外:KFE–FFE 連桿。</b>為了在踝關節給大扭矩,FFE 用連桿傳動,造成 KFE 與 FFE 之間<mark class="m-method" data-t="METHOD/IDEA">「耦合但線性」的關節-致動器映射</mark>,因此仍可把致動器當成關節來模擬:</p>
+        <p data-lang="en"><b>The one exception: the KFE–FFE linkage.</b> To deliver large ankle torque, FFE uses a linkage, producing a <mark class="m-method" data-t="METHOD/IDEA">"coupled but linear" joint–actuator mapping</mark> between KFE and FFE, so the actuators can still be simulated as joints:</p>
+        <div class="eq">$$\begin{bmatrix} q_{\text{KFE}}\\ q_{\text{FFE}}\end{bmatrix} = A\begin{bmatrix} \theta_{\text{KFE}}\\ \theta_{\text{FFE}}\end{bmatrix},\qquad \begin{bmatrix} \tau^{\theta}_{\text{KFE}}\\ \tau^{\theta}_{\text{FFE}}\end{bmatrix} = A^{\!\top}\begin{bmatrix} \tau_{\text{KFE}}\\ \tau_{\text{FFE}}\end{bmatrix},\qquad A=\text{const}$$</div>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted)"><span class="add">[導讀補充]</span> 論文沒給 \(A\) 的數值;力矩關係由虛功原理 \(\tau_\theta^\top\dot\theta=\tau_q^\top\dot q\) 推得。平行四邊形連桿通常讓 \(A\) 為元素 \(0,\pm1\) 的三角矩陣。值得注意:耦合時轉子慣量在關節座標下是 \(A^{-\top}\operatorname{diag}(N^2J_r)A^{-1}\),<b>會有非對角項</b>——只加對角 armature 是一個小近似(見 CRITIQUE Q5)。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted)"><span class="add">[guide note]</span> The paper gives no numbers for \(A\); the torque relation follows from virtual work \(\tau_\theta^\top\dot\theta=\tau_q^\top\dot q\). Parallelogram linkages usually make \(A\) triangular with entries in \(0,\pm1\). Notably, under coupling the rotor inertia in joint coordinates is \(A^{-\top}\operatorname{diag}(N^2J_r)A^{-1}\), <b>which has off-diagonal terms</b>—adding only diagonal armature is a small approximation (see CRITIQUE Q5).</p>
+        <p data-lang="zh"><b>致動與通訊。</b>行星 QDD 只帶來<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「微小、易於在關節空間建模」的摩擦不確定性</mark>;EtherCAT 讓最大延遲只有 0.5–2 ms(4 kHz 時 0.5 ms、1 kHz 時 2 ms),馬達力矩控制頻寬 1 kHz,因此<mark class="m-method" data-t="METHOD/IDEA">致動器可在模擬中當成無延遲的力矩源</mark>;訓練時「只模擬關節、不模擬致動器動力學」。結果:在 NVIDIA A4500 上<mark class="m-result" data-t="RESULT/EVIDENCE">每秒超過 90,000 個模擬步</mark>。</p>
+        <p data-lang="en"><b>Actuation and communication.</b> The planetary QDD introduces only <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"minor friction uncertainties that are easy to model in joint space"</mark>; EtherCAT keeps max latency at 0.5–2 ms (0.5 ms at 4 kHz, 2 ms at 1 kHz), and motor torque-control bandwidth is 1 kHz, so <mark class="m-method" data-t="METHOD/IDEA">the actuator is simulated as a delay-free torque source</mark>; training "simulates joints only, not actuator dynamics." Result: <mark class="m-result" data-t="RESULT/EVIDENCE">over 90,000 simulation steps per second</mark> on an NVIDIA A4500.</p>
+        <p data-lang="zh">策略輸出目標關節角,由馬達驅動板上的 PD 轉成力矩(增益論文未給):</p>
+        <p data-lang="en">The policy outputs target joint angles, converted to torque by a PD loop on the motor driver (gains not reported):</p>
+        <div class="eq">$$\tau = \operatorname{clip}\!\Big(K_p\,(q^d-q) - K_d\,\dot q,\; -\tau_{\text{peak}},\; \tau_{\text{peak}}\Big)$$</div>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted)"><span class="add">[導讀補充]</span> clip 是導讀者補上的常見實作(Isaac Lab 的理想 PD 致動器會截斷到 effort limit)。論文在 Limitations 自承:<mark class="m-limit" data-t="LIMITATION/FUTURE">接近飽和時的扭矩-電流非線性、馬達的工作區域(torque-speed region)與過熱保護都還沒進模擬</mark>——也就是說,模擬中的致動器上限大致是一個「方盒子」。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted)"><span class="add">[guide note]</span> The clip is the guide author&#39;s addition, a common implementation (Isaac Lab&#39;s ideal PD actuator clamps to the effort limit). The paper&#39;s Limitations admit that <mark class="m-limit" data-t="LIMITATION/FUTURE">torque–current nonlinearity near saturation, the motor&#39;s region of work (torque–speed envelope) and thermal protection are not yet simulated</mark>—i.e., the simulated actuator limit is roughly a "box."</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">原則 2 · Reliable &amp; Low-Cost</span><span data-lang="en">Principle 2 · Reliable &amp; Low-Cost</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.85">
+          <li data-lang="zh"><b>材料</b>:主結構 7075 / 6061 鋁合金,齒輪箱與連桿用 SKD11 鋼——<mark class="m-method" data-t="METHOD/IDEA">刻意不走 3D 列印/低成本材料路線</mark>(與 K-Scale、Pandora 等對比),以輕量結構扛重摔。</li>
+          <li data-lang="en"><b>Materials</b>: 7075 / 6061 aluminum for main parts, SKD11 steel for gearbox and linkage—<mark class="m-method" data-t="METHOD/IDEA">deliberately not the 3D-printed/low-cost-material route</mark> (contrast K-Scale, Pandora), so a light structure survives heavy impacts.</li>
+          <li data-lang="zh"><b>線材</b>:接觸環境造成的摩擦與振動會撕裂線材;三型大致動器的<mark class="m-method" data-t="METHOD/IDEA">中空軸讓線從關節軸心穿過</mark>,把關節運動造成的拉扯降到最低。</li>
+          <li data-lang="en"><b>Cables</b>: friction and vibration from environmental contact tear cables; the <mark class="m-method" data-t="METHOD/IDEA">hollow shafts of the three larger actuators route cables through the joint axis</mark>, minimizing tearing from joint motion.</li>
+          <li data-lang="zh"><b>免額外力感測</b>:QDD 讓關節扭矩可由電流估計,不需應變規;再用廣義動量觀測器(generalized momentum observer)估每隻腳的接觸力旋量,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不需接觸/力感測器</mark>。</li>
+          <li data-lang="en"><b>No extra force sensors</b>: QDD lets joint torque be estimated from current without strain gauges; a generalized momentum observer can then estimate each foot&#39;s contact wrench <mark class="m-assume" data-t="ASSUMPTION/CLAIM">without contact or F/T sensors</mark>.</li>
+          <li data-lang="zh"><b>便宜感測器</b>:學習對硬體不準較 robust,因此用手機等級 IMU ICM42688(晶片 &lt; 1 美元)取代前作約 1000 美元的 IMU。唯二非自製件是電腦(i7-1255U)與電池(DJI TB50)。</li>
+          <li data-lang="en"><b>Cheap sensors</b>: learning tolerates hardware inaccuracy, so a phone-grade ICM42688 IMU (chip under 1 USD) replaces the roughly 1,000 USD IMUs of prior work. The only non-custom parts are the computer (i7-1255U) and batteries (DJI TB50).</li>
+        </ul>
+        <p data-lang="zh" style="margin-top:12px">電流估扭矩與動量觀測器的標準形式如下 <span class="add">[導讀補充:論文只引用 Haddadin et al. 2008,未寫公式,也未實驗展示]</span>:</p>
+        <p data-lang="en" style="margin-top:12px">Standard forms of current-based torque estimation and the momentum observer <span class="add">[guide note: the paper only cites Haddadin et al. 2008, gives no formula, and shows no experiment]</span>:</p>
+        <div class="eq">$$\hat\tau_j = N\,k_t\,i_{q,j},\qquad r(t)=K_O\Big(p(t)-p(0)-\int_0^t\big(\hat\tau+C^{\top}\!(q,\dot q)\,\dot q-G(q)+r\big)\,ds\Big),\quad p=M(q)\,\dot q$$</div>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted)">殘差 \(r\) 以一階濾波收斂到外力矩 \(\tau_{\text{ext}}=J_c^\top F_c\),再反解腳底力 \(F_c\)。它需要一個可信的扭矩估計 \(\hat\tau\)——這正是低減速比 QDD 的價值。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted)">The residual \(r\) converges (first-order filter) to the external torque \(\tau_{\text{ext}}=J_c^\top F_c\), from which the foot force \(F_c\) is solved. It needs a trustworthy torque estimate \(\hat\tau\)—exactly what a low-ratio QDD provides.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">原則 3 & 4 · Experiment-Friendly、Anthropomorphic</span><span data-lang="en">Principles 3 &amp; 4 · Experiment-Friendly, Anthropomorphic</span></h3>
+        <p data-lang="zh"><b>實驗友善。</b>傳統全尺寸人形常比同身高的人還重,搬運需 2–3 人加吊架;約 300 Nm 的致動器更有傷人風險。本機<mark class="m-result" data-t="RESULT/EVIDENCE">16 kg,室內只需一名操作員,戶外加一名攝影</mark>——指令、收資料、拍片、跌倒後重置都一人完成,全文實驗皆如此。</p>
+        <p data-lang="en"><b>Experiment-friendly.</b> Traditional full-scale humanoids often outweigh a person of the same height, needing 2–3 people plus a gantry; ~300 Nm actuators risk injuries. This robot is <mark class="m-result" data-t="RESULT/EVIDENCE">16 kg: one operator indoors, plus an optional camera person outdoors</mark>—commanding, logging, filming and resetting after falls; every experiment in the paper used this setup.</p>
+        <p data-lang="zh"><b>擬人。</b>每腿 6 DoF 複製人腿常見建模;相較 5-DoF 平台多了<mark class="m-method" data-t="METHOD/IDEA">踝關節 roll(FAA)</mark>,改善困難靜態姿勢的穩定、可望單腳平衡;各關節極限對齊人體,既保護硬體又保留模仿人類動作的範圍(Table 5):</p>
+        <p data-lang="en"><b>Anthropomorphic.</b> 6 DoF per leg replicates common human-leg modeling; compared with 5-DoF platforms it adds <mark class="m-method" data-t="METHOD/IDEA">ankle roll (FAA)</mark>, improving stability in hard static poses and potentially enabling one-foot balance; joint limits are aligned to human limits, protecting hardware while keeping enough range to imitate human motion (Table 5):</p>
+        <div class="tscroll">
+        <table class="tight">
+          <tr><th><span data-lang="zh">關節(右腿)</span><span data-lang="en">Joint (right leg)</span></th><th>HR</th><th>HAA</th><th>HFE</th><th>KFE</th><th>FFE</th><th>FAA</th></tr>
+          <tr><td><span data-lang="zh">人體 (deg)</span><span data-lang="en">Human (deg)</span></td><td>\([-50,40]\)</td><td>\([-40,20]\)</td><td>\([-110,30]\)</td><td>\([0,150]\)</td><td>\([-20,50]\)</td><td>\([-30,18]\)</td></tr>
+          <tr><td><span data-lang="zh">本機 (deg)</span><span data-lang="en">Robot (deg)</span></td><td>\([-35,35]\)</td><td>\([-35,35]\)</td><td>\([-100,30]\)</td><td>\([0,120]\)</td><td>\([-30,70]\)</td><td>\([-30,30]\)</td></tr>
+          <tr><td><span data-lang="zh">覆蓋率</span><span data-lang="en">Coverage</span></td><td>77.8%</td><td>91.6%</td><td>92.9%</td><td>80.0%</td><td class="win">100%</td><td class="win">100%</td></tr>
+        </table>
+        </div>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted)">覆蓋率 = 兩區間交集長度 / 人體區間長度。髖旋轉(HR)與膝屈曲(KFE)覆蓋最低,深蹲、盤腿類動作會受限。<span class="add">[導讀補充]</span></p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted)">Coverage = overlap length / human range length. Hip rotation (HR) and knee flexion (KFE) have the lowest coverage, limiting deep squats or cross-legged poses. <span class="add">[guide note]</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">極簡組成的 RL 控制器</span><span data-lang="en">The minimally composed RL controller</span></h3>
+        <p data-lang="zh">任務寫成 MDP,用 PPO 在 Isaac Lab 訓練。所謂「極簡」有三層:<mark class="m-method" data-t="METHOD/IDEA">(1) actor 只吃當下狀態</mark>——沒有短/長歷史、沒有 teacher-student 估環境參數;<mark class="m-method" data-t="METHOD/IDEA">(2) 沒有預定相位訊號或參考動作</mark>,減少人為偏置;<mark class="m-method" data-t="METHOD/IDEA">(3) 最基本的 MLP</mark>。觀測與動作:</p>
+        <p data-lang="en">Tasks are MDPs solved with PPO in Isaac Lab. "Minimal" has three layers: <mark class="m-method" data-t="METHOD/IDEA">(1) the actor sees only the immediate state</mark>—no short/long history, no teacher-student estimation of environment parameters; <mark class="m-method" data-t="METHOD/IDEA">(2) no predefined phase signal or reference motion</mark>, reducing human bias; <mark class="m-method" data-t="METHOD/IDEA">(3) the most basic MLP</mark>. Observation and action:</p>
+        <div class="eq">$$o_t=\big[\;\omega_t,\;g_t,\;q_t,\;\dot q_t,\;\hat v_t,\;v^c_{x},\;v^c_{y},\;\omega^c_{z},\;a_{t-1}\;\big],\qquad a_t = q^d_t\in\mathbb{R}^{12},\qquad a_t=\pi_\phi(o_t)$$</div>
+        <p data-lang="zh" style="font-size:14px">\(\omega_t\):基座角速度;\(g_t\):投影重力向量;\(q_t,\dot q_t\):關節角/角速度;\(\hat v_t\):由<mark class="m-assume" data-t="ASSUMPTION/CLAIM">狀態估測器(Flayols et al. 2017)</mark>給的基座線速度;\(v^c,\omega^c_z\):速度指令;\(a_{t-1}\):上一步動作。依此算來維度為 \(3+3+12+12+3+3+12=48\) <span class="add">[導讀補充:論文未寫維度]</span>。</p>
+        <p data-lang="en" style="font-size:14px">\(\omega_t\): base angular velocity; \(g_t\): projected gravity; \(q_t,\dot q_t\): joint positions/velocities; \(\hat v_t\): base linear velocity from a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">state estimator (Flayols et al. 2017)</mark>; \(v^c,\omega^c_z\): velocity commands; \(a_{t-1}\): previous action. That gives \(3+3+12+12+3+3+12=48\) dims <span class="add">[guide note: dimension not stated in the paper]</span>.</p>
+        <table>
+          <tr><th><span data-lang="zh">元件</span><span data-lang="en">Component</span></th><th><span data-lang="zh">設定</span><span data-lang="en">Setting</span></th></tr>
+          <tr><td>Actor / Critic</td><td><span data-lang="zh">MLP,hidden \([512,256,128]\),ELU</span><span data-lang="en">MLP, hidden \([512,256,128]\), ELU</span></td></tr>
+          <tr><td><span data-lang="zh">演算法 / 模擬器</span><span data-lang="en">Algorithm / simulator</span></td><td>PPO · Isaac Lab</td></tr>
+          <tr><td><span data-lang="zh">執行頻率</span><span data-lang="en">Rates</span></td><td><span data-lang="zh">策略 50 Hz · 狀態估測 1 kHz · PD 25 kHz</span><span data-lang="en">policy 50 Hz · state estimator 1 kHz · PD 25 kHz</span></td></tr>
+          <tr><td><span data-lang="zh">未報告</span><span data-lang="en">Not reported</span></td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">reward 權重、PD 增益、並行環境數、訓練時間、PPO 超參數、critic 是否用特權資訊</mark></span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">reward weights, PD gains, number of envs, training time, PPO hyperparameters, whether the critic gets privileged info</mark></span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:10px"><b>Reward 結構(附錄 A)。</b>論文只描述各項、未給函數形式與權重,以下以權重 \(w_i\) 標示結構:</p>
+        <p data-lang="en" style="margin-top:10px"><b>Reward structure (Appendix A).</b> The paper describes the terms but gives neither functional forms nor weights; below, weights \(w_i\) mark the structure:</p>
+        <div class="eq">$$r_t=\underbrace{r_{\text{track}}\big(\|v^c_{xy}-v_{xy}\|_2,\;|\omega^c_z-\omega_z|\big)}_{\text{tracking}}\;\underbrace{-\,w_1 v_z^2-w_2\|\omega_{xy}\|^2-w_3\|\tau\|^2-w_4\|a_t-a_{t-1}\|^2}_{\text{smoothing}}\;+\;r_{\text{reg}}\;+\;r_{\text{gait}}$$</div>
+        <ul style="margin:0;padding-left:18px;line-height:1.8;font-size:14px">
+          <li data-lang="zh"><b>tracking</b>:前進/側向線速度與 yaw 角速度的誤差(論文說「以 L2 norm 實作」)。</li>
+          <li data-lang="en"><b>tracking</b>: errors of sagittal/lateral linear velocity and yaw rate (the paper says "implemented as the L2 norm").</li>
+          <li data-lang="zh"><b>smoothing</b>:懲罰垂直速度、roll/pitch 角速度、關節扭矩、action rate。</li>
+          <li data-lang="en"><b>smoothing</b>: penalize vertical velocity, roll/pitch rates, joint torques, action rate.</li>
+          <li data-lang="zh"><b>\(r_{\text{reg}}\)</b>:髖、膝關節貼近標稱姿勢;軀幹直立;致動器軟限位,超過即罰——防止危險動作。</li>
+          <li data-lang="en"><b>\(r_{\text{reg}}\)</b>: keep hip and knee near nominal; upright torso; soft actuator limits penalized beyond threshold—preventing dangerous motions.</li>
+          <li data-lang="zh"><b>\(r_{\text{gait}}\)</b>:鼓勵腳在空中停留較久(feet air time)、不打滑、<mark class="m-method" data-t="METHOD/IDEA">接觸力不超過門檻以保護齒輪箱</mark>。</li>
+          <li data-lang="en"><b>\(r_{\text{gait}}\)</b>: encourage longer feet air time, no slipping, and <mark class="m-method" data-t="METHOD/IDEA">contact forces under a threshold to protect gearboxes</mark>.</li>
+          <li data-lang="zh"><b>跳躍任務</b>:把垂直速度懲罰換成獎勵 \(r_{v_z}=\mathrm{ReLU}(v_z)\);取消髖 pitch 與膝的正則化(需要大的向上加速度);單腳跳另罰「懸空腳觸地」。其餘與行走相同。</li>
+          <li data-lang="en"><b>Hopping</b>: replace the vertical-velocity penalty by a reward \(r_{v_z}=\mathrm{ReLU}(v_z)\); drop hip-pitch and knee regularization (large upward acceleration is needed); single-leg hopping also penalizes the in-air leg touching the ground. Everything else matches walking.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">設計賦能的精準 Domain Randomization(Table 6)</span><span data-lang="en">Design-enabled accurate domain randomization (Table 6)</span></h3>
+        <p data-lang="zh">作者把不確定性分兩類:<mark class="m-method" data-t="METHOD/IDEA">機器人本體物理性質</mark>(如各連桿質量)與<mark class="m-method" data-t="METHOD/IDEA">執行任務時的接觸</mark>。前者因為自製、有 CAD 與逐顆摩擦實驗,可以給<b>小而準</b>的範圍;後者無法辨識,就給<b>寬</b>範圍(地面摩擦、恢復係數、外力推擾)。至於無法歸入這兩類的「motor strength 比例」或 PD gains,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">刻意不隨機化</mark>。</p>
+        <p data-lang="en">Uncertainty is split into two kinds: <mark class="m-method" data-t="METHOD/IDEA">the robot&#39;s physical properties</mark> (e.g., link masses) and <mark class="m-method" data-t="METHOD/IDEA">contact during the task</mark>. The former, thanks to in-house CAD and per-actuator friction tests, gets <b>small, accurate</b> ranges; the latter is unidentifiable and gets <b>wide</b> ranges (ground friction, restitution, external pushes). Parameters fitting neither—a generic "motor strength" ratio or PD gains—are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">deliberately not randomized</mark>.</p>
+        <div class="tscroll">
+        <table class="tight">
+          <tr><th><span data-lang="zh">動力學項</span><span data-lang="en">Dynamics term</span></th><th><span data-lang="zh">範圍</span><span data-lang="en">Range</span></th><th><span data-lang="zh">類別 / 解讀</span><span data-lang="en">Category / reading</span></th></tr>
+          <tr><td><span data-lang="zh">地面摩擦</span><span data-lang="en">Ground friction</span></td><td>\([0.2,\,1.25]\)</td><td><span data-lang="zh">環境 · <b>寬</b></span><span data-lang="en">environment · <b>wide</b></span></td></tr>
+          <tr><td><span data-lang="zh">恢復係數</span><span data-lang="en">Restitution</span></td><td>\([0,\,0.1]\)</td><td><span data-lang="zh">環境</span><span data-lang="en">environment</span></td></tr>
+          <tr><td><span data-lang="zh">基座質量</span><span data-lang="en">Base mass</span></td><td>\([-1.0,\,+1.0]\)</td><td><span data-lang="zh">本體(推測為加減 kg,約 \(\pm6\%\))<span class="add">[導讀補充]</span></span><span data-lang="en">robot (presumably added kg, about \(\pm6\%\)) <span class="add">[guide note]</span></span></td></tr>
+          <tr><td><span data-lang="zh">連桿質量</span><span data-lang="en">Linkage mass</span></td><td>\(\times[0.9,\,1.1]\)</td><td><span data-lang="zh">本體 · 窄</span><span data-lang="en">robot · narrow</span></td></tr>
+          <tr><td><span data-lang="zh">關節摩擦</span><span data-lang="en">Joint friction</span></td><td>\(\times[0.9,\,1.1]\)</td><td><span data-lang="zh">本體 · 繞實測值</span><span data-lang="en">robot · around measured values</span></td></tr>
+          <tr><td>Joint armature</td><td class="win">\(\times[1.0,\,1.05]\)</td><td><span data-lang="zh">本體 · <b>最窄且只往上</b>:CAD 轉子慣量被當成下界 <span class="add">[導讀補充]</span></span><span data-lang="en">robot · <b>narrowest and one-sided</b>: CAD rotor inertia treated as a lower bound <span class="add">[guide note]</span></span></td></tr>
+          <tr><td><span data-lang="zh">預設關節角偏移</span><span data-lang="en">Default joint pos offset</span></td><td>\([-0.05,\,0.05]\)</td><td><span data-lang="zh">本體(校正誤差)</span><span data-lang="en">robot (calibration error)</span></td></tr>
+        </table>
+        <table class="tight">
+          <tr><th><span data-lang="zh">雜訊項</span><span data-lang="en">Noise term</span></th><th>Lin Vel</th><th>Ang Vel</th><th>IMU</th><th>Hip Pos</th><th>KFE Pos</th><th>FFE Pos</th><th>FAA Pos</th><th>Joint Vel</th></tr>
+          <tr><td>\(\pm\)</td><td>0.1</td><td>0.2</td><td>0.05</td><td>0.03</td><td>0.05</td><td class="bad">0.08</td><td>0.03</td><td>1.5</td></tr>
+        </table>
+        </div>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted)">共 6 個動力學參數 + 8 個雜訊項(再加文中提到的外力推擾)。<b>沒有</b>延遲隨機化、<b>沒有</b> motor strength、<b>沒有</b> PD gain 隨機化。關節位置雜訊以 FFE 最大(0.08)、KFE 次之(0.05),恰好是走連桿傳動的兩個關節,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">可能反映連桿背隙/柔性</mark>。<span class="add">[導讀補充]</span></p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted)">6 dynamics parameters + 8 noise terms in total (plus the external pushes mentioned in the text). <b>No</b> latency randomization, <b>no</b> motor strength, <b>no</b> PD-gain randomization. Joint-position noise is largest for FFE (0.08) and next for KFE (0.05)—exactly the two linkage-driven joints, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">possibly reflecting linkage backlash/compliance</mark>. <span class="add">[guide note]</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(N\)</td><td><span data-lang="zh">減速比,本文全部 \(N=9\)。</span><span data-lang="en">Gear ratio; \(N=9\) for every actuator here.</span></td></tr>
+          <tr><td>\(J_r,\ I_a\)</td><td><span data-lang="zh">轉子慣量;反射到關節的 armature \(I_a=N^2J_r\)。</span><span data-lang="en">Rotor inertia; armature reflected to the joint \(I_a=N^2J_r\).</span></td></tr>
+          <tr><td>\(\theta,\ q\)</td><td><span data-lang="zh">致動器角度 vs 關節角度;除 KFE/FFE 外兩者相同。</span><span data-lang="en">Actuator angle vs joint angle; identical except for KFE/FFE.</span></td></tr>
+          <tr><td>\(A\)</td><td><span data-lang="zh">KFE–FFE 連桿的常數線性映射矩陣。</span><span data-lang="en">Constant linear mapping matrix of the KFE–FFE linkage.</span></td></tr>
+          <tr><td>\(q^d,\ K_p,\ K_d\)</td><td><span data-lang="zh">策略輸出的目標關節角;驅動板 PD 增益。</span><span data-lang="en">Target joint angles output by the policy; driver PD gains.</span></td></tr>
+          <tr><td>\(g_t,\ \hat v_t\)</td><td><span data-lang="zh">投影重力(機身姿態);估測的基座線速度。</span><span data-lang="en">Projected gravity (body attitude); estimated base linear velocity.</span></td></tr>
+          <tr><td>\(\tau_{\text{peak}},\ \omega_{\max},\ P_{\max}\)</td><td><span data-lang="zh">峰值扭矩、48 V 下最高轉速、最大功率(Table 2)。</span><span data-lang="en">Peak torque, max speed at 48 V, max power (Table 2).</span></td></tr>
+          <tr><td>\(r(t)\)</td><td><span data-lang="zh">動量觀測器殘差,收斂到外力造成的關節力矩。</span><span data-lang="en">Momentum-observer residual, converging to the joint torque caused by external forces.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">把模擬器「算不準、算不快」的東西從機器人身上<b>拿掉</b>,把剩下的參數<b>量準</b>,只在真正量不到的地方(地面)<b>大膽隨機化</b>——然後用最笨的策略證明這樣就夠了。</span>
+        <span data-lang="en"><b>Remove</b> from the robot whatever the simulator can&#39;t compute accurately or fast, <b>measure</b> what remains, <b>randomize boldly</b> only where you truly can&#39;t measure (the ground)—then prove it suffices with the dumbest possible policy.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何不學 actuator network?</span><span data-lang="en">Why no actuator network?</span></span>
+        <span data-lang="zh">Hwangbo et al. 2019(論文引用 [51])因 ANYmal 的串聯彈性致動器難以解析建模,改用神經網路從實機資料學致動器模型。本文的路線相反:<mark class="m-method" data-t="METHOD/IDEA">把致動器設計得夠「透明」</mark>(低減速比 + 1 kHz 力矩頻寬 + 低延遲),讓理想力矩源就夠用。代價是:飽和區與熱的行為沒有被捕捉。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">Hwangbo et al. 2019 (cited as [51]) learned an actuator model from hardware data because ANYmal&#39;s series-elastic actuators resist analytic modeling. This paper goes the other way: <mark class="m-method" data-t="METHOD/IDEA">design the actuator to be "transparent" enough</mark> (low ratio + 1 kHz torque bandwidth + low latency) that an ideal torque source suffices. The price: saturation and thermal behavior are not captured. <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意:「無歷史」不等於「無記憶」</span><span data-lang="en">Note: "no history" is not "no memory"</span></div>
+        <span data-lang="zh">策略本身確實只吃當下觀測,但 \(\hat v_t\) 來自 1 kHz 的<mark class="m-assume" data-t="ASSUMPTION/CLAIM">model-based 狀態估測器</mark>——它是一個融合 IMU 與運動學的濾波器,本身就帶有時間積分;\(a_{t-1}\) 也是一步記憶。「minimal」應讀成「策略網路極簡」,不是整個系統沒有狀態。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">The policy indeed sees only the current observation, but \(\hat v_t\) comes from a 1 kHz <mark class="m-assume" data-t="ASSUMPTION/CLAIM">model-based state estimator</mark>—a filter fusing IMU and kinematics that integrates over time; \(a_{t-1}\) is one step of memory too. Read "minimal" as "a minimal policy network," not "a stateless system." <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">兩種不確定性,兩種處理</span><span data-lang="en">Two uncertainties, two treatments</span></span>
+        <span data-lang="zh"><b>可辨識 → 量測 + 窄擾動</b>(質量、摩擦、armature、零點)。<b>不可辨識 → 寬擾動</b>(地面摩擦、恢復係數、推擾)。<b>沒有物理對應 → 不擾動</b>(motor strength、PD gains)。這三分法本身就是本文最可遷移的方法論。</span>
+        <span data-lang="en"><b>Identifiable → measure + perturb narrowly</b> (masses, friction, armature, zero offsets). <b>Unidentifiable → perturb widely</b> (ground friction, restitution, pushes). <b>No physical counterpart → don&#39;t perturb</b> (motor strength, PD gains). This three-way split is the paper&#39;s most transferable methodology.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">硬體規格:四型致動器(Table 2)</span><span data-lang="en">Hardware specs: four actuator types (Table 2)</span></h3>
+        <div class="tscroll">
+        <table class="tight">
+          <tr><th><span data-lang="zh">項目</span><span data-lang="en">Item</span></th><th>5013</th><th>8513</th><th>8518</th><th>10413</th></tr>
+          <tr><td><span data-lang="zh">每台數量</span><span data-lang="en">Qty per robot</span></td><td>2</td><td>6</td><td>2</td><td>2</td></tr>
+          <tr><td><span data-lang="zh">質量 (g)</span><span data-lang="en">Mass (g)</span></td><td>251</td><td>756</td><td>856</td><td>1011</td></tr>
+          <tr><td><span data-lang="zh">減速比</span><span data-lang="en">Gear ratio</span></td><td>9:1</td><td>9:1</td><td>9:1</td><td>9:1</td></tr>
+          <tr><td><span data-lang="zh">中空軸</span><span data-lang="en">Hollow shaft</span></td><td class="bad">✗</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+          <tr><td><span data-lang="zh">直徑 \(\times\) 厚 (mm)</span><span data-lang="en">Diameter \(\times\) thickness (mm)</span></td><td>\(54.6\times53\)</td><td>\(104\times50\)</td><td>\(104\times55\)</td><td>\(123\times50\)</td></tr>
+          <tr><td><span data-lang="zh">峰值扭矩 (Nm)</span><span data-lang="en">Peak torque (Nm)</span></td><td>9.7</td><td>45.3</td><td>62.6</td><td class="win">81.1</td></tr>
+          <tr><td><span data-lang="zh">持續扭矩 (Nm)</span><span data-lang="en">Sustained torque (Nm)</span></td><td>4.59</td><td>18.9</td><td>26.1</td><td>34.2</td></tr>
+          <tr><td><span data-lang="zh">48 V 最高轉速 (rad/s)</span><span data-lang="en">Max speed at 48 V (rad/s)</span></td><td>83.7</td><td>40.7</td><td>29</td><td>27.9</td></tr>
+          <tr><td><span data-lang="zh">最大功率 (W)</span><span data-lang="en">Max power (W)</span></td><td>220</td><td>570</td><td>730</td><td>890</td></tr>
+          <tr><td><span data-lang="zh">轉子慣量 \((\mathrm{kg\,m^2})\)</span><span data-lang="en">Rotor inertia \((\mathrm{kg\,m^2})\)</span></td><td>\(6.1\times10^{-6}\)</td><td>\(6.9\times10^{-5}\)</td><td>\(9.4\times10^{-5}\)</td><td>\(1.5\times10^{-4}\)</td></tr>
+          <tr class="derived"><td><span data-lang="zh">扭矩密度 (Nm/kg) <span class="add">[導讀補充]</span></span><span data-lang="en">Torque density (Nm/kg) <span class="add">[guide note]</span></span></td><td>38.6</td><td>59.9</td><td>73.1</td><td>80.2</td></tr>
+          <tr class="derived"><td><span data-lang="zh">反射慣量 \(N^2J_r\) \((\mathrm{kg\,m^2})\) <span class="add">[導讀補充]</span></span><span data-lang="en">Reflected inertia \(N^2J_r\) \((\mathrm{kg\,m^2})\) <span class="add">[guide note]</span></span></td><td>\(4.9\times10^{-4}\)</td><td>\(5.6\times10^{-3}\)</td><td>\(7.6\times10^{-3}\)</td><td>\(1.2\times10^{-2}\)</td></tr>
+          <tr class="derived"><td><span data-lang="zh">持續 / 峰值 <span class="add">[導讀補充]</span></span><span data-lang="en">Sustained / peak <span class="add">[guide note]</span></span></td><td>0.47</td><td>0.42</td><td>0.42</td><td>0.42</td></tr>
+          <tr class="derived"><td><span data-lang="zh">\(\tau_{\text{peak}}\,\omega_{\max}\) vs \(P_{\max}\) <span class="add">[導讀補充]</span></span><span data-lang="en">\(\tau_{\text{peak}}\,\omega_{\max}\) vs \(P_{\max}\) <span class="add">[guide note]</span></span></td><td>812 vs 220 W</td><td>1844 vs 570 W</td><td>1815 vs 730 W</td><td>2263 vs 890 W</td></tr>
+        </table>
+        </div>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted)">Table 1 中本機 HFE / KFE 最大扭矩(62.6 / 81.1 Nm)恰等於 8518 / 10413 的峰值,推測兩者分別用於 HFE 與 KFE;其餘 8513 與 5013 的關節分配論文未明說。<b>最後一列很重要</b>:峰值扭矩與最高轉速的乘積是最大功率的 2.5–3.7 倍,代表<mark class="m-limit" data-t="LIMITATION/FUTURE">「同時大扭矩又高速」在實機上做不到</mark>;若模擬只用扭矩方盒限制,就會在這個角落高估致動器能力。<span class="add">[導讀補充]</span></p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted)">In Table 1 the robot&#39;s max HFE / KFE torques (62.6 / 81.1 Nm) equal the peaks of the 8518 / 10413, suggesting those actuators drive HFE and KFE; the joint assignment of the 8513 and 5013 is not stated. <b>The last row matters</b>: peak torque times max speed is 2.5–3.7 times the max power, so <mark class="m-limit" data-t="LIMITATION/FUTURE">"high torque at high speed" is physically unavailable</mark>; a simulator with only a box torque limit overestimates the actuator in exactly that corner. <span class="add">[guide note]</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">成本拆解(Table 3,小量生產)</span><span data-lang="en">Cost breakdown (Table 3, small-quantity production)</span></h3>
+        <div class="tscroll">
+        <table class="tight">
+          <tr><th><span data-lang="zh">模組</span><span data-lang="en">Module</span></th><th>5013</th><th>8513</th><th>8518</th><th>10413</th><th>IMU</th><th>Torso</th><th>Leg</th><th>PC</th><th>Battery</th><th><span data-lang="zh">總計</span><span data-lang="en">Total</span></th></tr>
+          <tr><td><span data-lang="zh">單價 (USD)</span><span data-lang="en">Unit (USD)</span></td><td>422</td><td>570</td><td>639</td><td>676</td><td>50</td><td>410</td><td>974</td><td>347</td><td>153</td><td class="win">9,955</td></tr>
+          <tr><td><span data-lang="zh">數量</span><span data-lang="en">Qty</span></td><td>2</td><td>6</td><td>2</td><td>2</td><td>1</td><td>1</td><td>2</td><td>1</td><td>2</td><td>–</td></tr>
+        </table>
+        </div>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted)">加總核對:致動器 \(844+3420+1278+1352=6894\) 美元,<b>約佔 69%</b>;結構(軀幹+兩腿)2,358;PC+電池 653;IMU 50,合計正好 9,955。<span class="add">[導讀補充]</span> 論文強調這些數字<mark class="m-assume" data-t="ASSUMPTION/CLAIM">量產後會再下降</mark>;另估兩隻 4-DoF 手臂再加約 5K,含手臂的「non-profit cost」約 15K。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted)">Sanity check: actuators \(844+3420+1278+1352=6894\) USD, <b>about 69%</b>; structure (torso + two legs) 2,358; PC + batteries 653; IMU 50—summing exactly to 9,955. <span class="add">[guide note]</span> The paper stresses these <mark class="m-assume" data-t="ASSUMPTION/CLAIM">will decrease with scaled production</mark>; two 4-DoF arms add an estimated 5K, for a "non-profit cost" of about 15K with arms.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">行走實驗總覽(§5.1)</span><span data-lang="en">Locomotion experiments at a glance (§5.1)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">實驗</span><span data-lang="en">Experiment</span></th><th><span data-lang="zh">展示了什麼</span><span data-lang="en">What is shown</span></th><th><span data-lang="zh">證據型態</span><span data-lang="en">Evidence type</span></th></tr>
+          <tr><td><span data-lang="zh">全向行走</span><span data-lang="en">Omnidirectional walking</span></td><td><span data-lang="zh">前進、後退、原地轉、側走;室內與野外(Fig.4)</span><span data-lang="en">forward, backward, turn in place, sideways; lab and outdoors (Fig.4)</span></td><td><span data-lang="zh">影像序列</span><span data-lang="en">image sequences</span></td></tr>
+          <tr><td><span data-lang="zh">多種地形</span><span data-lang="en">Various terrains</span></td><td><span data-lang="zh">草地、磚道、未鋪面步道、柏油、橋、混凝土、跑道、磁磚,以及樓梯與斜坡</span><span data-lang="en">grass, brick sidewalk, unpaved trail, asphalt, bridge, concrete, running track, tiles, plus stairs and inclines</span></td><td><span data-lang="zh">影像序列</span><span data-lang="en">image sequences</span></td></tr>
+          <tr><td><span data-lang="zh">陡峭碎石小徑</span><span data-lang="en">Steep unpaved trail</span></td><td><span data-lang="zh">平均坡度約 \(20^\circ\),超過踝關節上仰範圍 → <mark class="m-result" data-t="RESULT/EVIDENCE">策略學會倒退上坡</mark>以保持軀幹直立;踩到鬆石能恢復;<mark class="m-result" data-t="RESULT/EVIDENCE">連續 5 分鐘以上、96 m、爬升 10.5 m</mark></span><span data-lang="en">average incline about 20 degrees, beyond the ankle&#39;s upward pitch range → <mark class="m-result" data-t="RESULT/EVIDENCE">the robot goes up backward</mark> to keep the torso upright; recovers from loose rocks; <mark class="m-result" data-t="RESULT/EVIDENCE">over 5 minutes non-stop, 96 m, 10.5 m elevation gain</mark></span></td><td><span data-lang="zh">影片 + 距離</span><span data-lang="en">video + distance</span></td></tr>
+          <tr><td><span data-lang="zh">不平人行道 / 石階</span><span data-lang="en">Uneven pathway / rocky stairs</span></td><td><span data-lang="zh">石板間有縫與高低差、會打滑;自製石階<b>每階 4 cm(腿長 10%)</b>,可上下並在階上轉彎</span><span data-lang="en">slab gaps and height changes, slippery; custom rocky stairs <b>4 cm per step (10% of leg length)</b>, traversed with turns on them</span></td><td><span data-lang="zh">影像序列</span><span data-lang="en">image sequences</span></td></tr>
+          <tr><td><span data-lang="zh">抗擾</span><span data-lang="en">Disturbance rejection</span></td><td><span data-lang="zh">原地踏步時從後/側方踢機身各部位,<mark class="m-result" data-t="RESULT/EVIDENCE">幾步內恢復</mark>;室內與草地皆可(Fig.6)</span><span data-lang="en">kicks to various body parts while stepping in place; <mark class="m-result" data-t="RESULT/EVIDENCE">recovery within a few steps</mark>, indoors and on grass (Fig.6)</span></td><td><span data-lang="zh">影像序列(<mark class="m-limit" data-t="LIMITATION/FUTURE">未量力道</mark>)</span><span data-lang="en">image sequences (<mark class="m-limit" data-t="LIMITATION/FUTURE">force not measured</mark>)</span></td></tr>
+          <tr><td><span data-lang="zh">長距離</span><span data-lang="en">Long distance</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">柏克萊校園 10 分鐘、364 m</mark>,含上下坡(Fig.7 GPS 與高度)</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">10 minutes, 364 m on the Berkeley campus</mark> with ups and downs (Fig.7 GPS and elevation)</span></td><td><span data-lang="zh">GPS 軌跡</span><span data-lang="en">GPS track</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted)">換算平均速度:校園約 \(364/600\approx0.61\) m/s;碎石坡至多約 \(96/300\approx0.32\) m/s。<span class="add">[導讀補充]</span></p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted)">Implied average speeds: campus about \(364/600\approx0.61\) m/s; trail at most about \(96/300\approx0.32\) m/s. <span class="add">[guide note]</span></p>
+        <figure class="fig"><img src="figs/Liao2024/fig5_terrains.jpg" alt="Figure 5 terrains">
+          <figcaption data-lang="zh"><b>Fig.5</b> (a) 八種日常地形;(b) 陡峭碎石小徑——仔細看連續畫面,機器人是<b>背對坡頂倒退</b>往上走;(c) 有縫隙與高低差的石板人行道;(d) 4 cm 石階上轉彎。這些是全文最強的「實用性」證據,但都是<b>質性的</b>快照,沒有成功率或嘗試次數。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> (a) Eight everyday terrains; (b) the steep gravel trail—look closely and the robot climbs <b>backward, facing away from the top</b>; (c) a slab pathway with gaps and height changes; (d) turning on 4 cm rocky stairs. This is the paper&#39;s strongest "practicality" evidence, but it is all <b>qualitative</b> snapshots with no success rates or trial counts.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Sim-to-real 的量化證據(§5.2,Fig.8)</span><span data-lang="en">Quantitative sim-to-real evidence (§5.2, Fig.8)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方向</span><span data-lang="en">Direction</span></th><th><span data-lang="zh">模擬(Isaac Lab)</span><span data-lang="en">Sim (Isaac Lab)</span></th><th><span data-lang="zh">實機</span><span data-lang="en">Hardware</span></th><th><span data-lang="zh">相對增加 <span class="add">[導讀補充]</span></span><span data-lang="en">Relative increase <span class="add">[guide note]</span></span></th></tr>
+          <tr><td><span data-lang="zh">前進 \(v_x\) 平均追蹤誤差</span><span data-lang="en">Sagittal \(v_x\) mean tracking error</span></td><td>0.051 m/s</td><td class="win">0.058 m/s</td><td>+14%</td></tr>
+          <tr><td><span data-lang="zh">側向 \(v_y\) 平均追蹤誤差</span><span data-lang="en">Lateral \(v_y\) mean tracking error</span></td><td>0.086 m/s</td><td>0.116 m/s</td><td class="bad">+34%</td></tr>
+        </table>
+        <figure class="fig"><img src="figs/Liao2024/fig8_sim2real.png" alt="Figure 8 sim-to-real">
+          <figcaption data-lang="zh"><b>Fig.8</b> 操作員隨機給速度指令(藍,約 \(\pm0.5\) m/s 的階躍),比較實機(黃)與 Isaac Lab(紫)的基座線速度,淡色為原始值、深色為移動平均。要注意:(1) 兩者平滑後的曲線幾乎重疊,右側放大框標示「相似的穩態誤差」;(2) 實機在階躍指令後<b>反應略慢</b>(例如 \(t\approx15\) s、\(t\approx35\) s 附近);(3) \(v_y\) 原始值在模擬與實機都劇烈振盪——這是步態本身的側向擺動,因此「追蹤誤差」同時混入了擺動幅度。</figcaption>
+          <figcaption data-lang="en"><b>Fig.8</b> Operator-issued random velocity commands (blue, steps of about \(\pm0.5\) m/s) vs base linear velocity on hardware (yellow) and in Isaac Lab (purple); light = raw, dark = moving average. Notice: (1) the smoothed curves nearly overlap, and the zoom box is labeled "similar steady-state error"; (2) the hardware <b>responds slightly later</b> after step commands (e.g., near \(t\approx15\) s and \(t\approx35\) s); (3) raw \(v_y\) oscillates strongly in both sim and real—that is the gait&#39;s lateral sway, so "tracking error" also absorbs sway amplitude.</figcaption></figure>
+        <p data-lang="zh">作者的推論鏈:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">策略沒有歷史、無法線上辨識或適應</mark> → 若實機誤差與模擬接近,<mark class="m-result" data-t="RESULT/EVIDENCE">表示訓練用的模擬 MDP 與實機 MDP 差距確實很小</mark> → 證實硬體設計造成了窄 gap。數據來自一段 60 秒的試驗(文中寫側向實機 0.1156,圖上標 0.116)。</p>
+        <p data-lang="en">The authors&#39; chain of inference: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the policy has no history and cannot identify or adapt online</mark> → if hardware error is close to sim, <mark class="m-result" data-t="RESULT/EVIDENCE">the gap between the training MDP and the real MDP is indeed small</mark> → confirming that the hardware design yields a narrow gap. The data come from one 60-second trial (text: lateral hardware 0.1156; figure: 0.116).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">高動態:雙腳與單腳跳(Fig.9)</span><span data-lang="en">Highly dynamic: double- and single-leg hopping (Fig.9)</span></h3>
+        <figure class="fig"><img src="figs/Liao2024/fig9_hopping.jpg" alt="Figure 9 hopping">
+          <figcaption data-lang="zh"><b>Fig.9</b> (a) 雙腳全向跳、可加減速;(b) 單腳跳。紫框 = 騰空相。注意 (b) 畫面左側有人手持<b>安全繩</b>:論文承認單腳跳需要安全繩與「少量平衡協助」,但說繩子大多是鬆的。跳躍策略與行走<b>同一套設定、只改 reward</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.9</b> (a) Omnidirectional double-leg hops with acceleration/deceleration; (b) single-leg hops. Purple frames = flight phase. Note the person holding a <b>safety rope</b> at the left of (b): the paper admits single-leg hopping used a rope and "minor balance assistance," though the rope is "mostly slack." The hopping policy uses <b>the same setup as walking, with only the rewards changed</b>.</figcaption></figure>
+        <p data-lang="zh">作者把「極簡控制器做得出有騰空相的跳躍」當作<mark class="m-assume" data-t="ASSUMPTION/CLAIM">硬體 sim-to-real gap 小的第二個證據</mark>:高動態動作最容易暴露致動器模型誤差。</p>
+        <p data-lang="en">The authors treat "a minimal controller can hop with flight phases" as <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the second piece of evidence for a small hardware sim-to-real gap</mark>: highly dynamic motion is where actuator-model errors show up first.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">硬體可靠度(§5.3,Table 4)</span><span data-lang="en">Hardware reliability (§5.3, Table 4)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">地面</span><span data-lang="en">Surface</span></th><th><span data-lang="zh">石磚路</span><span data-lang="en">Stone brick road</span></th><th><span data-lang="zh">草地</span><span data-lang="en">Grassland</span></th><th><span data-lang="zh">跑道</span><span data-lang="en">Running track</span></th><th><span data-lang="zh">未鋪面路</span><span data-lang="en">Unpaved road</span></th><th><span data-lang="zh">合計</span><span data-lang="en">Total</span></th></tr>
+          <tr><td><span data-lang="zh">跌倒次數</span><span data-lang="en">Falls</span></td><td>6</td><td>14</td><td>3</td><td>15</td><td class="win">38</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px">這 38 次是<b>整個專案測試與除錯期間</b>的戶外跌倒(不是上述實驗)。<mark class="m-result" data-t="RESULT/EVIDENCE">除兩次螺絲與膠鬆脫外,硬體本身沒有損壞</mark>;多數情況 3–5 秒內就能重置並恢復策略。</p>
+        <p data-lang="en" style="font-size:14px">These 38 are outdoor falls <b>during testing and debugging across the project</b> (not the experiments above). <mark class="m-result" data-t="RESULT/EVIDENCE">Apart from two failures from loose screws and glue, the hardware itself was undamaged</mark>; most of the time the robot was reset and the policy resumed within 3–5 seconds.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">實驗證明了什麼、沒證明什麼</span><span data-lang="en">What the experiments do and don&#39;t prove</span></span>
+          <p data-lang="zh" style="margin-top:6px"><b>有證明</b>:這台硬體 + 極簡 PPO 能零樣本做出可靠的戶外全向行走、抗擾與跳躍,且在一個速度追蹤指標上模擬與實機接近;機構夠耐摔。<b>沒證明</b>:窄 gap 的<mark class="m-limit" data-t="LIMITATION/FUTURE">「原因」是硬體設計</mark>(沒有任何對照組)、精準 DR 優於寬 DR(沒有消融)、以及在扭矩/功率極限附近模型仍準確。</p>
+          <p data-lang="en" style="margin-top:6px"><b>Proven</b>: this hardware + a minimal PPO policy achieves zero-shot, reliable outdoor omnidirectional walking, disturbance rejection and hopping, with sim and real close on one velocity-tracking metric; the mechanism survives falls. <b>Not proven</b>: that the hardware design is <mark class="m-limit" data-t="LIMITATION/FUTURE">the cause</mark> of the narrow gap (no control group at all), that accurate DR beats wide DR (no ablation), or that the model stays accurate near torque/power limits.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">16 kg、1 萬美元、一個人、一個 MLP:走 364 m、爬碎石坡、被踢不倒、單腳跳,而且前進速度誤差在模擬與實機只差 <b>0.007 m/s</b>。</span>
+        <span data-lang="en">16 kg, USD 10K, one person, one MLP: 364 m of walking, a gravel slope, kick recovery, single-leg hops—and sagittal velocity error differs by only <b>0.007 m/s</b> between sim and hardware.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">要記住的數字</span><span data-lang="en">Numbers to remember</span></span>
+        <table style="font-size:12.5px">
+          <tr><td><span data-lang="zh">最大延遲</span><span data-lang="en">Max latency</span></td><td>0.5–2 ms</td></tr>
+          <tr><td><span data-lang="zh">力矩頻寬</span><span data-lang="en">Torque bandwidth</span></td><td>1 kHz</td></tr>
+          <tr><td><span data-lang="zh">模擬速度</span><span data-lang="en">Sim throughput</span></td><td>&gt; 90k steps/s</td></tr>
+          <tr><td><span data-lang="zh">策略 / PD 頻率</span><span data-lang="en">Policy / PD rate</span></td><td>50 Hz / 25 kHz</td></tr>
+          <tr><td><span data-lang="zh">追蹤誤差 \(v_x\)</span><span data-lang="en">Tracking error \(v_x\)</span></td><td>0.051 → 0.058</td></tr>
+          <tr><td><span data-lang="zh">追蹤誤差 \(v_y\)</span><span data-lang="en">Tracking error \(v_y\)</span></td><td>0.086 → 0.116</td></tr>
+          <tr><td><span data-lang="zh">跌倒 / 損壞</span><span data-lang="en">Falls / damage</span></td><td><span data-lang="zh">38 / 0(+2 次鬆脫)</span><span data-lang="en">38 / 0 (+2 loosenings)</span></td></tr>
+        </table>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">最高速度、能耗/續航、馬達溫度、各地形成功率、推擾力道</mark>都沒有報告;石階只有 4 cm;指令速度在 Fig.8 只到約 0.5 m/s。</span>
+        <span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">Top speed, energy/battery life, motor temperature, per-terrain success rates and push magnitudes</mark> are not reported; stairs are only 4 cm; commanded speed in Fig.8 only reaches about 0.5 m/s.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">指標夠嗎?</span><span data-lang="en">metric enough?</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">致動器極限</span><span data-lang="en">actuator limits</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">「learning-friendly hardware」到底被怎麼驗證?</span><span data-lang="en">How is "learning-friendly hardware" actually validated?</span></h3>
+        <p data-lang="zh">論文對「學習友善」的定義其實是三件可檢驗的事:<b>(i) 模擬便宜</b>(90k steps/s)、<b>(ii) 模擬準</b>(極簡策略的 sim/real 指標接近)、<b>(iii) 實驗便宜</b>(輕、耐摔、一人操作、1 萬美元)。(i) 與 (iii) 有直接數據;(ii) 是全文核心,但證據是<mark class="m-limit" data-t="LIMITATION/FUTURE">單一 60 秒試驗的平均速度誤差 + 質性影片</mark>,且<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有反事實對照</mark>:沒有拿同一套極簡策略去跑另一台機器人、沒有在本機上「加回寬 DR / 拿掉 armature 與摩擦辨識」做消融。因此「是硬體設計讓 gap 變窄」是合理的工程判斷,而非被實驗隔離出來的因果結論。<span class="add">[導讀補充]</span></p>
+        <p data-lang="en">The paper&#39;s "learning-friendly" really means three checkable things: <b>(i) cheap simulation</b> (90k steps/s), <b>(ii) accurate simulation</b> (a minimal policy&#39;s sim/real metrics are close), <b>(iii) cheap experiments</b> (light, fall-tolerant, one operator, USD 10K). (i) and (iii) have direct data; (ii) is the paper&#39;s core, yet its evidence is <mark class="m-limit" data-t="LIMITATION/FUTURE">one 60-second trial&#39;s mean velocity error + qualitative video</mark>, with <mark class="m-limit" data-t="LIMITATION/FUTURE">no counterfactual</mark>: the same minimal policy is never run on another robot, and there is no ablation on this robot (adding back wide DR, removing armature/friction identification). So "the hardware design narrows the gap" is a sound engineering judgment, not a causal conclusion isolated by experiment. <span class="add">[guide note]</span></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>Sim-to-real 指標太單薄</b>:只比平均速度追蹤誤差,沒有關節軌跡、扭矩、接觸時序、能耗在模擬與實機的分布比較;側向誤差其實<mark class="m-limit" data-t="LIMITATION/FUTURE">增加了 34%</mark>,而且誤差混入了步態擺動。<b>單次</b>試驗、無變異數、無多條指令序列。</li>
+          <li data-lang="en"><b>A thin sim-to-real metric</b>: only mean velocity-tracking error—no distributional comparison of joint trajectories, torques, contact timing or energy between sim and real; lateral error actually <mark class="m-limit" data-t="LIMITATION/FUTURE">rises 34%</mark>, and the error mixes in gait sway. A <b>single</b> trial, no variance, no multiple command sequences.</li>
+          <li data-lang="zh"><b>致動器模型是理想化的</b>:沒有 torque-speed 包絡、沒有熱模型、沒有飽和非線性(作者自承)。由 Table 2 可算出 \(\tau_{\text{peak}}\omega_{\max}\) 是 \(P_{\max}\) 的 2.5–3.7 倍——<mark class="m-limit" data-t="LIMITATION/FUTURE">跳躍與 \(20^\circ\) 爬坡正是最可能撞到這個角落的任務</mark>,但論文沒有任何電流或溫度數據。</li>
+          <li data-lang="en"><b>An idealized actuator model</b>: no torque–speed envelope, no thermal model, no saturation nonlinearity (admitted). From Table 2, \(\tau_{\text{peak}}\omega_{\max}\) is 2.5–3.7 times \(P_{\max}\)—<mark class="m-limit" data-t="LIMITATION/FUTURE">hopping and the 20-degree climb are exactly the tasks most likely to hit that corner</mark>, yet no current or temperature data are shown.</li>
+          <li data-lang="zh"><b>「極簡」有隱藏的元件</b>:基座線速度來自 model-based 狀態估測器,它在滑地、軟地上的漂移會直接進入策略;論文沒有分析估測誤差。另外 critic 的輸入、reward 權重、PD 增益都未公開,<mark class="m-limit" data-t="LIMITATION/FUTURE">「minimal baseline」目前難以被他人精確複現</mark>。</li>
+          <li data-lang="en"><b>"Minimal" has hidden components</b>: base linear velocity comes from a model-based estimator whose drift on slippery or soft ground feeds straight into the policy; estimator error is not analyzed. Also the critic&#39;s inputs, reward weights and PD gains are not disclosed, so <mark class="m-limit" data-t="LIMITATION/FUTURE">the "minimal baseline" is hard for others to reproduce exactly</mark>.</li>
+          <li data-lang="zh"><b>成本口徑</b>:9,955 美元是小量生產的零件/加工成本(作者稱「non-profit cost」),<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不含研發、組裝人力、失敗迭代、治具與設計檔取得</mark>;拿它跟 G1 的 16K、H1 的 90K 零售價並列,是 BOM 對售價,而且本機不含手臂。對一個沒有設計檔與加工鏈的實驗室,實際門檻遠高於 1 萬美元。</li>
+          <li data-lang="en"><b>Cost basis</b>: USD 9,955 is small-batch parts/machining cost (the authors&#39; "non-profit cost"), <mark class="m-assume" data-t="ASSUMPTION/CLAIM">excluding R&amp;D, assembly labor, failed iterations, fixtures and access to design files</mark>; listing it beside G1&#39;s 16K and H1&#39;s 90K retail prices compares BOM against sale price, and this robot has no arms. For a lab without the design files and machining supply chain, the real barrier is far above 10K.</li>
+          <li data-lang="zh"><b>比較表的公平性</b>:Table 1 把 16 kg 無臂機與含臂機並列;扭矩/重量看起來的優勢,加上手臂後縮小(導讀自算膝扭矩指標由 1.29 降到 0.94)。表格也只列靜態規格,沒有任何兩台機器人在同一任務上的對比。</li>
+          <li data-lang="en"><b>Fairness of the comparison table</b>: Table 1 lists a 16 kg armless robot beside armed ones; the apparent torque-to-weight advantage shrinks once arms are added (the guide&#39;s knee index drops from 1.29 to 0.94). The table also lists only static specs—no two robots are compared on the same task.</li>
+          <li data-lang="zh"><b>穩健性證據偏質性</b>:踢擊沒有量化力道或衝量;地形沒有成功率與嘗試次數;石階僅 4 cm;單腳跳有安全繩與「少量協助」。另外,96 m 爬升 10.5 m 換算全程平均坡度約 \(6^\circ\),<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「平均 \(20^\circ\)」可能指最陡路段而非全程</mark>。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>Robustness evidence is mostly qualitative</b>: kicks have no measured force or impulse; terrains have no success rates or trial counts; stairs are just 4 cm; single-leg hopping used a safety rope and "minor assistance." Also, 10.5 m of gain over 96 m implies about 6 degrees on average, so <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"20 degrees on average" likely refers to the steepest section, not the whole route</mark>. <span class="add">[guide note]</span></li>
+          <li data-lang="zh"><b>可靠度數據的分母不明</b>:38 次跌倒沒有記錄跌落高度、累積運轉時數、齒輪磨耗或背隙變化;而 16 kg 的小尺寸本身就讓跌倒能量遠小於全尺寸——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">耐摔有多少來自設計、多少來自尺度</mark>,難以區分。</li>
+          <li data-lang="en"><b>Reliability data lack a denominator</b>: the 38 falls come with no fall heights, cumulative operating hours, gear wear or backlash growth; and at 16 kg fall energy is far below full scale—<mark class="m-assume" data-t="ASSUMPTION/CLAIM">how much fall tolerance comes from design versus scale</mark> is hard to separate.</li>
+          <li data-lang="zh"><b>宣稱但未展示</b>:動量觀測器估接觸力、單腳平衡、模仿人類動作、手臂——都是設計上「可以」,論文沒有實驗。</li>
+          <li data-lang="en"><b>Claimed but not shown</b>: momentum-observer contact estimation, one-foot balancing, human-motion imitation, arms—all "enabled" by design, none demonstrated.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">和其他人形放在一起看</span><span data-lang="en">Side by side with other humanoids</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">平台</span><span data-lang="en">Platform</span></th><th><span data-lang="zh">設計哲學</span><span data-lang="en">Design philosophy</span></th><th><span data-lang="zh">與本文的差別</span><span data-lang="en">Difference from this paper</span></th></tr>
+          <tr><td><b>Unitree G1</b></td><td><span data-lang="zh">商用 QDD、35 kg、含手臂、16K</span><span data-lang="en">commercial QDD, 35 kg, with arms, 16K</span></td><td><span data-lang="zh">買得到、生態大,但底層參數不透明;本文的論點正是「自製才拿得到 armature 與摩擦」。</span><span data-lang="en">Purchasable with a big ecosystem, but low-level parameters are opaque; this paper&#39;s point is "only in-house hardware gives you armature and friction."</span></td></tr>
+          <tr><td><b>MIT Humanoid</b></td><td><span data-lang="zh">QDD、24 kg、5-DoF 腿,為 model-based 特技(MPC)設計</span><span data-lang="en">QDD, 24 kg, 5-DoF legs, designed for model-based acrobatics (MPC)</span></td><td><span data-lang="zh">同屬 QDD 血統;本文多了踝 roll,並把設計目標從「好建模」改成「好模擬」。<span class="add">[導讀補充]</span></span><span data-lang="en">Same QDD lineage; this paper adds ankle roll and shifts the design target from "easy to model" to "easy to simulate." <span class="add">[guide note]</span></span></td></tr>
+          <tr><td><b>HECTOR</b></td><td><span data-lang="zh">16 kg、5-DoF、開源研究導向</span><span data-lang="en">16 kg, 5-DoF, open research focus</span></td><td><span data-lang="zh">同重量級,但本文 HFE/KFE 峰值扭矩約為其 1.6–1.9 倍。</span><span data-lang="en">Same weight class, but this paper&#39;s HFE/KFE peak torques are about 1.6–1.9 times higher.</span></td></tr>
+          <tr><td><b>Cassie / Digit</b></td><td><span data-lang="zh">彈簧 + 連桿 + 擺線/諧波,約 25 萬美元</span><span data-lang="en">springs + linkages + cycloidal/harmonic, about USD 250K</span></td><td><span data-lang="zh">本文批評的對象:被動柔順性好,但閉鏈與彈簧讓 RL 模擬貴且不準。</span><span data-lang="en">The paper&#39;s foil: great passive compliance, but closed chains and springs make RL simulation costly and inaccurate.</span></td></tr>
+          <tr><td><b>BRUCE</b></td><td><span data-lang="zh">3.3 kg 迷你 QDD,6.5K</span><span data-lang="en">3.3 kg miniature QDD, 6.5K</span></td><td><span data-lang="zh">更便宜更小,但扭矩與地形能力不在同一級。</span><span data-lang="en">Cheaper and smaller, but not in the same torque/terrain class.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>反事實</b>:把同一套「極簡策略 + 窄 DR」搬到 Unitree G1(或在本機加回彈簧)上,會失敗嗎?沒有這個對照,怎麼知道縮小 gap 的是硬體,而不是 Isaac Lab + 這套 reward?</li>
+          <li data-lang="en"><b>Counterfactual</b>: would the same "minimal policy + narrow DR" fail on a Unitree G1 (or on this robot with springs added back)? Without that control, how do we know the hardware—not Isaac Lab plus this reward set—narrows the gap?</li>
+          <li data-lang="zh"><b>指標</b>:一段 60 秒的平均速度誤差足以代表 MDP 差距嗎?同一指令序列在模擬與實機重播後,關節角/扭矩/接觸時序的分布差多少?</li>
+          <li data-lang="en"><b>Metric</b>: is one 60-second mean velocity error enough to represent MDP mismatch? Replaying the same command sequence in sim and real, how far apart are the distributions of joint angles, torques and contact timing?</li>
+          <li data-lang="zh"><b>致動器極限</b>:跳躍與爬坡時,實際電流與 torque-speed 工作點落在哪裡?有沒有撞到方盒模型沒畫出的功率上限或熱降額?</li>
+          <li data-lang="en"><b>Actuator limits</b>: during hopping and climbing, where do actual currents and torque–speed operating points fall? Do they hit power limits or thermal derating that the box model omits?</li>
+          <li data-lang="zh"><b>成本與可複製性</b>:一個外部實驗室要多少錢、多久才做得出一台?不開源硬體的情況下,「研究平台」對社群的意義是什麼?</li>
+          <li data-lang="en"><b>Cost and replicability</b>: how much money and time would an outside lab need to build one? Without open hardware, what does "research platform" mean for the community?</li>
+          <li data-lang="zh"><b>耦合 armature</b>:KFE–FFE 線性耦合下,反射慣量有非對角項;只加對角 armature 的誤差多大?FFE 最大的位置雜訊(0.08)是否就是在補這類未建模效應(背隙/柔性)?</li>
+          <li data-lang="en"><b>Coupled armature</b>: under the linear KFE–FFE coupling, reflected inertia has off-diagonal terms—how large is the error from adding only diagonal armature? Is FFE&#39;s largest position noise (0.08) compensating for exactly such unmodeled effects (backlash/compliance)?</li>
+          <li data-lang="zh"><b>估測器的角色</b>:若把 \(\hat v_t\) 換成雜訊更大的估計或直接拿掉,策略還行嗎?多少穩健性其實來自這個 model-based 估測器?</li>
+          <li data-lang="en"><b>Role of the estimator</b>: if \(\hat v_t\) were noisier or removed, would the policy still work? How much robustness actually comes from this model-based estimator?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把本文讀成「<b>有了好硬體,就不需要 domain randomization 或歷史/適應</b>」。實際上它仍在環境上做<b>寬</b> DR(地面摩擦 0.2–1.25、推擾),並依賴 model-based 狀態估測;它證明的是「在一台好模擬的機器人上,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">本體參數的 DR 可以很窄</mark>」,而不是 sim-to-real 從此免費。</span>
+        <span data-lang="en">Reading this as "<b>with good hardware you don&#39;t need domain randomization or history/adaptation</b>." It still applies <b>wide</b> DR to the environment (ground friction 0.2–1.25, pushes) and relies on model-based state estimation. What it shows is that on an easy-to-simulate robot <mark class="m-assume" data-t="ASSUMPTION/CLAIM">DR over the robot&#39;s own parameters can be narrow</mark>—not that sim-to-real is now free.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">實驗全部在戶外真實地形、由一人操作完成,且附上完整的 DR 範圍表、關節範圍表、成本表、跌倒紀錄——對硬體論文來說資訊揭露相當充分;Limitations 也坦承了扭矩飽和、工作區域與熱保護沒進模擬。</span>
+        <span data-lang="en">All experiments run on real outdoor terrain with a single operator, and the paper discloses the full DR table, joint-range table, cost table and fall log—generous transparency for a hardware paper; the Limitations also admit that torque saturation, region of work and thermal protection are not simulated.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">作者自承的限制</span><span data-lang="en">Author-stated limits</span></span>
+        <span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">沒有手臂</mark>;關節範圍、背隙、重量、機械強度待後續硬體迭代改善;需做飽和附近的扭矩-電流辨識;馬達工作區域與熱保護應納入訓練;未來加 4 或 6 DoF 手臂並挑戰後空翻。</span>
+        <span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">No arms</mark>; range of motion, backlash, weight and strength to improve over hardware iterations; torque–current identification near saturation is needed; motor region of work and thermal protection should be simulated in training; future 4- or 6-DoF arms and backflips.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>把「可模擬性」寫進硬體需求</b>:若你會做機構或挑平台,問「這個彈簧/連桿/傳動在 Isaac Lab / MuJoCo 裡要怎麼表示、要多少時間步、參數量得到嗎?」——答不出來的元件,都是未來的 sim-to-real 負債。</li>
+          <li data-lang="en"><b>Write "simulatability" into hardware requirements</b>: when designing a mechanism or choosing a platform, ask "how is this spring/linkage/transmission represented in Isaac Lab / MuJoCo, what time step does it need, can its parameters be measured?"—any component without an answer is future sim-to-real debt.</li>
+          <li data-lang="zh"><b>DR 三分法可直接借用</b>:可辨識 → 量測 + 窄擾動;不可辨識 → 寬擾動;沒有物理對應的「萬用旋鈕」(motor strength、PD gain)→ 先問能不能換成可辨識的參數。</li>
+          <li data-lang="en"><b>Borrow the DR three-way split</b>: identifiable → measure + perturb narrowly; unidentifiable → perturb widely; physics-free "catch-all knobs" (motor strength, PD gains) → first ask whether they can be replaced by identifiable parameters.</li>
+          <li data-lang="zh"><b>用極簡策略當 sim-to-real 探針</b>:在加入歷史編碼或適應模組之前,先用無記憶策略量出硬體本身的 gap;之後每加一個演算法元件,才知道它真正補了多少。</li>
+          <li data-lang="en"><b>Use a minimal policy as a sim-to-real probe</b>: before adding history encoders or adaptation modules, measure the hardware&#39;s own gap with a memoryless policy; then each added algorithmic component has a clear measure of what it actually fixes.</li>
+          <li data-lang="zh"><b>補上本文缺的實驗</b>是好題目:同策略跨平台對照、窄 vs 寬 DR 消融、torque-speed/熱模型對高動態任務的影響。</li>
+          <li data-lang="en"><b>The paper&#39;s missing experiments</b> are good research topics: same-policy cross-platform controls, narrow vs wide DR ablations, and the effect of torque–speed/thermal models on highly dynamic tasks.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">與相關工作的關係</span><span data-lang="en">Relation to related work</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">工作</span><span data-lang="en">Work</span></th><th><span data-lang="zh">關係</span><span data-lang="en">Relation</span></th></tr>
+          <tr><td><b>Berkeley Humanoid Lite</b><br><small><span data-lang="zh">同實驗室,2025</span><span data-lang="en">same lab, 2025</span></small></td><td><span data-lang="zh"><span class="add">[導讀補充]</span> 直系後續:同樣是「平價研究平台」路線,改走<b>開源、3D 列印結構與減速器、現成馬達</b>,成本再往下壓並補上全身形態;代價是剛性與扭矩密度。本文的鋁/鋼 + 自製 QDD 可視為「高性能版」,Lite 是「可複製版」——也正回應了本文「硬體不開源」的批評。</span><span data-lang="en"><span class="add">[guide note]</span> The direct successor: the same "affordable research platform" line, now <b>open-source with 3D-printed structure and gearboxes and off-the-shelf motors</b>, pushing cost lower and adding a full-body form, at the price of stiffness and torque density. This paper&#39;s aluminum/steel + custom QDD is the "high-performance edition"; Lite is the "replicable edition"—answering the critique that this robot&#39;s hardware is not open.</span></td></tr>
+          <tr><td><b>MIT Humanoid · Mini Cheetah QDD</b><br><small><span data-lang="zh">論文引用 [7,8,9,14,18]</span><span data-lang="en">cited [7,8,9,14,18]</span></small></td><td><span data-lang="zh">QDD 哲學的源頭:低減速比行星 + 大扭矩密度馬達 → 透明、可反驅、能用電流估力。本文沿用此血統(9:1;<span class="add">[導讀補充]</span> Mini Cheetah 為 6:1),但目的從「讓 model-based 控制器(MPC/WBC)好用」轉為「讓模擬器好用」,並把更多致動器直接放在關節上、加了踝 roll。</span><span data-lang="en">The source of the QDD philosophy: low-ratio planetary + torque-dense motors → transparent, backdrivable, current-based force sensing. This paper inherits that lineage (9:1; <span class="add">[guide note]</span> Mini Cheetah is 6:1) but retargets it from "making model-based controllers (MPC/WBC) work" to "making the simulator work," mounting more actuators directly at joints and adding ankle roll.</span></td></tr>
+          <tr><td><b>RMA · DreamWaQ · HIMLoco</b><br><small><span data-lang="zh">RL 足式運動主線</span><span data-lang="en">the RL locomotion line</span></small></td><td><span data-lang="zh">三者都是<b>演算法端的 sim-to-real</b>:從本體感覺歷史推環境/機器人反應的 latent(RMA 的 adaptation module、DreamWaQ 的 context estimator、HIMLoco 的 hybrid internal model)。本文刻意<b>拿掉歷史</b>,主張硬體端把 gap 做小;兩者互補——窄 gap 的機器人正是量測「歷史/適應到底額外貢獻多少」的理想試驗台。<span class="add">[導讀補充]</span></span><span data-lang="en">All three are <b>algorithm-side sim-to-real</b>: inferring a latent of environment/robot response from proprioceptive history (RMA&#39;s adaptation module, DreamWaQ&#39;s context estimator, HIMLoco&#39;s hybrid internal model). This paper deliberately <b>removes history</b>, arguing the hardware makes the gap small. They are complementary—a narrow-gap robot is the ideal testbed for measuring how much history/adaptation adds on top. <span class="add">[guide note]</span></span></td></tr>
+          <tr><td><b>Hwangbo et al. 2019 (actuator net)</b></td><td><span data-lang="zh">對照組:難建模的致動器 → 學一個致動器模型;本文:把致動器設計到理想力矩源就夠。</span><span data-lang="en">The foil: a hard-to-model actuator → learn an actuator model; this paper: design the actuator so an ideal torque source suffices.</span></td></tr>
+          <tr><td><b>Li et al. 2024 · Radosavovic et al. 2024</b><br><small><span data-lang="zh">同校人形 RL</span><span data-lang="en">same-campus humanoid RL</span></small></td><td><span data-lang="zh">分別在 Cassie 用長短期 I/O 歷史、在 Digit 用 transformer;本文是同一群人的「反方向」實驗:換掉硬體、拿掉歷史,看極簡控制器能走多遠。</span><span data-lang="en">Using long/short I/O history on Cassie and a transformer on Digit, respectively; this paper is the same community&#39;s "opposite-direction" experiment: change the hardware, drop the history, and see how far a minimal controller goes.</span></td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What&#39;s worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「硬體設計可以縮小 sim-to-real gap」</span><span data-lang="en">"Hardware design can narrow the sim-to-real gap"</span></td><td><span data-lang="zh">代表性正面案例(致動器即關節、無彈簧、EtherCAT、armature)。</span><span data-lang="en">A flagship positive example (actuator-as-joint, no springs, EtherCAT, armature).</span></td></tr>
+          <tr><td><span data-lang="zh">「過寬的 DR 不必要,應隨機化可辨識參數」</span><span data-lang="en">"Over-wide DR is unnecessary; randomize identifiable parameters"</span></td><td><span data-lang="zh">引 Table 6 與「不隨機化 motor strength / PD gains」的論述。</span><span data-lang="en">Cite Table 6 and the argument against randomizing motor strength / PD gains.</span></td></tr>
+          <tr><td><span data-lang="zh">「無歷史 MLP 也能做戶外人形行走與跳躍」</span><span data-lang="en">"A memoryless MLP can do outdoor humanoid walking and hopping"</span></td><td><span data-lang="zh">引 §4.1 的控制器設定與 §5 的實驗(注意它仍用狀態估測器)。</span><span data-lang="en">Cite the §4.1 controller and §5 experiments (noting it still uses a state estimator).</span></td></tr>
+          <tr><td><span data-lang="zh">「低成本中型人形平台」</span><span data-lang="en">"A low-cost mid-scale humanoid platform"</span></td><td><span data-lang="zh">引 Table 1–3(並說明成本是無臂、小量生產零件成本)。</span><span data-lang="en">Cite Tables 1–3 (stating the cost is armless, small-batch parts cost).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">Berkeley Humanoid 把 sim-to-real 從「訓練技巧」改寫成「<b>機構設計規格</b>」:拿掉模擬器算不準的元件、量準剩下的參數、只在環境上大膽隨機化,就讓一個無記憶 MLP 在 16 kg、1 萬美元的人形上零樣本走遍校園、爬坡、單腳跳。它的工程論證很有說服力,但「是硬體造成窄 gap」仍缺少對照實驗來坐實。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">Berkeley Humanoid rewrites sim-to-real from "a training trick" into "<b>a mechanism-design spec</b>": remove what the simulator can&#39;t compute accurately, measure what remains, randomize boldly only over the environment—and a memoryless MLP walks across campus, climbs a slope and hops on one leg zero-shot on a 16 kg, USD 10K humanoid. The engineering argument is persuasive, but "the hardware causes the narrow gap" still lacks a controlled experiment to nail it down.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀(本庫)</span><span data-lang="en">Further reading (this library)</span></span>
+        <div class="chips" style="margin-top:6px">
+          <a class="chip" href="Kau2019_StanfordDoggo.html">Stanford Doggo (QDD)</a>
+          <a class="chip" href="Kumar2021_RMA.html">RMA</a>
+          <a class="chip" href="Nahrendra2023_DreamWaQ.html">DreamWaQ</a>
+          <a class="chip" href="Long2024_HIMLoco.html">HIMLoco</a>
+          <a class="chip" href="Margolis2022_WalkTheseWays.html">Walk These Ways</a>
+        </div>
+        <div class="chips">
+          <span class="chip">Hwangbo 2019 actuator net</span>
+          <span class="chip">MIT Humanoid</span>
+          <span class="chip">Berkeley Humanoid Lite</span>
+          <span class="chip">Isaac Lab</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成,依據 arXiv v1 全文與圖表。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論或自行換算(扭矩密度、反射慣量、膝扭矩指標、成本占比等),其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill from the full arXiv v1 text and figures. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences or own calculations (torque density, reflected inertia, knee index, cost shares, etc.); all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Liao et al. 2024 (Berkeley Humanoid) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Berkeley Humanoid reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>
