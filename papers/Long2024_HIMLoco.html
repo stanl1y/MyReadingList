@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>HIMLoco — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Hybrid Internal Model: Learning Agile Legged Locomotion with Simulated Robot Response","authors":"Junfeng Long, Zirui Wang, Quanyi Li, Jiawei Gao, Liu Cao, Jiangmiao Pang","year":"2024","venue":"ICLR","tags":["Legged Robotics","Reinforcement Learning","Sim-to-Real","Quadruped","Contrastive Learning","State Estimation"],"tldr":"借古典 Internal Model Control 的觀念:不直接估地形、摩擦等外部擾動,而從 5 步本體感測歷史估「機器人的反應」——顯式體速(用模擬真值回歸)+ 隱式穩定性 latent(SwAV 式原型對比學習,對齊下一步本體觀測);單階段 PPO、免 teacher-student 模仿、只用 IMU 與關節編碼器,RTX 4090 訓練一小時,實機 Aliengo 長程樓梯連爬 176.5 階(RMA 75.4)。","tldr_en":"Borrowing Internal Model Control, HIMLoco estimates the robot response instead of the terrain: an explicit body velocity (regressed to sim ground truth) plus an implicit stability latent trained with SwAV-style prototype contrast against the next proprioceptive state. One-stage PPO, no teacher-student imitation, IMU and joint encoders only, one hour on an RTX 4090; a real Aliengo climbs 176.5 stairs nonstop versus 75.4 for RMA."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  a.chip{text-decoration:none}
+  a.chip:hover{background:#e6dcc4}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+  .tbl-scroll{overflow-x:auto}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:118px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">HIMLoco 把四足盲走的「狀態估測」換了一個估測目標:<b>不去估地形高度、摩擦係數這些外部擾動本身</b>,而是借古典 <mark class="m-method" data-t="METHOD/IDEA">Internal Model Control(IMC)</mark> 的想法,從 5 步本體感測歷史估「<b>機器人對擾動的反應</b>」——一個<b>顯式</b>的體速 \(\hat{\mathbf v}_t\)(用模擬真值回歸)加一個<b>隱式</b>的 16 維穩定性 latent \(\hat{\mathbf l}_t\)(用 <mark class="m-method" data-t="METHOD/IDEA">SwAV 式原型對比學習</mark>對齊「下一步」本體觀測)。單階段 PPO、<b>沒有 teacher-student 模仿</b>、只用 IMU + 關節編碼器、RTX 4090 訓練約 1 小時;實機 Aliengo <mark class="m-result" data-t="RESULT/EVIDENCE">長程樓梯連爬 176.5 階(RMA 75.4、Walk These Ways 0)</mark>,42 cm 踩空落台 100% 不倒。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">HIMLoco changes <i>what</i> a blind quadruped should estimate: <b>not the external disturbances themselves</b> (terrain height, friction), but—borrowing classical <mark class="m-method" data-t="METHOD/IDEA">Internal Model Control (IMC)</mark>—<b>the robot's response to them</b>, inferred from 5 steps of proprioceptive history. The response is <b>hybrid</b>: an <b>explicit</b> body velocity \(\hat{\mathbf v}_t\) (regressed to sim ground truth) plus an <b>implicit</b> 16-D stability latent \(\hat{\mathbf l}_t\), trained with <mark class="m-method" data-t="METHOD/IDEA">SwAV-style prototype contrastive learning</mark> to agree with the <i>next</i> proprioceptive observation. One-stage PPO, <b>no teacher-student imitation</b>, IMU + joint encoders only, ~1 hour on an RTX 4090. On hardware, an Aliengo <mark class="m-result" data-t="RESULT/EVIDENCE">climbs 176.5 stairs nonstop (RMA 75.4, Walk These Ways 0)</mark> and survives a 42 cm missed step 100% of the time.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Long2024/fig1_teaser.png" alt="Figure 1 teaser">
+        <figcaption data-lang="zh"><b>Fig.1</b> 論文的四個賣點。上排左:<b>Minimal Sensors</b>(LiDAR、相機打叉,只留 IMU 與馬達編碼器);中:<b>No Mimic Learning</b>(把 teacher→student 與 RMA 式 env-factor→adaptation 兩種「模仿」都打叉);右:<b>Efficient Learning</b>(200M frames、RTX 4090 一小時)。下排實機:衝刺、樓梯、粗糙斜坡、高台。注意「No Mimic」指的是 actor 與估測器沒有模仿對象,<b>不等於訓練時完全不用特權資訊</b>(見 02 頁 pitfall)。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> The paper's four selling points. Top left: <b>Minimal Sensors</b> (LiDAR and camera crossed out; only IMU and motor encoders). Middle: <b>No Mimic Learning</b> (both teacher→student and RMA-style env-factor→adaptation imitation crossed out). Right: <b>Efficient Learning</b> (200M frames, one hour on an RTX 4090). Bottom: hardware sprinting, stairs, rough slopes, a high platform. Note that "No Mimic" means the actor and estimator have no imitation target—<b>not that no privileged information is used in training</b> (see the pitfall on tab 02).</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 盲走需要知道外部狀態(地形、摩擦、外力),主流做法是<mark class="m-problem" data-t="PROBLEM/GAP">兩階段:先訓 oracle,再讓學生模仿</mark>(teacher-student / RMA)。作者認為這有兩個硬傷:回歸「絕對環境參數」會被 domain randomization 的雜訊卡住;模仿階段<mark class="m-problem" data-t="PROBLEM/GAP">必然損失資訊</mark>。</li>
+          <li data-lang="en"><b>Problem</b> — Blind walking needs external state (terrain, friction, pushes). The mainstream recipe is <mark class="m-problem" data-t="PROBLEM/GAP">two-stage: train an oracle, then have a student imitate it</mark> (teacher-student / RMA). The authors see two flaws: regressing <i>absolute</i> environment parameters gets stuck on domain-randomization noise, and the imitation phase <mark class="m-problem" data-t="PROBLEM/GAP">inevitably loses information</mark>.</li>
+          <li data-lang="zh"><b>方法</b> — 一顆 MLP 從 \(\mathbf o^a_{t-H:t}\) 輸出 <mark class="m-method" data-t="METHOD/IDEA">hybrid internal embedding</mark> \((\hat{\mathbf v}_t,\hat{\mathbf l}_t)\):速度用真值回歸;latent 與「target encoder 看到的 \(\mathbf o^a_{t+1}\)」做 <mark class="m-method" data-t="METHOD/IDEA">SwAV 交換分群預測</mark>(Sinkhorn + 16 個原型)。每個 iteration 先更新 HIM、再凍結它跑 PPO;critic 可看特權外力與地形高度。</li>
+          <li data-lang="en"><b>Method</b> — One MLP maps \(\mathbf o^a_{t-H:t}\) to a <mark class="m-method" data-t="METHOD/IDEA">hybrid internal embedding</mark> \((\hat{\mathbf v}_t,\hat{\mathbf l}_t)\): velocity is regressed to ground truth; the latent plays a <mark class="m-method" data-t="METHOD/IDEA">SwAV swapped-assignment game</mark> (Sinkhorn + 16 prototypes) with a target encoder that sees \(\mathbf o^a_{t+1}\). Each iteration updates HIM first, then freezes it for PPO; the critic sees privileged force and terrain height.</li>
+          <li data-lang="zh"><b>結果</b> — 實機 8 項測試(A1/Aliengo)<mark class="m-result" data-t="RESULT/EVIDENCE">全部持平或勝過 RMA / Walk These Ways / 內建 MPC</mark>(拖曳一項與 RMA 平手);模擬中難地形(樓梯、離散障礙)追蹤誤差約為 RMA 的一半;消融顯示<b>拿掉 latent 輸入,長程樓梯從 176.5 掉到 13.3 階</b>。</li>
+          <li data-lang="en"><b>Results</b> — On 8 hardware tests (A1/Aliengo) it <mark class="m-result" data-t="RESULT/EVIDENCE">matches or beats RMA / Walk These Ways / the built-in MPC everywhere</mark> (tied with RMA on dragging). In simulation, tracking error on hard terrain (stairs, discrete obstacles) is roughly half of RMA's. Ablations: <b>removing the latent input drops long-range stairs from 176.5 to 13.3 steps</b>.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">Isaac Gym 的大規模平行模擬(Rudin et al. 2022「Learning to walk in minutes」)讓 RL 四足控制器成為主流。盲走這一支的核心難題是 <mark class="m-problem" data-t="PROBLEM/GAP">部分可觀測</mark>:真機只有關節編碼器與 IMU,看不到地形、摩擦、外力。歷來有兩種補法:</p>
+        <p data-lang="en">Massively parallel simulation in Isaac Gym (Rudin et al. 2022, "Learning to walk in minutes") made RL quadruped controllers mainstream. The core difficulty of the blind branch is <mark class="m-problem" data-t="PROBLEM/GAP">partial observability</mark>: a real robot has joint encoders and an IMU, but can't see terrain, friction, or external forces. Two families of fixes exist:</p>
+        <ul style="margin:0 0 12px;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>模仿式(mimic learning)</b>:Lee 2020 / Miki 2022 的 <mark class="m-method" data-t="METHOD/IDEA">teacher-student</mark>(學生模仿老師行為),以及 RMA(Kumar 2021)的 <mark class="m-method" data-t="METHOD/IDEA">adaptation</mark>(學生從歷史回歸老師的 env-factor latent)。兩者都是兩階段。</li>
+          <li data-lang="en"><b>Mimic learning</b>: the <mark class="m-method" data-t="METHOD/IDEA">teacher-student</mark> scheme of Lee 2020 / Miki 2022 (the student imitates the teacher's behavior), and RMA's (Kumar 2021) <mark class="m-method" data-t="METHOD/IDEA">adaptation</mark> (the student regresses the teacher's env-factor latent from history). Both are two-stage.</li>
+          <li data-lang="zh"><b>動力學學習式</b>:DayDreamer(world model)、<mark class="m-method" data-t="METHOD/IDEA">DreamWaQ</mark>(Nahrendra 2023:非對稱 actor-critic + β-VAE 估體速與 context、重建下一步觀測)。作者指出它們共同點是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">用回歸目標</mark>,在 DR 雜訊下會「去擬合雜訊、最終 representation collapse」。</li>
+          <li data-lang="en"><b>Dynamics learning</b>: DayDreamer (a world model) and <mark class="m-method" data-t="METHOD/IDEA">DreamWaQ</mark> (Nahrendra 2023: asymmetric actor-critic + a β-VAE estimating velocity and context by reconstructing the next observation). The authors argue their shared trait is a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">regression objective</mark>, which under DR noise "fits the random noise, eventually resulting in representation collapse."</li>
+        </ul>
+        <p data-lang="zh">HIM 自認屬於第二支,但主張兩個差異:<b>不走昂貴的 MBRL</b>、<b>不用回歸當輔助 loss</b>,改用原型對比學習(SwAV / Proto-RL / DreamerPro 一系)——只要求編碼器<mark class="m-method" data-t="METHOD/IDEA">分辨「現在的處境和其他處境有何不同」</mark>,而非精確擬合目標值。</p>
+        <p data-lang="en">HIM places itself in the second family but claims two differences: <b>no expensive MBRL</b>, and <b>no regression as the auxiliary loss</b>—instead, prototypical contrastive learning (the SwAV / Proto-RL / DreamerPro line), which only asks the encoder to <mark class="m-method" data-t="METHOD/IDEA">distinguish how the current situation differs from others</mark> rather than fit target values exactly.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的賣點其實是一個<b>重新命名 + 換 loss</b>:「從歷史估速度與一個與下一步觀測掛鉤的 latent」這副骨架,DreamWaQ 已經有了;HIM 的新東西是 (1) 用 IMC 給它一個控制理論的說法——「估反應而非估擾動」;(2) 把重建/回歸換成 SwAV 式對比。實驗上它確實在最難的長程樓梯、踩空任務拉開差距,這讓它很快成為後續盲走工作的常用 baseline 與 codebase。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">The pitch is really a <b>reframing plus a loss swap</b>: the skeleton "estimate velocity and a latent tied to the next observation, from history" already existed in DreamWaQ. HIM's novelty is (1) giving it a control-theoretic story via IMC—"estimate the response, not the disturbance"—and (2) replacing reconstruction/regression with SwAV-style contrast. Empirically it does open a gap on the hardest tasks (long stairs, missed steps), which quickly made it a go-to baseline and codebase for later blind-locomotion work. <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是「又一個四足 SOTA」,而是這幾個設計觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away is not "another quadruped SOTA" but these design ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">估「反應」,不估「原因」。</b> 地形、摩擦、恢復係數高維又難觀測;但它們對機器人的<b>影響</b>都會出現在本體感測的下一步裡。IMC 的精神正是:不顯式建模擾動,也能靠內部模型的回授做穩健控制。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Estimate the response, not the cause.</b> Terrain, friction, and restitution are high-dimensional and hard to observe, but their <b>effect</b> on the robot shows up in the next proprioceptive step. That's IMC's spirit: robust control via internal-model feedback, without explicitly modeling the disturbance.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">「Hybrid」= 顯式的就監督、隱式的就自監督。</b> 任務的<b>顯式</b>目標是追速度 → 速度有模擬真值,直接回歸;<b>隱式</b>目標是保持穩定 → 沒有標籤,用「與未來狀態一致」當自監督訊號。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">"Hybrid" = supervise the explicit part, self-supervise the implicit part.</b> The <b>explicit</b> goal is tracking velocity → sim ground truth exists, so regress it. The <b>implicit</b> goal is staying stable → no label, so use "consistency with the future state" as the self-supervised signal.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">對比 &gt; 回歸(作者主張)。</b> 原型對比只要求分群正確,不要求擬合被 DR 雜訊污染的目標值;且一個 batch 同時含 4096 個不同環境,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「batch-level information」</mark>讓編碼器學會區分地形。證據主要是 t-SNE 與 Regression 消融。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Contrast &gt; regression (authors' claim).</b> Prototype contrast only asks for correct cluster assignments, not for fitting DR-noise-corrupted targets; and a batch holds 4096 different environments at once, so <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"batch-level information"</mark> teaches the encoder to tell terrains apart. Evidence: mainly a t-SNE plot and the Regression ablation.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">Sim 與 real 的觀測一致。</b> source 與 target encoder 都只吃本體感測,部署時看到的和訓練時完全一樣,<b>沒有「學生追不上老師」的資訊落差</b>。特權資訊只留給 critic(部署時丟掉)。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Consistent observations in sim and real.</b> Both source and target encoders see only proprioception, so what the deployed policy sees is exactly what it trained on—<b>no "student can't match the teacher" information gap</b>. Privileged info is left to the critic (discarded at deployment).</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">latent 是最關鍵的那一半。</b> 實機消融:去掉 latent 輸入或 latent loss,長程樓梯 176.5 → 13.3 / 10.6 階、踩空 100% → 5% / 0%;去掉速度則 → 51–55 階。<mark class="m-result" data-t="RESULT/EVIDENCE">兩者都需要,但隱式那半更致命。</mark></li>
+          <li data-lang="en"><b style="color:var(--c-result)">The latent is the critical half.</b> Hardware ablation: removing the latent input or latent loss drops long stairs 176.5 → 13.3 / 10.6 steps and missed-step success 100% → 5% / 0%; removing velocity → 51–55 steps. <mark class="m-result" data-t="RESULT/EVIDENCE">Both are needed, but losing the implicit half is far worse.</mark></li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Hybrid Internal Model: Learning Agile Legged Locomotion with Simulated Robot Response</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Junfeng Long*, Zirui Wang*, Quanyi Li, Jiawei Gao, Liu Cao, Jiangmiao Pang</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>OpenRobotLab, Shanghai AI Laboratory · Zhejiang Univ. · Tsinghua Univ.</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2024 · ICLR(arXiv:2312.11460 v3)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Legged Locomotion</span>
+          <b><span data-lang="zh">平台</span><span data-lang="en">Robots</span></b><span>Unitree A1 · Go1 · Aliengo</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>github.com/OpenRobotLab/HIMLoco <span class="add"><span data-lang="zh">[導讀補充]</span><span data-lang="en">[guide note]</span></span></span>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:10px 0 0"><span data-lang="zh">* 共同一作。arXiv PDF 本身沒有會議頁眉;ICLR 2024 依導讀任務指定與公開收錄資訊。</span><span data-lang="en">* Equal contribution. The arXiv PDF carries no venue header; ICLR 2024 follows the assignment and public acceptance records.</span></p>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它證明<b>不需要老師、不需要外感測器、不需要動作資料集</b>,單一階段、一小時訓練的盲走策略就能爬上百階樓梯、扛住踩空與外力。對沒有大算力、沒有 LiDAR 的實驗室,這是極實用的起點。</span>
+        <span data-lang="en">It shows that <b>no teacher, no exteroception, and no motion dataset</b> are needed: a one-stage, one-hour blind policy can climb a hundred-plus stairs and survive missed steps and pushes. For labs without big compute or LiDAR, it's a very practical starting point.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">黑話翻譯</span><span data-lang="en">Jargon decoder</span></span>
+        <span data-lang="zh"><b>Proprioception</b>:本體感測(關節角/角速度、IMU)。<b>Exteroception</b>:外感測(相機、LiDAR)。<b>Privileged info</b>:只有模擬器知道的真值(地形高度、摩擦、外力)。<b>DR</b>:domain randomization,隨機化物理參數以利 sim-to-real。<b>SwAV</b>:Caron 2020 的自監督法,讓兩個 view 互相預測對方的「分群代碼」。</span>
+        <span data-lang="en"><b>Proprioception</b>: body-internal sensing (joint angles/velocities, IMU). <b>Exteroception</b>: external sensing (cameras, LiDAR). <b>Privileged info</b>: ground truth only the simulator knows (terrain height, friction, forces). <b>DR</b>: domain randomization of physics for sim-to-real. <b>SwAV</b>: Caron 2020's self-supervised method where two views predict each other's "cluster codes."</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Internal Model Control</span><span class="chip">SwAV</span>
+          <span class="chip">Sinkhorn-Knopp</span><span class="chip">Asymmetric critic</span>
+          <span class="chip">Velocity estimation</span><span class="chip">Isaac Gym</span>
+          <span class="chip">Blind locomotion</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <p data-lang="zh">作者在 Introduction 點名兩階段範式的三個限制:</p>
+        <p data-lang="en">The Introduction names three limits of the two-stage paradigm:</p>
+        <table>
+          <tr><th><span data-lang="zh">現況</span><span data-lang="en">Status quo</span></th><th><span data-lang="zh">痛點</span><span data-lang="en">Pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">回歸絕對環境參數</span><span data-lang="en">Regressing absolute env parameters</span></b></td><td><span data-lang="zh">DR 對 sim-to-real 有益,但它引入的雜訊<mark class="m-problem" data-t="PROBLEM/GAP">限制了模型進一步最佳化</mark>——同樣的歷史觀測可能對應很多組參數,回歸目標本身就模糊。</span><span data-lang="en">DR helps sim-to-real, but the noise it injects <mark class="m-problem" data-t="PROBLEM/GAP">restricts further optimization</mark>—the same history can correspond to many parameter sets, so the regression target is itself ambiguous.</span></td></tr>
+          <tr><td><b><span data-lang="zh">兩階段模仿</span><span data-lang="en">Two-phase imitation</span></b></td><td><span data-lang="zh">訓練流程複雜,且模仿階段<mark class="m-problem" data-t="PROBLEM/GAP">必然有資訊損失</mark>——不管是模仿行為(teacher-student)還是模仿 latent(RMA),學生的觀測本來就比老師少。</span><span data-lang="en">A complicated pipeline, and the imitation phase <mark class="m-problem" data-t="PROBLEM/GAP">inevitably loses information</mark>—whether imitating behavior (teacher-student) or a latent (RMA), the student simply observes less than the teacher.</span></td></tr>
+          <tr><td><b><span data-lang="zh">依賴外感測器</span><span data-lang="en">Relying on exteroception</span></b></td><td><span data-lang="zh">相機(Agarwal 2023)或 LiDAR(Miki 2022)的<mark class="m-problem" data-t="PROBLEM/GAP">配置因平台而異</mark>,難以做「通用平台」上的訓練與部署。</span><span data-lang="en">Camera (Agarwal 2023) or LiDAR (Miki 2022) <mark class="m-problem" data-t="PROBLEM/GAP">configurations vary across platforms</mark>, making it hard to train and deploy on universal platforms.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「能不能讓策略在整個訓練過程中都不需要外部狀態的模仿目標,只靠本體感測自己推斷擾動?」</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"Can the policy go through training with no imitation target built from external states, inferring disturbances from proprioception alone?"</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">論文的定位表(Table 1 重建)</span><span data-lang="en">The paper's positioning table (Table 1, rebuilt)</span></h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">表徵什麼</span><span data-lang="en">Represents</span></th><th><span data-lang="zh">外感測器</span><span data-lang="en">Ext. sensors</span></th><th><span data-lang="zh">模仿目標</span><span data-lang="en">Mimic target</span></th><th><span data-lang="zh">參考資料集</span><span data-lang="en">Ref. dataset</span></th><th><span data-lang="zh">樣本數(M)</span><span data-lang="en">Samples (M)</span></th></tr>
+          <tr><td>Teacher-Student<br><small>(Miki 2022)</small></td><td><span data-lang="zh">當前環境參數</span><span data-lang="en">Current env. params</span></td><td>LiDAR</td><td>Behavior</td><td>-</td><td>Unknown</td></tr>
+          <tr><td>MONO<br><small>(Agarwal 2023)</small></td><td><span data-lang="zh">當前環境參數</span><span data-lang="en">Current env. params</span></td><td>Depth camera</td><td>Behavior</td><td>-</td><td>Unknown</td></tr>
+          <tr><td>AMP<br><small>(Wu 2022; Escontrela 2022)</small></td><td><span data-lang="zh">當前環境參數</span><span data-lang="en">Current env. params</span></td><td>-</td><td>Behavior</td><td>✓</td><td>600</td></tr>
+          <tr><td>RMA<br><small>(Kumar 2021)</small></td><td><span data-lang="zh">當前環境參數</span><span data-lang="en">Current env. params</span></td><td>-</td><td>Latent</td><td>-</td><td>1,280</td></tr>
+          <tr><td class="win">Ours (HIM)</td><td class="win"><span data-lang="zh">模擬的機器人反應</span><span data-lang="en">Simulated robot response</span></td><td class="win">-</td><td class="win">-</td><td class="win">-</td><td class="win">200</td></tr>
+        </table>
+        </div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">「當前環境參數」指當下這一幀的 elevation map、摩擦、恢復係數等。注意樣本數欄是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">跨不同論文、不同模擬器、不同任務設定的數字</mark>,只能當量級參考(見 05 頁)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">"Current env. params" means this frame's elevation map, friction, restitution, etc. Note the sample-count column <mark class="m-assume" data-t="ASSUMPTION/CLAIM">mixes numbers across papers, simulators, and task setups</mark>—treat it as an order-of-magnitude reference only (see tab 05).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,HIM 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how HIM fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">HIM 如何補上</span><span data-lang="en">How HIM fills it</span></th></tr>
+          <tr>
+            <td><b>Teacher-Student</b><br><small>(Lee 2020, Miki 2022)</small></td>
+            <td><span data-lang="zh">學生模仿老師行為,<mark class="m-problem" data-t="PROBLEM/GAP">性能被老師與觀測落差夾住</mark>;Miki 版需 LiDAR 建 elevation map。</span><span data-lang="en">The student imitates the teacher's behavior, <mark class="m-problem" data-t="PROBLEM/GAP">capped by the teacher and the observation gap</mark>; Miki's version needs LiDAR elevation maps.</span></td>
+            <td><span data-lang="zh">沒有老師;actor 從頭到尾就是部署時那顆,<mark class="m-method" data-t="METHOD/IDEA">只吃本體感測 + 自己的估測</mark>。</span><span data-lang="en">No teacher; the actor trained is the one deployed, <mark class="m-method" data-t="METHOD/IDEA">eating only proprioception + its own estimates</mark>.</span></td>
+          </tr>
+          <tr>
+            <td><b>RMA</b><br><small>(Kumar 2021)</small></td>
+            <td><span data-lang="zh">第二階段 adaptation module 回歸老師的 env-factor latent——<mark class="m-problem" data-t="PROBLEM/GAP">兩階段、回歸被 DR 雜訊污染的目標</mark>。</span><span data-lang="en">Phase-2 adaptation module regresses the teacher's env-factor latent—<mark class="m-problem" data-t="PROBLEM/GAP">two phases, regressing a DR-noise-corrupted target</mark>.</span></td>
+            <td><span data-lang="zh">單階段交替訓練;latent 目標是<mark class="m-method" data-t="METHOD/IDEA">下一步本體觀測(自監督)</mark>,不是特權參數。</span><span data-lang="en">One-stage alternating training; the latent target is <mark class="m-method" data-t="METHOD/IDEA">the next proprioceptive observation (self-supervised)</mark>, not privileged parameters.</span></td>
+          </tr>
+          <tr>
+            <td><b>AMP</b><br><small>(Wu 2022)</small></td>
+            <td><span data-lang="zh">需要參考動作資料集。</span><span data-lang="en">Needs a reference motion dataset.</span></td>
+            <td><span data-lang="zh">只用 reward(沿用 Rudin 2022 / Agarwal 2023),不需資料集。</span><span data-lang="en">Rewards only (from Rudin 2022 / Agarwal 2023); no dataset.</span></td>
+          </tr>
+          <tr>
+            <td><b>DreamWaQ / DayDreamer</b></td>
+            <td><span data-lang="zh"><mark class="m-assume" data-t="ASSUMPTION/CLAIM">回歸/重建式目標</mark>,作者稱會擬合 DR 雜訊而 representation collapse;MBRL 計算昂貴。</span><span data-lang="en"><mark class="m-assume" data-t="ASSUMPTION/CLAIM">Regression/reconstruction objectives</mark>, which the authors say fit DR noise and collapse; MBRL is computationally expensive.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">原型對比(SwAV)</mark>取代回歸;不做 rollout 想像,只當輔助表徵。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Prototype contrast (SwAV)</mark> replaces regression; no imagined rollouts, just an auxiliary representation.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意作者把「回歸」當成共同敵人:RMA 回歸老師 latent、DreamWaQ 回歸(重建)下一步觀測,都被歸為「要求網路完美擬合目標」。但這兩者性質很不同——前者的目標是<b>特權資訊</b>,後者是<b>自監督</b>。HIM 真正與 DreamWaQ 的差別只剩<b>loss 形式</b>;與 RMA 的差別則是<b>目標從特權換成自監督</b>。讀結果時要分清楚增益是哪一個差別帶來的。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">Note how "regression" is cast as the common enemy: RMA regresses a teacher latent, DreamWaQ regresses (reconstructs) the next observation—both lumped as "requiring the network to fit targets perfectly." But they differ in kind: the former's target is <b>privileged</b>, the latter's is <b>self-supervised</b>. HIM's real delta from DreamWaQ is only the <b>loss form</b>; its delta from RMA is <b>swapping a privileged target for a self-supervised one</b>. When reading results, keep track of which delta produced which gain. <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">「No mimic learning」<b>≠</b>「完全不用特權資訊」。HIM 仍有兩處特權監督:(1) <mark class="m-assume" data-t="ASSUMPTION/CLAIM">critic 額外吃外力 \(\mathbf f_t\) 與地形高度 \(\mathbf h_t\)</mark>(非對稱 actor-critic,同 DreamWaQ);(2) 速度頭 \(\hat{\mathbf v}_t\) 用<b>模擬真值速度</b>回歸。真正被拿掉的是「actor / 估測器去模仿一個看得更多的老師」這件事。</span>
+        <span data-lang="en">"No mimic learning" <b>≠</b> "no privileged information." HIM still uses two privileged signals: (1) <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the critic also sees external force \(\mathbf f_t\) and ground height \(\mathbf h_t\)</mark> (asymmetric actor-critic, as in DreamWaQ); (2) the velocity head \(\hat{\mathbf v}_t\) regresses <b>sim ground-truth velocity</b>. What's actually removed is "the actor/estimator imitating a teacher who sees more."</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">如果模仿的資訊損失真是瓶頸,那 HIM 的消融應顯示:「與 Oracle 差距」比 RMA 小。Fig.5 的確如此(Ours 最接近 Oracle、RMA 的最終水平線更低)——這是本文最直接支持其動機的證據。</span>
+        <span data-lang="en">If imitation information loss really is the bottleneck, HIM's ablations should show a smaller "gap to Oracle" than RMA. Fig.5 does show this (Ours closest to Oracle; RMA's final-performance line lower)—the most direct evidence for the paper's motivation.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">真是對比的功勞?</span><span data-lang="en">is it the contrast?</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">IMC 類比</span><span data-lang="en">IMC analogy</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">一次 iteration 做什麼</span><span data-lang="en">What one iteration does</span></h3>
+        <div class="flow">
+          <div class="step"><div class="ph mono">STEP 1 · ROLLOUT</div><b><span data-lang="zh">4096 環境收集軌跡</span><span data-lang="en">Collect from 4096 envs</span></b><small><span data-lang="zh">每個環境 100 步;actor 吃 \(\mathbf o^a_t\) + 估測,critic 吃 \(\mathbf o^c_t\)。</span><span data-lang="en">100 steps per env; actor sees \(\mathbf o^a_t\) + estimates, critic sees \(\mathbf o^c_t\).</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 2 · HIO</div><b><span data-lang="zh">更新 Hybrid Internal Model</span><span data-lang="en">Update the Hybrid Internal Model</span></b><small><span data-lang="zh">速度回歸 + SwAV 對比(source:歷史;target:下一步)。</span><span data-lang="en">Velocity regression + SwAV contrast (source: history; target: next step).</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STEP 3 · PPO</div><b><span data-lang="zh">凍結 HIM,更新 actor-critic</span><span data-lang="en">Freeze HIM, update actor-critic</span></b><small><span data-lang="zh">PPO 梯度<b>不回傳</b>到 encoder。</span><span data-lang="en">PPO gradients do <b>not</b> flow into the encoder.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">DEPLOY</div><b><span data-lang="zh">只留 source encoder + policy</span><span data-lang="en">Keep source encoder + policy</span></b><small><span data-lang="zh">50 Hz 策略、500 Hz PD;critic 與 target encoder 丟掉。</span><span data-lang="en">50 Hz policy, 500 Hz PD; critic and target encoder discarded.</span></small></div>
+        </div>
+        <figure class="fig"><img src="figs/Long2024/fig2_framework.png" alt="Figure 2 framework">
+          <figcaption data-lang="zh"><b>Fig.2</b> 框架總覽。分三塊看:<b>黃色 HIO</b>——target encoder 吃 \(\mathbf o^a_{t+1}\) 得 \(\hat{\mathbf l}^T_t\),source encoder 吃 \(\mathbf o^a_{t-H:t}\) 得 \(\hat{\mathbf l}^S_t\) 與 \(\hat{\mathbf v}_t\),兩個 latent 做對比學習;<b>橘框 Policy</b>——\(\hat{\mathbf l}^S_t\)、\(\hat{\mathbf v}_t\)、\(\mathbf o^a_t\) 串接進 policy;<b>藍色 PPO</b>——critic 額外吃「External」的外力與 elevation map。右欄是作者的修辭重點:對比學習在 batch 內「拉近正對、推開負對」,模仿學習則是逐一對齊。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> Framework overview, in three zones. <b>Yellow HIO</b>: the target encoder maps \(\mathbf o^a_{t+1}\) to \(\hat{\mathbf l}^T_t\); the source encoder maps \(\mathbf o^a_{t-H:t}\) to \(\hat{\mathbf l}^S_t\) and \(\hat{\mathbf v}_t\); the two latents are contrasted. <b>Orange Policy box</b>: \(\hat{\mathbf l}^S_t\), \(\hat{\mathbf v}_t\), \(\mathbf o^a_t\) are concatenated into the policy. <b>Blue PPO</b>: the critic additionally sees the "External" force and elevation map. The right column is the rhetorical point: contrastive learning "pulls positives closer, pushes negatives away" across the batch, while mimic learning aligns pairs one-to-one.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 1:IMC 類比——估反應,不估擾動</span><span data-lang="en">Key idea 1: the IMC analogy — estimate the response, not the disturbance</span></h3>
+        <figure class="fig"><img src="figs/Long2024/fig3_imc.png" alt="Figure 3 IMC vs HIM" style="max-width:520px">
+          <figcaption data-lang="zh"><b>Fig.3</b> (a) 古典 IMC:控制訊號同時送進真實系統與內部 Model,模型產生的「simulated response」回授,控制器不必顯式建模擾動。(b) HIM 的對應:命令拆成顯式 velocity 與隱式 stability;HIM 輸出「velocity &amp; implicit response」回授給 policy。<b>注意圖例</b>:(a) 用 ⊕ 加法,(b) 全換成 Ⓒ 串接——HIM 沒有做 IMC 的「量測輸出減模型輸出」,這是類比與真正 IMC 的分歧點。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> (a) Classical IMC: the control signal feeds both the real plant and an internal Model, whose "simulated response" is fed back, so the controller needn't model the disturbance explicitly. (b) HIM's counterpart: commands split into explicit velocity and implicit stability; HIM outputs "velocity &amp; implicit response" back to the policy. <b>Read the legend</b>: (a) uses ⊕ addition, (b) swaps all of them for Ⓒ concatenation—HIM never computes IMC's "measured output minus model output," which is exactly where the analogy departs from real IMC.</figcaption></figure>
+        <p data-lang="zh">古典 IMC(Rivera, Morari, Skogestad 1986)的回授訊號是「實際輸出 − 內部模型預測輸出」,在模型準確時恰好等於擾動的估計 <span class="add">[導讀補充]</span>:</p>
+        <p data-lang="en">In classical IMC (Rivera, Morari, Skogestad 1986), the feedback signal is "actual output − internal-model predicted output," which equals a disturbance estimate when the model is accurate <span class="add">[guide note]</span>:</p>
+        <div class="eq">$$\hat d(t)=y(t)-\tilde P\,u(t)\;\approx\;d(t)\quad\text{when}\quad \tilde P\approx P$$</div>
+        <p data-lang="zh">論文把地形、摩擦、恢復係數都視為<mark class="m-method" data-t="METHOD/IDEA">系統擾動</mark>,主張「直接估它們很難,那就估機器人的反應」。反應有兩面:機器人被<b>顯式</b>命令追一個速度,同時被<b>隱式</b>要求保持穩定——於是 HIM 同時估一個顯式速度與一個隱式反應,與觀測一起餵給 policy,形成「完全閉環」。</p>
+        <p data-lang="en">The paper treats terrain, friction, and restitution as <mark class="m-method" data-t="METHOD/IDEA">system disturbances</mark> and argues: they're hard to estimate directly, so estimate the robot's response instead. The response has two faces: the robot is <b>explicitly</b> commanded to track a velocity and <b>implicitly</b> required to stay stable—so HIM estimates an explicit velocity and an implicit response together, feeding both with the observation into the policy to "close the loop."</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 2:狀態、動作與 hybrid internal embedding</span><span data-lang="en">Key idea 2: state, action, and the hybrid internal embedding</span></h3>
+        <p data-lang="zh">actor 的部分觀測與 critic 的特權觀測:</p>
+        <p data-lang="en">The actor's partial observation and the critic's privileged observation:</p>
+        <div class="eq">$$\mathbf o^a_t=\big[\mathbf c_t,\ \boldsymbol\theta_t,\ \dot{\boldsymbol\theta}_t,\ \boldsymbol\omega_t,\ \mathbf g_t,\ \mathbf a_{t-1}\big],\qquad \mathbf c_t=\big[v^c_x,\ v^c_y,\ \omega^c_{\text{yaw}}\big],\qquad \mathbf o^c_t=\big[\mathbf o^a_t,\ \mathbf f_t,\ \mathbf h_t\big]$$</div>
+        <p data-lang="zh">source encoder \(\phi_{\text{src}}\)(3 層 MLP,512-256-128)從 \(H=5\) 步歷史抽出 embedding;policy \(\pi\) 吃 embedding 與當前觀測;動作是相對名目關節角的偏移,乘上縮放 \(k\le 1\):</p>
+        <p data-lang="en">The source encoder \(\phi_{\text{src}}\) (3-layer MLP, 512-256-128) extracts the embedding from \(H=5\) steps of history; the policy \(\pi\) takes the embedding plus the current observation; actions are offsets from nominal joint angles, scaled by \(k\le 1\):</p>
+        <div class="eq">$$\big(\hat{\mathbf v}_t,\ \hat{\mathbf l}_t\big)=\phi_{\text{src}}\big(\mathbf o^a_{t-H:t}\big),\qquad \mathbf a_t=\pi\big(\mathbf o^a_t,\ \hat{\mathbf v}_t,\ \hat{\mathbf l}_t\big),\qquad \boldsymbol\theta_{\text{target}}=\boldsymbol\theta_0+k\,\mathbf a_t$$</div>
+        <p data-lang="zh">兩半各有各的監督:</p>
+        <p data-lang="en">Each half gets its own supervision:</p>
+        <ul style="margin:0 0 10px;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>顯式 \(\hat{\mathbf v}_t\)</b>:作者承認「直接預測 \(\mathbf o^a_{t+1}\)」才最符合 IMC,但狀態高維且 sim/real 有落差;既然在模擬裡訓練,<mark class="m-method" data-t="METHOD/IDEA">速度直接用真值回歸</mark>。</li>
+          <li data-lang="en"><b>Explicit \(\hat{\mathbf v}_t\)</b>: the authors concede that directly predicting \(\mathbf o^a_{t+1}\) would be most IMC-faithful, but states are high-dimensional and sim/real differ; since training is in sim, <mark class="m-method" data-t="METHOD/IDEA">velocity is regressed to ground truth</mark>.</li>
+          <li data-lang="zh"><b>隱式 \(\hat{\mathbf l}_t\)</b>:放在 latent 空間 \(\mathcal Z\subset\mathbb R^{16}\),<mark class="m-method" data-t="METHOD/IDEA">用對比學習拉近它與下一步狀態的表徵</mark>——「反應」天然藏在後繼狀態 \(\mathbf o^a_{t+1}\) 裡。</li>
+          <li data-lang="en"><b>Implicit \(\hat{\mathbf l}_t\)</b>: lives in a latent space \(\mathcal Z\subset\mathbb R^{16}\), and <mark class="m-method" data-t="METHOD/IDEA">contrastive learning pulls it toward the representation of the next state</mark>—the "response" is naturally embedded in the successor state \(\mathbf o^a_{t+1}\).</li>
+        </ul>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">速度 loss 論文沒寫出式子,只說「用真值回歸」、權重 1.0;以下為導讀依慣例的重建 <span class="add">[導讀補充]</span>:</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The paper never writes the velocity loss—only "regress using ground truth," weight 1.0. Below is the guide's conventional reconstruction <span class="add">[guide note]</span>:</p>
+        <div class="eq">$$\mathcal L_{\text{vel}}=\big\|\hat{\mathbf v}_t-\mathbf v_t\big\|_2^2,\qquad \mathcal L_{\text{HIO}}=\lambda_{\text{vel}}\,\mathcal L_{\text{vel}}+\lambda_{\text{con}}\,\mathcal J^{\text{SwAV}},\qquad \lambda_{\text{vel}}=\lambda_{\text{con}}=1.0$$</div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">關鍵 3:Hybrid Internal Optimization(SwAV 式原型對比)</span><span data-lang="en">Key idea 3: Hybrid Internal Optimization (SwAV-style prototype contrast)</span></h3>
+        <p data-lang="zh"><b>配對規則</b>:每個 iteration 以各環境收集到的軌跡為一個 batch;<mark class="m-method" data-t="METHOD/IDEA">若 \(\mathbf o^a_{t+1}\) 與 \(\mathbf o^a_{t-H:t}\) 來自同一條軌跡就是正對,否則為負對</mark>。歷史串接成 source 向量、下一步觀測當 target 向量,分別過 source / target encoder,得到 \(\mathbf l^{\text{source}}_t\)(即 \(\hat{\mathbf l}_t\))與 \(\mathbf l^{\text{target}}_t\),再 L2 正規化到單位球面。</p>
+        <p data-lang="en"><b>Pairing rule</b>: each iteration, trajectories collected in each environment form a batch; <mark class="m-method" data-t="METHOD/IDEA">if \(\mathbf o^a_{t+1}\) and \(\mathbf o^a_{t-H:t}\) come from the same trajectory they're a positive pair, otherwise negative</mark>. The concatenated history is the source vector and the next observation is the target vector; each goes through its encoder to give \(\mathbf l^{\text{source}}_t\) (i.e. \(\hat{\mathbf l}_t\)) and \(\mathbf l^{\text{target}}_t\), L2-normalized onto the unit sphere.</p>
+        <p data-lang="zh"><b>分群機率(Eq.1)</b>:\(K=16\) 個 L2 正規化原型 \(\mathbf E=\{\bar{\mathbf e}_1,\dots,\bar{\mathbf e}_K\}\),對每個原型的點積取 softmax,\(\tau\) 為溫度:</p>
+        <p data-lang="en"><b>Cluster probabilities (Eq.1)</b>: with \(K=16\) L2-normalized prototypes \(\mathbf E=\{\bar{\mathbf e}_1,\dots,\bar{\mathbf e}_K\}\), take a softmax over dot products with each prototype, temperature \(\tau\):</p>
+        <div class="eq">$$p^{\text{source}}_{t,k}=\frac{\exp\!\big(\tfrac{1}{\tau}\,{\mathbf l^{\text{source}}_t}^{\!\top}\bar{\mathbf e}_k\big)}{\sum_{k'}\exp\!\big(\tfrac{1}{\tau}\,{\mathbf l^{\text{source}}_t}^{\!\top}\bar{\mathbf e}_{k'}\big)},\qquad p^{\text{target}}_{t,k}=\frac{\exp\!\big(\tfrac{1}{\tau}\,{\mathbf l^{\text{target}}_t}^{\!\top}\bar{\mathbf e}_k\big)}{\sum_{k'}\exp\!\big(\tfrac{1}{\tau}\,{\mathbf l^{\text{target}}_t}^{\!\top}\bar{\mathbf e}_{k'}\big)}$$</div>
+        <p data-lang="zh"><b>目標代碼</b>:為避免所有樣本都塌到同一群的平凡解,對兩個 encoder 都用 <mark class="m-method" data-t="METHOD/IDEA">Sinkhorn-Knopp</mark>(Cuturi 2013)算出目標 \(\mathbf q^{\text{source}}_t,\mathbf q^{\text{target}}_t\)。SwAV 原文中這是一個「原型均分」約束下的熵正則最佳運輸 <span class="add">[導讀補充,出自 SwAV]</span>:</p>
+        <p data-lang="en"><b>Target codes</b>: to avoid the trivial all-in-one-cluster solution, <mark class="m-method" data-t="METHOD/IDEA">Sinkhorn-Knopp</mark> (Cuturi 2013) computes targets \(\mathbf q^{\text{source}}_t,\mathbf q^{\text{target}}_t\) for both encoders. In the SwAV paper this is entropy-regularized optimal transport under an "equal share per prototype" constraint <span class="add">[guide note, from SwAV]</span>:</p>
+        <div class="eq">$$\mathbf Q^\star=\arg\max_{\mathbf Q\in\mathcal Q}\ \operatorname{Tr}\!\big(\mathbf Q^\top\mathbf E^\top\mathbf L\big)+\varepsilon\,\mathcal H(\mathbf Q),\qquad \mathcal Q=\Big\{\mathbf Q\in\mathbb R_+^{K\times B}:\ \mathbf Q\mathbf 1_B=\tfrac1K\mathbf 1_K,\ \mathbf Q^\top\mathbf 1_K=\tfrac1B\mathbf 1_B\Big\}$$</div>
+        <p data-lang="zh"><b>交換預測目標(Eq.2)</b>:用 source 的代碼監督 target 的機率、用 target 的代碼監督 source 的機率:</p>
+        <p data-lang="en"><b>Swapped-prediction objective (Eq.2)</b>: source codes supervise target probabilities and target codes supervise source probabilities:</p>
+        <div class="eq">$$\mathcal J^{\text{SwAV}}=-\frac{1}{2H}\sum_{t=1}^{H}\Big(\mathbf q^{\text{source}}_t\log\mathbf p^{\text{target}}_t+\mathbf q^{\text{target}}_t\log\mathbf p^{\text{source}}_t\Big)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">這裡 \(\mathbf q\log\mathbf p\) 指對 \(k\) 的內積 \(\sum_k q_{t,k}\log p_{t,k}\)。原式的求和索引是 \(t=1..H\)(\(H\) 是歷史長度),但語意上應該是對整個 batch 的樣本平均——<mark class="m-limit" data-t="LIMITATION/FUTURE">記號不夠嚴謹</mark>。論文也說「augmentation 跨時間步一致」,但<b>沒說是什麼 augmentation</b>,\(\tau\) 的值也沒給。<span class="add">[導讀補充]</span></p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Here \(\mathbf q\log\mathbf p\) denotes the inner product over \(k\), \(\sum_k q_{t,k}\log p_{t,k}\). The printed sum runs over \(t=1..H\) (\(H\) is the history length), whereas semantically it should average over batch samples—<mark class="m-limit" data-t="LIMITATION/FUTURE">loose notation</mark>. The paper also says "augmentation is consistent across time steps" but <b>never says what the augmentation is</b>, and \(\tau\) is not given. <span class="add">[guide note]</span></p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">白話</span><span data-lang="en">In plain words</span></span>
+          <p data-lang="zh" style="margin-top:6px">把 16 個原型想成 16 個「處境類別」(作者取 16 = 4 種地形的平方)。HIM 要求:<b>看過去 5 步的你,和看到下一步的你,要把這段經驗分到同一個類別</b>;Sinkhorn 強迫 batch 裡的樣本平均分到各類,避免偷懶全歸一類。於是 latent 被逼著編碼「這條軌跡和其他 4095 條有何不同」——正是地形與動力學的差異。</p>
+          <p data-lang="en" style="margin-top:6px">Think of the 16 prototypes as 16 "situation categories" (the authors pick 16 = the square of 4 terrain types). HIM demands: <b>you-seeing-the-past-5-steps and you-seeing-the-next-step must assign this experience to the same category</b>; Sinkhorn forces the batch to spread evenly across categories so nobody lazily picks one. The latent is thus forced to encode "how this trajectory differs from the other 4095"—precisely the terrain and dynamics differences.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">訓練配方(Sec.3.4 + Appendix A)</span><span data-lang="en">Training recipe (Sec.3.4 + Appendix A)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">項目</span><span data-lang="en">Item</span></th><th><span data-lang="zh">設定</span><span data-lang="en">Setting</span></th></tr>
+          <tr><td><span data-lang="zh">模擬</span><span data-lang="en">Simulation</span></td><td><span data-lang="zh">Isaac Gym,4096 平行環境、rollout 長度 100 步;1000 個 rollout ≈ RTX 4090 一小時(到 2000 仍在進步)</span><span data-lang="en">Isaac Gym, 4096 parallel envs, rollout length 100; 1000 rollouts ≈ one hour on an RTX 4090 (still improving at 2000)</span></td></tr>
+          <tr><td>PPO</td><td><span data-lang="zh">clip 0.2、entropy 0.01、\(\gamma=0.99\)、GAE \(\lambda=0.95\)、desired KL 0.01、lr \(10^{-3}\)、5 epochs、grad clip 10</span><span data-lang="en">clip 0.2, entropy 0.01, \(\gamma=0.99\), GAE \(\lambda=0.95\), desired KL 0.01, lr \(10^{-3}\), 5 epochs, grad clip 10</span></td></tr>
+          <tr><td>HIM</td><td><span data-lang="zh">16 個原型;對比 loss 與速度 loss 權重皆 1.0;lr \(10^{-3}\);\(H=5\);latent 16 維</span><span data-lang="en">16 prototypes; contrastive and velocity loss weights both 1.0; lr \(10^{-3}\); \(H=5\); 16-D latent</span></td></tr>
+          <tr><td><span data-lang="zh">Domain randomization</span><span data-lang="en">Domain randomization</span></td><td><span data-lang="zh">本體/連桿質量 \(\times[0.8,1.2]\)、CoM \(\pm0.1\) m、負載 \([-1,3]\) kg、摩擦 \([0.2,2.75]\)、恢復係數 \([0,1]\)、馬達強度 \(\times[0.8,1.2]\)、\(K_p\in[0.8,1.2]\times20\)、\(K_d\in[0.8,1.2]\times0.5\)、延遲 \([0,3\Delta t]\)、外力每軸 \(\pm30\) N、初始關節 \(\times[0.5,1.5]\)</span><span data-lang="en">body/link mass \(\times[0.8,1.2]\), CoM \(\pm0.1\) m, payload \([-1,3]\) kg, friction \([0.2,2.75]\), restitution \([0,1]\), motor strength \(\times[0.8,1.2]\), \(K_p\in[0.8,1.2]\times20\), \(K_d\in[0.8,1.2]\times0.5\), delay \([0,3\Delta t]\), external force \(\pm30\) N per axis, initial joints \(\times[0.5,1.5]\)</span></td></tr>
+          <tr><td><span data-lang="zh">地形課程</span><span data-lang="en">Terrain curriculum</span></td><td><span data-lang="zh">20×10 格、每格 10×10 m;斜坡 / 粗糙斜坡 0–40°、樓梯階高 5–23 cm、離散障礙 5–15 cm,比例 0.1 / 0.2 / 0.6 / 0.1;達 80% 線速度追蹤 reward 升級,走不到一半降級</span><span data-lang="en">20×10 grid of 10×10 m tiles; slopes / rough slopes 0–40°, stairs 5–23 cm step height, discrete obstacles 5–15 cm, proportions 0.1 / 0.2 / 0.6 / 0.1; promote at 80% of linear-tracking reward, demote if less than half the tile is traversed</span></td></tr>
+          <tr><td><span data-lang="zh">命令</span><span data-lang="en">Commands</span></td><td><span data-lang="zh">樓梯/離散:\(v_{x,y}\in[-1,1]\) m/s、\(\omega\in[-2,2]\) rad/s;斜坡類:\(v_x\in[-3,3]\)、\(\omega\in[-3,3]\);每 25 步重抽</span><span data-lang="en">Stairs/discrete: \(v_{x,y}\in[-1,1]\) m/s, \(\omega\in[-2,2]\) rad/s; slopes: \(v_x\in[-3,3]\), \(\omega\in[-3,3]\); resampled every 25 steps</span></td></tr>
+          <tr><td>Reward</td><td><span data-lang="zh">線速度追蹤 \(\exp(-\|\mathbf v^{\text{cmd}}_{xy}-\mathbf v_{xy}\|^2/\sigma)\)(1.0)、角速度追蹤(0.5),\(\sigma=0.25\);懲罰 \(v_z^2\)(−2.0)、姿態、關節加速度、功率、體高、抬腳高度、action rate、smoothness</span><span data-lang="en">Linear tracking \(\exp(-\|\mathbf v^{\text{cmd}}_{xy}-\mathbf v_{xy}\|^2/\sigma)\) (1.0), angular tracking (0.5), \(\sigma=0.25\); penalties on \(v_z^2\) (−2.0), orientation, joint accel, power, base height, foot clearance, action rate, smoothness</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\mathbf o^a_t\)</td><td><span data-lang="zh">actor 的部分觀測:速度命令、關節角與角速度、機身角速度、重力方向、上一步動作。</span><span data-lang="en">Actor's partial observation: velocity command, joint positions/velocities, base angular velocity, gravity direction, last action.</span></td></tr>
+          <tr><td>\(\mathbf o^c_t\)</td><td><span data-lang="zh">critic 的特權觀測 = \(\mathbf o^a_t\) + 外力 \(\mathbf f_t\) + 周圍地形高度 \(\mathbf h_t\)(只在訓練用)。</span><span data-lang="en">Critic's privileged observation = \(\mathbf o^a_t\) + external force \(\mathbf f_t\) + surrounding ground height \(\mathbf h_t\) (training only).</span></td></tr>
+          <tr><td>\(\mathbf o^a_{t-H:t}\)</td><td><span data-lang="zh">最近 \(H=5\) 步觀測歷史,source encoder 的輸入。</span><span data-lang="en">The last \(H=5\) steps of observation history; source-encoder input.</span></td></tr>
+          <tr><td>\(\hat{\mathbf v}_t\)</td><td><span data-lang="zh">估測的機身線速度(顯式反應),用模擬真值監督。</span><span data-lang="en">Estimated base linear velocity (explicit response), supervised by sim ground truth.</span></td></tr>
+          <tr><td>\(\hat{\mathbf l}_t\in\mathbb R^{16}\)</td><td><span data-lang="zh">隱式反應 latent(= \(\mathbf l^{\text{source}}_t\)),「穩定性」的表徵。</span><span data-lang="en">Implicit-response latent (= \(\mathbf l^{\text{source}}_t\)), the "stability" representation.</span></td></tr>
+          <tr><td>\(\mathbf l^{\text{target}}_t\)</td><td><span data-lang="zh">target encoder 對下一步 \(\mathbf o^a_{t+1}\) 的編碼(部署時不需要)。</span><span data-lang="en">Target encoder's embedding of the next step \(\mathbf o^a_{t+1}\) (not needed at deployment).</span></td></tr>
+          <tr><td>\(\bar{\mathbf e}_k,\ K=16\)</td><td><span data-lang="zh">可學的 L2 正規化原型,「處境類別」中心。</span><span data-lang="en">Learnable L2-normalized prototypes—"situation category" centers.</span></td></tr>
+          <tr><td>\(\mathbf p_t,\ \mathbf q_t\)</td><td><span data-lang="zh">預測的分群機率 / Sinkhorn 算出的目標代碼。</span><span data-lang="en">Predicted cluster probabilities / Sinkhorn target codes.</span></td></tr>
+          <tr><td>\(\boldsymbol\theta_0,\ k\)</td><td><span data-lang="zh">名目關節角與動作縮放(\(k\le1\))。</span><span data-lang="en">Nominal joint angles and action scale (\(k\le1\)).</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">讓機器人從「剛剛 5 步的手感」猜兩件事:<b>我現在多快</b>(有標準答案,直接教)、<b>我現在處在哪種處境</b>(沒標準答案,就要求這個猜測與「下一步實際發生的事」分在同一類)。</span>
+        <span data-lang="en">Have the robot guess two things from "the feel of the last 5 steps": <b>how fast am I going</b> (there's an answer key—teach it) and <b>what situation am I in</b> (no answer key—so require the guess to land in the same category as "what actually happens next").</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何 encoder 與 PPO 脫鉤?</span><span data-lang="en">Why detach the encoder from PPO?</span></span>
+        <span data-lang="zh">每個 iteration 先更新 HIM 再凍結它跑 PPO,所以 embedding <b>只由 HIO loss 塑形</b>。對照組「Baseline」恰好相反:保留 source encoder 但只用 PPO 訓練——結果實機長程樓梯 0 階。這說明<mark class="m-result" data-t="RESULT/EVIDENCE">有語意的輔助目標遠比讓 RL 自己學表徵重要</mark>。</span>
+        <span data-lang="en">Each iteration updates HIM first and then freezes it for PPO, so the embedding is <b>shaped only by HIO losses</b>. The "Baseline" control is the opposite: keep the source encoder but train it only with PPO—and it climbs 0 long-range stairs on hardware. So <mark class="m-result" data-t="RESULT/EVIDENCE">a meaningful auxiliary target matters far more than letting RL learn the representation</mark>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">對照 DreamWaQ</span><span data-lang="en">Versus DreamWaQ</span></span>
+        <span data-lang="zh">DreamWaQ 的 CENet:歷史 → 速度(回歸)+ latent(β-VAE,重建 \(\mathbf o_{t+1}\))+ 非對稱 critic。HIM:歷史 → 速度(回歸)+ latent(<b>SwAV 對齊 \(\mathbf o_{t+1}\) 的編碼</b>)+ 非對稱 critic。<b>骨架幾乎相同,差在 loss。</b><span class="add">[導讀補充]</span></span>
+        <span data-lang="en">DreamWaQ's CENet: history → velocity (regression) + latent (β-VAE, reconstruct \(\mathbf o_{t+1}\)) + asymmetric critic. HIM: history → velocity (regression) + latent (<b>SwAV-aligned to an encoding of \(\mathbf o_{t+1}\)</b>) + asymmetric critic. <b>Nearly the same skeleton; the loss differs.</b> <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">Fig.2 畫的是 InfoNCE 式「拉近/推開」矩陣,但 SwAV 本身<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不用顯式負樣本</mark>——「推開」是靠 Sinkhorn 均分約束間接達成。文中「負對」的說法與實際機制不完全吻合。</span>
+        <span data-lang="en">Fig.2 draws an InfoNCE-style "pull/push" matrix, but SwAV itself <mark class="m-assume" data-t="ASSUMPTION/CLAIM">uses no explicit negatives</mark>—"pushing apart" happens indirectly through Sinkhorn's equipartition constraint. The text's talk of "negative pairs" doesn't quite match the actual mechanism.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實機主結果(Table 2,每項 20 次,↑)</span><span data-lang="en">Hardware main results (Table 2, 20 trials each, ↑)</span></h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th><span data-lang="zh">任務(機器人)</span><span data-lang="en">Task (robot)</span></th><th><span data-lang="zh">指標</span><span data-lang="en">Metric</span></th><th>Ours</th><th>RMA</th><th>MoB</th><th>Built-in MPC</th></tr>
+          <tr><td><span data-lang="zh">短程樓梯(A1)</span><span data-lang="en">Short-range stairs (A1)</span></td><td><span data-lang="zh">成功率 %</span><span data-lang="en">Success %</span></td><td class="win">100</td><td>60</td><td>0</td><td>0</td></tr>
+          <tr><td><span data-lang="zh">長程樓梯(Aliengo)</span><span data-lang="en">Long-range stairs (Aliengo)</span></td><td><span data-lang="zh">連爬階數</span><span data-lang="en">Stairs climbed</span></td><td class="win">176.5±7.81</td><td>75.35±19.98</td><td>0.0</td><td>0.0</td></tr>
+          <tr><td><span data-lang="zh">組合地形(Aliengo)</span><span data-lang="en">Compositional terrain (Aliengo)</span></td><td><span data-lang="zh">成功率 %</span><span data-lang="en">Success %</span></td><td class="win">85</td><td>45</td><td>0</td><td>0</td></tr>
+          <tr><td><span data-lang="zh">可變形斜坡(A1)</span><span data-lang="en">Deformable slope (A1)</span></td><td><span data-lang="zh">成功率 %</span><span data-lang="en">Success %</span></td><td class="win">55</td><td>10</td><td>0</td><td>0</td></tr>
+          <tr><td><span data-lang="zh">拖曳障礙(A1)</span><span data-lang="en">Dragging obstacle (A1)</span></td><td><span data-lang="zh">最大重量 kg</span><span data-lang="en">Max weight kg</span></td><td class="win">10</td><td class="win">10</td><td>7</td><td>3</td></tr>
+          <tr><td><span data-lang="zh">撞擊(A1)</span><span data-lang="en">Hit (A1)</span></td><td><span data-lang="zh">最大重量 kg</span><span data-lang="en">Max weight kg</span></td><td class="win">8</td><td>7.5</td><td>7</td><td>5</td></tr>
+          <tr><td><span data-lang="zh">負載(A1)</span><span data-lang="en">Payload (A1)</span></td><td><span data-lang="zh">最大重量 kg</span><span data-lang="en">Max weight kg</span></td><td class="win">8</td><td>7</td><td>4</td><td>7</td></tr>
+          <tr><td><span data-lang="zh">踩空落台 42 cm(Aliengo)</span><span data-lang="en">Missed step, 42 cm (Aliengo)</span></td><td><span data-lang="zh">成功率 %</span><span data-lang="en">Success %</span></td><td class="win">100</td><td>0</td><td>0</td><td>0</td></tr>
+        </table>
+        </div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">差距最大的是<mark class="m-result" data-t="RESULT/EVIDENCE">長程樓梯(2.3× RMA)與踩空(100 vs 0)</mark>——兩者都需要「持續、快速地察覺腳下變了」。組合地形與可變形斜坡是訓練中<b>沒出現過</b>的地形,作者以此主張開放世界泛化。抗擾動三項差距則小(0.5–1 kg),拖曳與 RMA 平手。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">The biggest gaps are <mark class="m-result" data-t="RESULT/EVIDENCE">long-range stairs (2.3× RMA) and missed steps (100 vs 0)</mark>—both require noticing "the ground changed" continuously and fast. Compositional terrain and the deformable slope were <b>never seen</b> in training; the authors cite them as open-world generalization. The three anti-disturbance gaps are small (0.5–1 kg), and dragging ties RMA.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">模擬追蹤誤差(Table 3 節錄,Aliengo,↓,4096×5 次)</span><span data-lang="en">Simulated tracking error (Table 3 excerpt, Aliengo, ↓, 4096×5 trials)</span></h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th><span data-lang="zh">地形 · 速度類型 · 範圍</span><span data-lang="en">Terrain · velocity · range</span></th><th>Ours</th><th>Regression</th><th>RMA</th><th>Baseline</th><th>MoB</th></tr>
+          <tr><td><span data-lang="zh">斜坡 · 線速度 · [−1,1] m/s</span><span data-lang="en">Slopes · linear · [−1,1] m/s</span></td><td>0.073</td><td class="win">0.071</td><td>0.158</td><td>0.271</td><td>0.103</td></tr>
+          <tr><td><span data-lang="zh">斜坡 · 角速度 · [−2,2] rad/s</span><span data-lang="en">Slopes · angular · [−2,2] rad/s</span></td><td>0.124</td><td>0.130</td><td>0.134</td><td>0.202</td><td class="win">0.114</td></tr>
+          <tr><td><span data-lang="zh">斜坡 · 組合 · [−2,2] m/s</span><span data-lang="en">Slopes · combined · [−2,2] m/s</span></td><td class="win">0.094</td><td>0.107</td><td>0.203</td><td>0.224</td><td>0.103</td></tr>
+          <tr><td><span data-lang="zh">粗糙斜坡 · 組合 · [−2,2] m/s</span><span data-lang="en">Rough slopes · combined · [−2,2] m/s</span></td><td class="win">0.103</td><td>0.137</td><td>0.221</td><td>0.284</td><td>0.195</td></tr>
+          <tr><td><span data-lang="zh">樓梯 · 線速度 · [−1,1] m/s</span><span data-lang="en">Stairs · linear · [−1,1] m/s</span></td><td class="win">0.147</td><td>0.194</td><td>0.306</td><td>0.377</td><td>1.108</td></tr>
+          <tr><td><span data-lang="zh">樓梯 · 組合 · [−1,1] m/s</span><span data-lang="en">Stairs · combined · [−1,1] m/s</span></td><td class="win">0.135</td><td>0.217</td><td>0.337</td><td>0.405</td><td>1.270</td></tr>
+          <tr><td><span data-lang="zh">離散障礙 · 線速度 · [−1,1] m/s</span><span data-lang="en">Discrete · linear · [−1,1] m/s</span></td><td class="win">0.125</td><td>0.182</td><td>0.311</td><td>0.279</td><td>0.973</td></tr>
+          <tr><td><span data-lang="zh">離散障礙 · 組合 · [−1,1] m/s</span><span data-lang="en">Discrete · combined · [−1,1] m/s</span></td><td class="win">0.125</td><td>0.206</td><td>0.305</td><td>0.374</td><td>1.254</td></tr>
+        </table>
+        </div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">完整表 24 列中 Ours 在 19 列最佳;<mark class="m-limit" data-t="LIMITATION/FUTURE">輸掉的 5 列全在斜坡/粗糙斜坡</mark>(被 MoB 勝過 4 列、被 Regression 勝過 2 列,其中一列兩者都比 Ours 好)。<mark class="m-result" data-t="RESULT/EVIDENCE">難地形上優勢明顯</mark>:樓梯、離散障礙的誤差約為 RMA 的 35–50%、Regression 的 55–85%。MoB 在樓梯上誤差 ~1.0–1.3,基本上是不會走。評測只用地形等級 1–4(樓梯階高 \(\le 13\) cm)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Across all 24 rows, Ours is best in 19; <mark class="m-limit" data-t="LIMITATION/FUTURE">all 5 losses are on slopes / rough slopes</mark> (beaten by MoB in 4 rows and by Regression in 2, one row by both). <mark class="m-result" data-t="RESULT/EVIDENCE">The edge is clear on hard terrain</mark>: on stairs and discrete obstacles the error is ~35–50% of RMA's and ~55–85% of Regression's. MoB's ~1.0–1.3 error on stairs means it essentially can't walk there. Evaluation uses only terrain levels 1–4 (stairs \(\le 13\) cm).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">模擬消融:學習曲線(Fig.5,10 seeds)</span><span data-lang="en">Simulation ablation: learning curves (Fig.5, 10 seeds)</span></h3>
+        <p data-lang="zh">指標是正規化追蹤分數與最大可達地形等級:</p>
+        <p data-lang="en">Metrics are normalized tracking scores and the maximum reachable terrain level:</p>
+        <div class="eq">$$\text{NLTS}=\exp\!\Big(-\frac{\|\mathbf v_{x,y}-\mathbf v^{\text{target}}_{x,y}\|_2^2}{0.25}\Big),\qquad \text{NATS}=\exp\!\Big(-\frac{\|\omega_{\text{yaw}}-\omega^{\text{target}}_{\text{yaw}}\|_2^2}{0.25}\Big)$$</div>
+        <figure class="fig"><img src="figs/Long2024/fig5_ablation_curves.png" alt="Figure 5 ablation curves">
+          <figcaption data-lang="zh"><b>Fig.5</b> (a) 線速度追蹤分數、(b) 角速度追蹤分數、(c) 最大可達地形等級;陰影為 seed 間標準差。看:<b>Ours(棕)</b>在 (a) 收斂約 0.8,最貼近 <b>Oracle(灰,吃完整觀測歷史)</b>的 ~0.85;<b>Regression(粉)</b>~0.75;<b>虛線 RMA</b> 只是「最終性能」水平線 ~0.71,不是同條件的曲線;<b>Baseline(藍)</b>約 1800 iter 時崩落。(c) 中連 Oracle 也只到約 6/9 級——最難的地形沒人征服。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> (a) linear-velocity tracking score, (b) angular, (c) max reachable terrain level; shading = std across seeds. Look: <b>Ours (brown)</b> converges to ~0.8 in (a), closest to <b>Oracle (gray, full-observation history)</b> at ~0.85; <b>Regression (pink)</b> ~0.75; the <b>dashed RMA</b> line is only a "final performance" level ~0.71, not a matched curve; <b>Baseline (blue)</b> collapses around iteration 1800. In (c) even Oracle tops out near level 6 of 9—nobody conquers the hardest terrain.</figcaption></figure>
+        <p data-lang="zh">論文的三點結論:(1) <mark class="m-result" data-t="RESULT/EVIDENCE">速度與 latent 都有貢獻</mark>,拿掉任一個都退化;(2) <mark class="m-result" data-t="RESULT/EVIDENCE">HIO 勝 Regression</mark>,作者歸因於 batch-level 資訊;(3) <mark class="m-result" data-t="RESULT/EVIDENCE">RMA 學不到 Oracle 的全部能力</mark>,HIM 因觀測一致而更好。</p>
+        <p data-lang="en">The paper's three conclusions: (1) <mark class="m-result" data-t="RESULT/EVIDENCE">velocity and latent both contribute</mark>—removing either degrades; (2) <mark class="m-result" data-t="RESULT/EVIDENCE">HIO beats Regression</mark>, attributed to batch-level information; (3) <mark class="m-result" data-t="RESULT/EVIDENCE">RMA can't imitate all of Oracle's ability</mark>, while HIM does better thanks to consistent observations.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實機消融(Table 4)——每拿掉一塊,丟多少</span><span data-lang="en">Hardware ablation (Table 4) — what each removal costs</span></h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th><span data-lang="zh">任務</span><span data-lang="en">Task</span></th><th>Ours</th><th><span data-lang="zh">無速度輸入</span><span data-lang="en">w/o vel. inp.</span></th><th><span data-lang="zh">無速度 loss</span><span data-lang="en">w/o vel. loss</span></th><th><span data-lang="zh">無 latent 輸入</span><span data-lang="en">w/o lat. inp.</span></th><th><span data-lang="zh">無 latent loss</span><span data-lang="en">w/o lat. loss</span></th><th>Regression</th><th>Baseline</th></tr>
+          <tr><td><span data-lang="zh">短程樓梯 %</span><span data-lang="en">Short stairs %</span></td><td class="win">100</td><td>85</td><td>80</td><td class="bad">50</td><td class="bad">55</td><td>85</td><td class="bad">10</td></tr>
+          <tr><td><span data-lang="zh">長程樓梯(階)</span><span data-lang="en">Long stairs (steps)</span></td><td class="win">176.5</td><td>51.45</td><td>54.6</td><td class="bad">13.3</td><td class="bad">10.6</td><td>155.7</td><td class="bad">0.0</td></tr>
+          <tr><td><span data-lang="zh">組合地形 %</span><span data-lang="en">Compositional %</span></td><td class="win">85</td><td>70</td><td>75</td><td>50</td><td>50</td><td>70</td><td class="bad">15</td></tr>
+          <tr><td><span data-lang="zh">可變形斜坡 %</span><span data-lang="en">Deformable slope %</span></td><td class="win">55</td><td>30</td><td>25</td><td class="bad">0</td><td class="bad">0</td><td>30</td><td class="bad">0</td></tr>
+          <tr><td><span data-lang="zh">拖曳 kg</span><span data-lang="en">Dragging kg</span></td><td class="win">10</td><td class="win">10</td><td class="win">10</td><td>5</td><td>5</td><td class="win">10</td><td>4</td></tr>
+          <tr><td><span data-lang="zh">撞擊 kg</span><span data-lang="en">Hit kg</span></td><td class="win">8</td><td>7</td><td>6.5</td><td>4</td><td>4</td><td class="win">8</td><td>5.5</td></tr>
+          <tr><td><span data-lang="zh">負載 kg</span><span data-lang="en">Payload kg</span></td><td class="win">8</td><td>7</td><td>7</td><td>3.5</td><td>3.5</td><td>7.5</td><td>3</td></tr>
+          <tr><td><span data-lang="zh">踩空 %</span><span data-lang="en">Missed step %</span></td><td class="win">100</td><td>90</td><td>90</td><td class="bad">5</td><td class="bad">0</td><td>65</td><td class="bad">0</td></tr>
+        </table>
+        </div>
+        <ul style="margin:6px 0 0;padding-left:18px;line-height:1.8;font-size:14px">
+          <li data-lang="zh"><b>latent 是承重牆</b>:「無 latent 輸入」與「無 latent loss」幾乎一樣糟 → latent 的價值<mark class="m-result" data-t="RESULT/EVIDENCE">完全來自 HIO 的監督</mark>,不是多一個輸入通道而已。</li>
+          <li data-lang="en"><b>The latent is load-bearing</b>: "w/o latent input" and "w/o latent loss" are about equally bad → the latent's value <mark class="m-result" data-t="RESULT/EVIDENCE">comes entirely from HIO's supervision</mark>, not from having an extra input channel.</li>
+          <li data-lang="zh"><b>速度是重要但次要</b>:拿掉速度,長程樓梯 → 51–55 階、踩空仍有 90%。</li>
+          <li data-lang="en"><b>Velocity matters, but second</b>: without it, long stairs → 51–55 steps, while missed steps still succeed 90% of the time.</li>
+          <li data-lang="zh"><b>對比 vs 回歸</b>:Regression 長程樓梯 155.7(vs 176.5)、踩空 65%(vs 100%)——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">差距真實但遠小於「有無 latent」</mark>;抗擾動三項幾乎打平。</li>
+          <li data-lang="en"><b>Contrast vs regression</b>: Regression gets 155.7 long stairs (vs 176.5) and 65% missed steps (vs 100%)—<mark class="m-assume" data-t="ASSUMPTION/CLAIM">a real gap, but much smaller than "latent vs no latent"</mark>; the three anti-disturbance tasks are near-ties.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">表徵品質:t-SNE(Fig.4)與原型數(Fig.7)</span><span data-lang="en">Representation quality: t-SNE (Fig.4) and prototype count (Fig.7)</span></h3>
+        <figure class="fig"><img src="figs/Long2024/fig4_tsne.png" alt="Figure 4 t-SNE">
+          <figcaption data-lang="zh"><b>Fig.4</b> latent 的 t-SNE,依地形著色(樓梯藍、粗糙坡橙、斜坡綠、離散紅)。(a) HIM:四種地形形成可辨識的分群(雖然橙、紅各分裂成數塊);(b) Regression(論文標為 Nahrendra 2023,即 DreamWaQ 式):兩大團、四色完全混雜。注意這是<b>定性</b>證據,沒有線性探針或分群純度等量化指標。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> t-SNE of the latent, colored by terrain (stairs blue, rough slope orange, slope green, discrete red). (a) HIM: the four terrains form recognizable clusters (though orange and red each split into several islands). (b) Regression (labeled Nahrendra 2023, i.e. DreamWaQ-style): two blobs with all four colors thoroughly mixed. This is <b>qualitative</b> evidence—no linear probe or cluster-purity metric.</figcaption></figure>
+        <p data-lang="zh"><b>原型數消融(Appendix B.3,Fig.7)</b>:預設 16 = 地形種數的平方。作者寫「性能隨原型數增加而提升直到 64,之後下降」。導讀者看 Fig.7:2 與 4 個原型明顯最差(線速度分數平台約 0.6),8 / 16 / 64 約 0.8,32 / 128 / 512 約 0.74 <span class="add">[導讀補充:讀圖]</span>。也就是說「太少很糟、適中最好」,但曲線並非單調,32 反而比 16、64 差。</p>
+        <p data-lang="en"><b>Prototype-count ablation (Appendix B.3, Fig.7)</b>: the default 16 = the square of the number of terrain types. The authors write "performance improves with more prototypes until 64, then declines." Reading Fig.7: 2 and 4 prototypes are clearly worst (linear score plateaus ~0.6), 8 / 16 / 64 reach ~0.8, 32 / 128 / 512 ~0.74 <span class="add">[guide note: read off the plot]</span>. So "too few is bad, moderate is best," but the curve isn't monotone—32 is worse than both 16 and 64.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">在<b>最需要快速察覺地形變化</b>的任務(長程樓梯、踩空、未見過的組合地形)上,HIM 對 RMA 與 Walk These Ways 拉開數倍差距;在平緩斜坡與抗擾動上,優勢則縮到誤差範圍內。</span>
+        <span data-lang="en">On the tasks that <b>most require noticing terrain changes fast</b> (long stairs, missed steps, unseen compositional terrain), HIM opens multi-fold gaps over RMA and Walk These Ways; on gentle slopes and anti-disturbance tests, the edge shrinks to within noise.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">實驗證明了 / 沒證明</span><span data-lang="en">What it does / doesn't prove</span></div>
+        <span data-lang="zh"><b>證明了</b>:有語意輔助目標的 latent 對盲走極重要;本文的 recipe 在實機難地形大勝作者重現的 RMA。<b>沒證明</b>:增益主要來自「對比」而非訓練協議細節;latent 真的編碼了「反應/穩定性」;IMC 類比有實質作用。<mark class="m-limit" data-t="LIMITATION/FUTURE">也沒有和原版 DreamWaQ 直接比較。</mark></span>
+        <span data-lang="en"><b>Proves</b>: a latent with a meaningful auxiliary target is crucial for blind walking; this recipe beats the authors' RMA reproduction by a wide margin on hard real terrain. <b>Doesn't prove</b>: that the gain comes mainly from "contrast" rather than training-protocol details; that the latent truly encodes "response/stability"; that the IMC analogy does real work. <mark class="m-limit" data-t="LIMITATION/FUTURE">Nor is there a direct comparison with the original DreamWaQ.</mark></span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">實機設定</span><span data-lang="en">Hardware setup</span></span>
+        <span data-lang="zh">A1 / Go1 / Aliengo;策略 50 Hz、PD 500 Hz;A1、Go1 用 \(k_p=30,\ k_d=0.75\),Aliengo 用 \(k_p=40,\ k_d=2.0\)。3 類 benchmark、8 項任務,場景照片見 Appendix Fig.6;另有戶外草地、碎石、台階(Fig.8)。</span>
+        <span data-lang="en">A1 / Go1 / Aliengo; policy 50 Hz, PD 500 Hz; \(k_p=30,\ k_d=0.75\) for A1 and Go1, \(k_p=40,\ k_d=2.0\) for Aliengo. Three benchmark groups, eight tasks; scene photos in Appendix Fig.6, plus outdoor grass, gravel, and steps (Fig.8).</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">latent 編碼了什麼?</span><span data-lang="en">what does the latent encode?</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">baseline 公平?</span><span data-lang="en">fair baselines?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「Internal model」其實是什麼?</b> 古典 IMC 的內部模型是<b>受控體的模型</b>,回授的是「量測 − 模型預測」的殘差。HIM 沒有受控體模型、沒有殘差,也沒有任何穩定性或擾動抑制分析;它就是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">一顆歷史編碼器加兩個 head</mark>。target encoder 吃 \(\mathbf o^a_{t+1}\) 確實讓 latent 帶有「前向動力學」味道,但這與 DreamWaQ 重建 \(\mathbf o_{t+1}\) 是同一個想法。IMC 是好用的直覺與包裝,<b>不是方法的推導來源</b>。</li>
+          <li data-lang="en"><b>What is the "internal model," really?</b> In classical IMC the internal model is a <b>model of the plant</b>, and the feedback is the residual "measurement − model prediction." HIM has no plant model, no residual, and no stability or disturbance-rejection analysis; it is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a history encoder with two heads</mark>. Feeding \(\mathbf o^a_{t+1}\) to the target encoder does give the latent a "forward-dynamics" flavor, but that's the same idea as DreamWaQ reconstructing \(\mathbf o_{t+1}\). IMC is useful intuition and packaging, <b>not where the method is derived from</b>.</li>
+          <li data-lang="zh"><b>與「顯式特權估測器」的界線比宣稱的模糊</b>:速度頭就是顯式特權估測(用模擬真值回歸),消融顯示它對長程樓梯貢獻 3 倍以上;critic 也吃特權地形與外力。「不模仿」成立,「不用特權」不成立。與 RMA 真正的差別是 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">latent 的目標從特權 env factor 換成自監督的下一步觀測</mark>。</li>
+          <li data-lang="en"><b>The line from "explicit privileged estimators" is blurrier than claimed</b>: the velocity head <i>is</i> an explicit privileged estimator (regressed to sim truth), and the ablation shows it contributes over 3× on long stairs; the critic also eats privileged terrain and force. "No imitation" holds; "no privilege" doesn't. The real difference from RMA is that <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the latent's target switches from privileged env factors to the self-supervised next observation</mark>.</li>
+          <li data-lang="zh"><b>Baseline 公平性</b>:(1) <mark class="m-limit" data-t="LIMITATION/FUTURE">MoB(Walk These Ways)是為平地行為多樣性設計的盲走控制器</mark>,本來就不是要爬樓梯——樓梯誤差 1.1、實機 0% 是預期中的,把它列進來放大了勝幅。(2) RMA 是作者重現的,其模擬器、reward、DR、網路大小是否與 HIM 對齊沒有交代;Table 1 的 1,280M 樣本數來自原論文不同的設定。(3) <b>最直接的競爭者 DreamWaQ 沒有以原版出現</b>,只以「Regression」消融代表(Fig.4 標註 Nahrendra 2023),而它在實機長程樓梯拿到 155.7,與 HIM 的 176.5 差距遠比 RMA 小。</li>
+          <li data-lang="en"><b>Baseline fairness</b>: (1) <mark class="m-limit" data-t="LIMITATION/FUTURE">MoB (Walk These Ways) is a blind controller built for gait diversity on flat ground</mark>, not for stairs—1.1 tracking error and 0% on hardware stairs are expected, and including it inflates the win. (2) RMA is a reimplementation whose simulator, rewards, DR, and network size are not stated to match HIM's; Table 1's 1,280M samples come from the original paper's different setup. (3) <b>The most direct competitor, DreamWaQ, never appears in original form</b>—only as the "Regression" ablation (labeled Nahrendra 2023 in Fig.4)—and it reaches 155.7 hardware long stairs, a far smaller gap to HIM's 176.5 than RMA's.</li>
+          <li data-lang="zh"><b>模擬指標太窄、太簡單</b>:模擬只比速度追蹤誤差,而且只在地形等級 1–4(樓梯 \(\le 13\) cm);沒有跌倒率、能耗、足端打滑、高難度等級的成功率。Fig.5(c) 中連 Oracle 也只到約 6/9 級,<mark class="m-limit" data-t="LIMITATION/FUTURE">最難的地形其實沒人解掉</mark>。</li>
+          <li data-lang="en"><b>Sim metrics are narrow and easy</b>: simulation compares only velocity-tracking error, and only at terrain levels 1–4 (stairs \(\le 13\) cm); no fall rate, energy, foot slip, or success at high difficulty. In Fig.5(c) even Oracle only reaches ~level 6 of 9—<mark class="m-limit" data-t="LIMITATION/FUTURE">the hardest terrain is actually unsolved by everyone</mark>.</li>
+          <li data-lang="zh"><b>實機統計</b>:每項 20 次,但只有樓梯階數有信賴區間,成功率沒有;最大重量以 0.5–1 kg 為級距,差 0.5 kg 很可能在誤差內。「所有任務都勝出」在拖曳一項其實是平手。標題級的「<mark class="m-assume" data-t="ASSUMPTION/CLAIM">traverse any terrain under any disturbances</mark>」只有 8 項測試支撐。</li>
+          <li data-lang="en"><b>Hardware statistics</b>: 20 trials each, but only the stair count carries a confidence interval; success rates don't. Max-weight is measured in 0.5–1 kg steps, so a 0.5 kg gap may be within noise. "Outperforms on all tasks" is actually a tie on dragging. The headline "<mark class="m-assume" data-t="ASSUMPTION/CLAIM">traverse any terrain under any disturbances</mark>" rests on eight tests.</li>
+          <li data-lang="zh"><b>對比 &gt; 回歸的證據偏弱</b>:「回歸會擬合 DR 雜訊而 collapse」只由一張 t-SNE 支撐;t-SNE 的分群外觀對 perplexity 敏感,且「把地形類型分開」不等於「編碼了 policy 需要的動力學資訊」。缺少線性探針(摩擦、地形高度、外力)這類量化。</li>
+          <li data-lang="en"><b>Evidence for contrast &gt; regression is thin</b>: "regression fits DR noise and collapses" rests on one t-SNE plot; t-SNE cluster appearance is perplexity-sensitive, and "separating terrain types" isn't the same as "encoding the dynamics the policy needs." No quantitative probes (friction, terrain height, force).</li>
+          <li data-lang="zh"><b>內部一致性問題</b> <span class="add">[導讀補充]</span>:(1) 宣稱 200M frames,但 \(4096\times100\times1000\approx4.1\times10^8\);Table 7 的 batch size 寫 \(4096\times200\) 又與 rollout 長度 100 不符。(2) 訓練時 \(K_p\) 隨機化在 \([16,24]\)、\(K_d\in[0.4,0.6]\),部署卻用 \(k_p=30/40\)、\(k_d=0.75/2.0\)(除非各機型名目值不同但未交代)。(3) 消融列了 6 種地形卻只給 4 個比例。(4) 原型數消融的文字前後矛盾(先說到 64 都在進步,又說「原型少最後性能更好」),與 Fig.7 也不符。(5) Table 稱「Vertical Hit」、附錄稱「Lateral hit」。(6) augmentation 內容與 \(\tau\) 未給。</li>
+          <li data-lang="en"><b>Internal-consistency issues</b> <span class="add">[guide note]</span>: (1) it claims 200M frames, but \(4096\times100\times1000\approx4.1\times10^8\); Table 7's batch size \(4096\times200\) also conflicts with a rollout length of 100. (2) Training randomizes \(K_p\) in \([16,24]\) and \(K_d\in[0.4,0.6]\), yet deployment uses \(k_p=30/40\), \(k_d=0.75/2.0\) (unless per-robot nominal values differ, which isn't stated). (3) The ablation lists six terrain types but only four proportions. (4) The prototype-ablation text contradicts itself ("improves up to 64," then "fewer prototypes reach superior final performance") and doesn't match Fig.7. (5) The table says "Vertical Hit," the appendix "Lateral hit." (6) The augmentation and \(\tau\) are unspecified.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>真是對比的功勞?</b> 把 DreamWaQ 的 β-VAE 重建換成 SwAV、其他全部相同(encoder 與 PPO 脫鉤、同樣的速度頭、同 DR),差距剩多少?增益來自 loss 還是訓練協議?</li>
+          <li data-lang="en"><b>Is it really the contrast?</b> Swap DreamWaQ's β-VAE reconstruction for SwAV with everything else equal (encoder detached from PPO, same velocity head, same DR)—how much of the gap remains? Is the gain from the loss or the training protocol?</li>
+          <li data-lang="zh"><b>latent 編碼了什麼?</b> 對 \(\hat{\mathbf l}_t\) 做線性探針預測摩擦、地形高度、負載、外力,準確度如何?「穩定性表徵」這個名字有實證嗎?</li>
+          <li data-lang="en"><b>What does the latent encode?</b> Linear-probe \(\hat{\mathbf l}_t\) for friction, terrain height, payload, external force—how accurate? Is there evidence behind the name "stability representation"?</li>
+          <li data-lang="zh"><b>IMC 類比承重嗎?</b> 若照真正的 IMC 做法,把「預測下一步 − 實際下一步」的殘差當回授訊號,會更好還是更差?如果不會變好,IMC 這個框架貢獻了什麼?</li>
+          <li data-lang="en"><b>Is the IMC analogy load-bearing?</b> Following real IMC—feeding back the residual "predicted next step − actual next step"—would it do better or worse? If not better, what does the IMC framing contribute?</li>
+          <li data-lang="zh"><b>正負對的定義</b>:同一地形、不同環境的兩段軌跡會被當成「負對」嗎(false negatives)?SwAV 沒有顯式負樣本,Fig.2 的拉近/推開與實際機制如何對應?</li>
+          <li data-lang="en"><b>Pair definitions</b>: are two trajectories on the same terrain in different envs treated as "negatives" (false negatives)? SwAV has no explicit negatives—how does Fig.2's pull/push map onto the actual mechanism?</li>
+          <li data-lang="zh"><b>Baseline 公平性</b>:用 RMA 原始碼與兩階段預算、DreamWaQ 原始碼重跑,並把 MoB 換成有樓梯課程的版本,Table 2 的勝幅還剩多少?</li>
+          <li data-lang="en"><b>Baseline fairness</b>: rerun RMA with its original code and two-stage budget, DreamWaQ with its original code, and replace MoB with a stair-curriculum version—how much of Table 2's margin survives?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 HIM 讀成「從控制理論推導出的新架構」。實際上它是 <b>DreamWaQ 式的歷史估測器 + SwAV 輔助 loss + 與 PPO 脫鉤的訓練</b>;IMC 提供的是命名與直覺。它的實證價值很高(尤其實機難地形),但<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「internal model」不應被理解為真的學到了一個可用於預測的系統模型</mark>——target encoder 只是讓 latent 與下一步一致。</span>
+        <span data-lang="en">Reading HIM as "a new architecture derived from control theory." In fact it is <b>a DreamWaQ-style history estimator + a SwAV auxiliary loss + training detached from PPO</b>; IMC supplies the name and intuition. Its empirical value is high (especially on hard real terrain), but <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"internal model" should not be read as having learned a usable predictive system model</mark>—the target encoder merely makes the latent consistent with the next step.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">實機評測做得比多數同類論文紮實:三台機器、8 項有量化指標的任務、每項 20 次,並把完整消融也搬上實機(Table 4)。這讓「latent 是承重牆」的結論相當可信。作者也坦承缺乏外感知只能學到「原始技能集」。</span>
+        <span data-lang="en">The hardware evaluation is more thorough than most peers: three robots, eight tasks with quantitative metrics, 20 trials each, and the full ablation carried onto hardware (Table 4). That makes "the latent is load-bearing" quite credible. The authors also concede that without exteroception the robot only learns a "primitive skill set."</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">作者自述的限制</span><span data-lang="en">Author-stated limitation</span></span>
+        <span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">沒有外感知(如視覺)</mark>,只能處理「踩到才知道」的地形;未來要結合外感知以挑戰更難環境與更高階任務。</span>
+        <span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">No exteroception (e.g., vision)</mark>, so it only handles terrain it can feel by stepping on it; future work will combine external perception for harder environments and higher-level tasks.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「估反應,不估原因」是可移植的設計模式</b>:當潛在擾動高維、難觀測(接觸、摩擦、負載),與其回歸它們的參數,不如學一個與「未來會發生什麼」一致的表徵。在操作(接觸豐富的 manipulation)上同樣適用。</li>
+          <li data-lang="en"><b>"Estimate the response, not the cause" is a portable design pattern</b>: when latent disturbances are high-dimensional and hard to observe (contact, friction, payload), instead of regressing their parameters, learn a representation consistent with "what happens next." It applies equally to contact-rich manipulation.</li>
+          <li data-lang="zh"><b>顯式/隱式分流</b>:有真值且與任務指標直接相關的量(速度)就監督;沒有標籤的部分用自監督目標。這比「全部丟給一個 latent」或「全部回歸特權資訊」都務實。</li>
+          <li data-lang="en"><b>Explicit/implicit split</b>: supervise quantities that have ground truth and directly tie to the task metric (velocity); use a self-supervised target for the unlabeled rest. More pragmatic than "one latent for everything" or "regress all privileged info."</li>
+          <li data-lang="zh"><b>輔助表徵與 RL 梯度脫鉤</b>:Baseline(encoder 只用 PPO 訓)在實機幾乎全滅。若你的 RL 系統有歷史編碼器,先給它一個有語意的輔助目標,再考慮要不要讓 RL 梯度流進去。</li>
+          <li data-lang="en"><b>Detach the auxiliary representation from RL gradients</b>: the Baseline (encoder trained only by PPO) nearly fails across the board on hardware. If your RL system has a history encoder, give it a meaningful auxiliary target first, then decide whether RL gradients should flow in.</li>
+          <li data-lang="zh"><b>拿它當盲走 baseline / codebase</b>:一小時單卡訓練、無老師、無資料集、開源,是做新想法(地形感知、人形、力控)時很合適的起點。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>Use it as a blind-locomotion baseline / codebase</b>: one-hour single-GPU training, no teacher, no dataset, open source—a good starting point for new ideas (perception, humanoids, force control). <span class="add">[guide note]</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">在學習式足式控制脈絡中的位置</span><span data-lang="en">Where it sits in the learning-based legged line</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">工作</span><span data-lang="en">Work</span></th><th><span data-lang="zh">如何處理看不到的外部狀態</span><span data-lang="en">How it handles unobserved external state</span></th></tr>
+          <tr><td><b>RMA</b> (Kumar 2021)</td><td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">顯式特權 → 蒸餾</mark>:老師把 env factors 編成 latent,第二階段 adaptation module 從歷史回歸它。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Explicit privilege → distillation</mark>: a teacher encodes env factors into a latent; a phase-2 adaptation module regresses it from history.</span></td></tr>
+          <tr><td><b>Walk These Ways</b> (Margolis &amp; Agrawal)</td><td><span data-lang="zh">換一條軸:不估環境,而是<mark class="m-method" data-t="METHOD/IDEA">學一族可調步態(MoB)</mark>,由人在部署時選行為;以平地為主。</span><span data-lang="en">A different axis: not estimating the environment, but <mark class="m-method" data-t="METHOD/IDEA">learning a family of tunable gaits (MoB)</mark> that a human selects at deployment; mostly flat ground.</span></td></tr>
+          <tr><td><b>DreamWaQ</b> (Nahrendra 2023)</td><td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">單階段、非對稱 critic + 估測器</mark>:速度回歸 + β-VAE latent(重建下一步)。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">One-stage asymmetric critic + estimator</mark>: velocity regression + β-VAE latent (reconstruct the next step).</span></td></tr>
+          <tr><td class="win"><b>HIMLoco</b> (Long 2024)</td><td class="win"><span data-lang="zh">同骨架,<mark class="m-method" data-t="METHOD/IDEA">隱式 internal model</mark>:速度回歸 + SwAV 原型對比 latent(對齊下一步),encoder 與 PPO 脫鉤,用 IMC 命名。</span><span data-lang="en">Same skeleton, <mark class="m-method" data-t="METHOD/IDEA">implicit internal model</mark>: velocity regression + SwAV prototype-contrast latent (aligned to the next step), encoder detached from PPO, IMC framing.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">一句話:這條線從「<b>顯式估特權參數再蒸餾</b>」(RMA)走向「<b>隱式學一個與未來一致的表徵</b>」(DreamWaQ → HIM)。<span class="add">[導讀補充]</span> 同團隊後續把同一思路延伸到 H-Infinity 式對抗擾動訓練與加入感知的人形版本(PIM)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">In one line: the lineage moves from "<b>explicitly estimate privileged parameters, then distill</b>" (RMA) to "<b>implicitly learn a representation consistent with the future</b>" (DreamWaQ → HIM). <span class="add">[guide note]</span> The same group later extended the idea to H-Infinity-style adversarial-disturbance training and a perceptive humanoid version (PIM).</p>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「只用本體感測的單階段 RL 就能做到高難度盲走」</span><span data-lang="en">"One-stage proprioception-only RL can achieve hard blind locomotion"</span></td><td><span data-lang="zh">實機長程樓梯 176.5 階、42 cm 踩空 100%。</span><span data-lang="en">176.5 hardware long stairs, 100% on a 42 cm missed step.</span></td></tr>
+          <tr><td><span data-lang="zh">「原型對比可取代重建/回歸當 RL 輔助 loss」</span><span data-lang="en">"Prototype contrast can replace reconstruction/regression as an RL auxiliary loss"</span></td><td><span data-lang="zh">HIO vs Regression 消融與 t-SNE(注意證據強度有限)。</span><span data-lang="en">The HIO vs Regression ablation and t-SNE (mind the limited evidence strength).</span></td></tr>
+          <tr><td><span data-lang="zh">「與 IMC 的概念連結」</span><span data-lang="en">"A conceptual link to IMC"</span></td><td><span data-lang="zh">作為「估反應而非估擾動」的直覺來源,而非理論保證。</span><span data-lang="en">As the source of the "estimate the response, not the disturbance" intuition, not as a theoretical guarantee.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">HIMLoco 用 IMC 的語言重新包裝了 DreamWaQ 式的盲走估測器——顯式回歸速度、用 SwAV 原型對比讓隱式 latent 與下一步一致——而這個看似小的 loss 替換配上脫鉤訓練,在實機最難的樓梯與踩空任務上帶來數倍於 RMA 的表現;它的 internal model 是「與未來一致的表徵」,不是真正的系統模型。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">HIMLoco rewraps a DreamWaQ-style blind-walking estimator in IMC language—regress velocity explicitly, and use SwAV prototype contrast to make an implicit latent consistent with the next step—and this seemingly small loss swap, plus detached training, yields multi-fold gains over RMA on the hardest real stair and missed-step tasks. Its "internal model" is a future-consistent representation, not a true system model.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <a class="chip" href="Kumar2021_RMA.html">RMA (Kumar 2021)</a>
+          <a class="chip" href="Margolis2022_WalkTheseWays.html">Walk These Ways</a>
+          <a class="chip" href="Nahrendra2023_DreamWaQ.html">DreamWaQ (Nahrendra 2023)</a>
+          <span class="chip">SwAV (Caron 2020)</span>
+          <span class="chip">Proto-RL (Yarats 2021)</span>
+          <span class="chip">DreamerPro (Deng 2022)</span>
+          <span class="chip">Rudin 2022 (legged_gym)</span>
+          <span class="chip">IMC (Rivera 1986)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論或讀圖,其餘事實與數據均出自原論文(arXiv v3)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences or plot readings; all other facts and figures come from the original paper (arXiv v3).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Long et al. 2024 (HIMLoco) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'HIMLoco reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

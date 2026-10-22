@@ -51,29 +51,68 @@ CLUSTERS = [
     },
     {
         "id": "legged", "emoji": "🦿", "accent": "#a0522d",
+        "synthesis": "Synthesis_LeggedRobotics.html",
+        "synthesis_emoji": "🗺️",
+        "synthesis_label_zh": "論文地圖", "synthesis_label_en": "Paper Map",
+        "synthesis_note_zh": "：整份 Legged-Robots 書單約 150 篇,可搜尋、附一句話定位與四條閱讀路線 →",
+        "synthesis_note_en": ": the whole Legged-Robots list (~150 entries), searchable, with one-liners and four reading routes →",
         "title_zh": "足式機器人:控制的兩條路",
         "title_en": "Legged Robots: Two Roads to Control",
-        "blurb_zh": ("四足控制的兩種世界觀——又一次「模型 vs 學習」的對照(與力覺串同構)。"
-                     "<b>Model-based 線</b>:把動力學寫成模型、線上解最佳化——凸 MPC 規劃地面反作用力、500 Hz 全身 QP「追力而非追軌跡」(WBIC),"
-                     "Mini-Cheetah 用同一組參數跑六種步態、最高 3.7 m/s;Wensing 等的 T-RO 綜述把「接觸建模→簡化模型→數值轉錄→全身 QP」整條工具鏈畫成地圖。"
-                     "<b>Learning 線</b>:模擬器大規模 RL、零樣本上真機——模仿動物(Motion Imitation)→ 1 秒內線上適應環境 extrinsics(RMA)→ "
-                     "一個 policy 多種步態的行為旋鈕(Walk These Ways)→ 非對稱 actor-critic 的隱式地形想像、單卡一小時訓完(DreamWaQ)。"
-                     "跨串彩蛋:RMA 出自 Pathak 組——與力覺串的 FACTR 同一實驗室。"),
-        "blurb_en": ("Two worldviews for quadruped control — another model-vs-learning contrast (isomorphic to the force thread). "
-                     "<b>Model-based line</b>: write down the dynamics and optimize online — convex MPC plans ground-reaction forces, a 500 Hz whole-body QP tracks forces rather than trajectories (WBIC); "
-                     "Mini-Cheetah runs six gaits up to 3.7 m/s with one parameter set; the Wensing et al. T-RO survey maps the whole toolchain (contact modeling → reduced models → transcription → whole-body QP). "
-                     "<b>Learning line</b>: massive RL in sim, zero-shot to hardware — imitate animals (Motion Imitation) → adapt online to environment extrinsics within a second (RMA) → "
-                     "one policy, many gaits via behavior knobs (Walk These Ways) → implicit terrain imagination with asymmetric actor-critic, trained in one hour on one GPU (DreamWaQ). "
-                     "Cross-thread egg: RMA comes from the Pathak lab — the same lab as FACTR in the force thread."),
+        "blurb_zh": ("四足控制的兩種世界觀——又一次「模型 vs 學習」的對照(與力覺串同構),而且兩派正在互借工具。"
+                     "<b>Model-based 線</b>:凸 MPC 規劃地面反作用力、500 Hz 全身 QP「追力而非追軌跡」(WBIC,Mini-Cheetah 六種步態、3.7 m/s)→ "
+                     "把姿態線性化搬到 SO(3) 上、實機穿越 Euler 奇異點後空翻(RF-MPC)→ Wensing 等的 T-RO 綜述畫出整條工具鏈。"
+                     "<b>Learning 線</b>:模仿動物(Motion Imitation)→ 1 秒內適應環境 extrinsics(RMA)→ 一個 policy 多種步態(Walk These Ways)→ "
+                     "隱式地形想像(DreamWaQ)→ 估「機器人自己的反應」而非環境,實機爬 176.5 階(HIMLoco)→ 把學到的模型接回規劃(PIP-Loco)。"
+                     "<b>行走之外</b>:用腿運球(DribbleBot)、預訓練動作先驗玩鬼抓人(Tencent)、人形的雙層動作模仿(Bi-Level)。"),
+        "blurb_en": ("Two worldviews for quadruped control — another model-vs-learning contrast (isomorphic to the force thread), now borrowing each other's tools. "
+                     "<b>Model-based line</b>: convex MPC plans ground-reaction forces and a 500 Hz whole-body QP tracks forces, not trajectories (WBIC; six gaits, 3.7 m/s on Mini-Cheetah) → "
+                     "attitude linearization moved onto SO(3), backflipping through the Euler singularity on hardware (RF-MPC) → the Wensing et al. T-RO survey maps the toolchain. "
+                     "<b>Learning line</b>: imitate animals (Motion Imitation) → adapt to extrinsics within a second (RMA) → one policy, many gaits (Walk These Ways) → "
+                     "implicit terrain imagination (DreamWaQ) → estimate the robot's own response instead of the terrain, 176.5 real stairs (HIMLoco) → plug the learned model back into planning (PIP-Loco). "
+                     "<b>Beyond walking</b>: dribbling with legs (DribbleBot), a pre-trained motion prior that plays chase tag (Tencent), bi-level motion imitation for humanoids."),
         "context": None,
         "lineages": [
             {"label_zh": "Model-based:最佳化控制", "label_en": "Model-based: optimization control",
-             "chain": ["Kim2019", "Wensing2022"],
-             "edges_zh": ["系統實作 → 領域綜述"], "edges_en": ["system → field survey"]},
+             "chain": ["Kim2019", "Ding2021", "Wensing2022"],
+             "edges_zh": ["凸 MPC → SO(3) MPC", "→ 領域綜述"], "edges_en": ["convex → SO(3) MPC", "→ field survey"]},
             {"label_zh": "Learning-based:RL 運動控制", "label_en": "Learning-based: RL locomotion",
-             "chain": ["Peng2020", "Kumar2021", "Margolis2022", "Nahrendra2023"],
-             "edges_zh": ["模仿動物 → 快速適應", "→ 行為多樣性", "→ 隱式地形想像"],
-             "edges_en": ["imitate → rapid adaptation", "→ behavior multiplicity", "→ terrain imagination"]},
+             "chain": ["Peng2020", "Kumar2021", "Margolis2022", "Nahrendra2023", "Long2024", "Shirwatkar2024"],
+             "edges_zh": ["模仿動物 → 快速適應", "→ 行為多樣性", "→ 隱式地形想像", "→ 估反應而非環境", "→ 接回規劃"],
+             "edges_en": ["imitate → rapid adaptation", "→ behavior multiplicity", "→ terrain imagination", "→ response, not terrain", "→ back to planning"]},
+            {"label_zh": "行走之外:操作、遊戲、人形", "label_en": "Beyond walking: manipulation, play, humanoids",
+             "chain": ["Ji2023", "Han2024", "Zhao2024"],
+             "edges_zh": ["腿當操作器 ↔ 動作先驗", "四足 → 人形"], "edges_en": ["legs as manipulators ↔ motion prior", "quadruped → humanoid"]},
+        ],
+    },
+    {
+        "id": "leggedhw", "emoji": "⚙️", "accent": "#8a6d2f",
+        "synthesis": "Synthesis_LeggedRobotics.html",
+        "synthesis_emoji": "🗺️",
+        "synthesis_label_zh": "論文地圖", "synthesis_label_en": "Paper Map",
+        "synthesis_note_zh": "：致動器、機器人平台、協同設計的完整清單與「減速比取捨」入門 →",
+        "synthesis_note_en": ": full lists of actuators, platforms and co-design, plus a gear-ratio trade-off primer →",
+        "title_zh": "足式機器人:硬體與協同設計",
+        "title_en": "Legged Robots: Hardware and Co-Design",
+        "blurb_zh": ("控制吃的是硬體的「透明度」:低減速比的準直驅讓電流≈力矩,MPC 才能直接下力、模擬器才建得準。"
+                     "<b>硬體線</b>:用無人機馬達 + 3:1 皮帶做出跳 1.14 m 的開源四足(Stanford Doggo)→ 把馬達力矩-轉速極限寫進 RL,讓高速奔跑不超出致動器(KAIST HOUND)→ "
+                     "為了縮小 sim-to-real 差距而設計的人形(Berkeley Humanoid)→ 3D 列印擺線致動器的開源人形(Berkeley Humanoid Lite)。"
+                     "<b>協同設計線</b>:不再先做硬體再調控制,而是把設計參數放進最佳化——外層設計 × 內層最佳控制(Dinev 等,Edinburgh)↔ 把「改身體」變成 RL 策略的動作(Transform2Act)→ "
+                     "用 RL 一起決定並聯彈簧與控制(PEA co-design)→ 綜述畫出整個 brain-body co-design 的分類法。"),
+        "blurb_en": ("Control feeds on hardware transparency: a low-ratio quasi-direct drive makes current ≈ torque, so MPC can command forces and simulators can be accurate. "
+                     "<b>Hardware line</b>: drone motors plus a 3:1 belt give an open-source quadruped that jumps 1.14 m (Stanford Doggo) → motor torque-speed limits written into RL so high-speed running stays within the actuators (KAIST HOUND) → "
+                     "a humanoid designed to shrink the sim-to-real gap (Berkeley Humanoid) → an open-source humanoid on 3D-printed cycloidal actuators (Berkeley Humanoid Lite). "
+                     "<b>Co-design line</b>: instead of building hardware first and tuning control after, put design parameters into the optimization — outer design × inner optimal control (Dinev et al., Edinburgh) ↔ changing the body as an RL policy action (Transform2Act) → "
+                     "RL deciding parallel springs and control together (PEA co-design) → a survey mapping the whole brain-body co-design taxonomy."),
+        "context": None,
+        "lineages": [
+            {"label_zh": "硬體:從致動器到平台", "label_en": "Hardware: from actuators to platforms",
+             "chain": ["Kau2019", "Shin2023", "Liao2024", "Chi2025"],
+             "edges_zh": ["QDD 四足 → 致動器限制進 RL", "→ 為 RL 設計的人形", "→ 3D 列印擺線版"],
+             "edges_en": ["QDD quadruped → actuator limits in RL", "→ humanoid designed for RL", "→ 3D-printed cycloidal"]},
+            {"label_zh": "協同設計:身體與大腦一起最佳化", "label_en": "Co-design: body and brain together",
+             "chain": ["Dinev2022", "Yuan2022", "Bjelonic2023", "WangYX2025"],
+             "edges_zh": ["對照:模型式 ↔ 設計即策略", "→ RL + 真實 PEA", "→ 領域綜述"],
+             "edges_en": ["contrast: model-based ↔ design as policy", "→ RL + real PEA", "→ field survey"]},
         ],
     },
     {
@@ -207,9 +246,11 @@ def render_clusters(by_key, present=frozenset()):
         if c.get("synthesis") and c["synthesis"] in present:
             note_zh = c.get("synthesis_note_zh", "：橫向比較表 + 演進脈絡 →")
             note_en = c.get("synthesis_note_en", ": head-to-head comparison + lineage evolution →")
+            lab_zh = c.get("synthesis_label_zh", "綜合導讀")
+            lab_en = c.get("synthesis_label_en", "Synthesis")
             parts.append(f'<a class="synbanner" href="{html.escape(c["synthesis"])}">'
-                         '<span class="sb-emoji">🧵</span><span class="sb-txt">'
-                         '<b><span data-lang="zh">綜合導讀</span><span data-lang="en">Synthesis</span></b> '
+                         f'<span class="sb-emoji">{c.get("synthesis_emoji", "🧵")}</span><span class="sb-txt">'
+                         f'<b><span data-lang="zh">{lab_zh}</span><span data-lang="en">{lab_en}</span></b> '
                          f'<span data-lang="zh">{note_zh}</span>'
                          f'<span data-lang="en">{note_en}</span>'
                          '</span></a>')
@@ -221,7 +262,8 @@ def render_clusters(by_key, present=frozenset()):
             parts.append('</div>')
         parts.append('<div class="vines">')
         for ln in c["lineages"]:
-            chain = [k for k in ln["chain"] if k in by_key]
+            idx = [i for i, k in enumerate(ln["chain"]) if k in by_key]
+            chain = [ln["chain"][i] for i in idx]
             if not chain:
                 continue
             parts.append('<div class="lineage">')
@@ -232,8 +274,10 @@ def render_clusters(by_key, present=frozenset()):
             for i, k in enumerate(chain):
                 parts.append(gcard(by_key[k], acc))
                 if i < len(chain) - 1:
-                    ez = ln["edges_zh"][i] if i < len(ln.get("edges_zh", [])) else "→"
-                    ee = ln["edges_en"][i] if i < len(ln.get("edges_en", [])) else "→"
+                    # label of the edge that leads into the next present paper
+                    e = idx[i + 1] - 1
+                    ez = ln["edges_zh"][e] if e < len(ln.get("edges_zh", [])) else "→"
+                    ee = ln["edges_en"][e] if e < len(ln.get("edges_en", [])) else "→"
                     parts.append(vine(ez, ee))
             parts.append('</div></div>')
         parts.append('</div></section>')

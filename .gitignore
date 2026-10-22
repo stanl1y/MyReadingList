@@ -6,3 +6,4 @@
 .playwright-mcp/
 *.tmp
 Thumbs.db
+.claude/launch.json

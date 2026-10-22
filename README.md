@@ -24,9 +24,15 @@ Method · Results · Critique · Takeaway** — with:
 - 🧵 **[Synthesis](papers/Synthesis_ForceManipulation.html)** — head-to-head comparison of the two lines
 
 ### 🦿 Legged Robots: Two Roads to Control
-*Model-based optimization vs learned locomotion — curated from the [Legged-Robots](https://github.com/singhaman1750/Legged-Robots) list.*
-- **Model-based** — WBIC+MPC (Kim 2019, MIT Mini-Cheetah) → Optimization-Based Control survey (T-RO 2022+)
-- **Learning** — Motion Imitation (Peng 2020) → RMA (2021) → Walk These Ways (2022) → DreamWaQ (2023)
+*Model-based optimization vs learned locomotion — from the [Legged-Robots](https://github.com/singhaman1750/Legged-Robots) list.*
+- 🗺️ **[Paper Map](papers/Synthesis_LeggedRobotics.html)** — every entry of the list (~150, control · robot design · actuators · co-design), searchable, with one-liners, access status and four reading routes
+- **Model-based** — WBIC+MPC (Kim 2019, MIT Mini-Cheetah) → RF-MPC on SO(3) (T-RO 2021) → Optimization-Based Control survey (T-RO 2022+)
+- **Learning** — Motion Imitation (Peng 2020) → RMA (2021) → Walk These Ways (2022) → DreamWaQ (2023) → HIMLoco (ICLR 2024) → PIP-Loco (2024)
+- **Beyond walking** — DribbleBot (ICRA 2023) · Lifelike Agility and Play (Nature MI 2024) · Bi-Level Motion Imitation for humanoids (CoRL 2024)
+
+### ⚙️ Legged Robots: Hardware and Co-Design
+- **Hardware** — Stanford Doggo (ICRA 2019) → Actuator-Constrained RL on KAIST HOUND (2023) → Berkeley Humanoid (2024) → Berkeley Humanoid Lite (RSS 2025)
+- **Co-design** — Versatile Co-Design (IROS 2022) ↔ Transform2Act (ICLR 2022) → PEA co-design (RA-L 2023) → Embodied Co-Design survey (IEEE TEC 2026)
 
 ### ✂️ The Segment Anything Series
 *One promptable machine, four dimension expansions: space → time → semantics → 3D.*

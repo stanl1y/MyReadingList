@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>DribbleBot — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"DribbleBot: Dynamic Legged Manipulation in the Wild","authors":"Yandong Ji, Gabriel B. Margolis, Pulkit Agrawal","year":"2023","venue":"ICRA","tags":["Legged Robotics","Reinforcement Learning","Sim-to-Real","Quadruped","Legged Manipulation","Robot Soccer","Whole-Body Control"],"tldr":"Unitree Go1 四足只靠板載 210° 魚眼相機與 Jetson 運算,在沙地、碎石、泥地、雪地、草地上邊跑邊盤帶足球:以「全域座標下的球速」為指令,在 Isaac Gym 用 PPO 訓練全身策略;再以微調 YOLOv7 魚眼偵測、球–地面拖曳模型隨機化、跌倒起身策略三招跨越 sim-to-real。","tldr_en":"A Unitree Go1 quadruped dribbles a soccer ball on sand, gravel, mud, snow and grass using only onboard 210-degree fisheye cameras and Jetson compute: a PPO whole-body policy commanded by ball velocity in the global frame, bridged to reality by a fine-tuned YOLOv7 fisheye detector, randomized ball-terrain drag, and a fall-recovery policy."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:88px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  .rw td:nth-child(2){white-space:nowrap}
+  .rw td:nth-child(3){white-space:nowrap; text-align:right; font-family:ui-monospace,"SF Mono",Menlo,monospace}
+  .t1 td,.t1 th{text-align:center} .t1 td:first-child,.t1 th:first-child{text-align:left}
+  .lk{color:var(--c-method); text-decoration:none; border-bottom:1px dotted var(--c-method)}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">DribbleBot 讓一台 40 cm 高的 <b>Unitree Go1</b> 四足機器人,<b>只靠機身上的兩顆 210° 魚眼相機與板載 Jetson 運算</b>,在沙地、碎石、泥地、雪地、草地上<b>邊跑邊盤帶足球</b>(in-the-wild,無 tether、無外部相機)。核心是一條在 Isaac Gym 以 PPO 訓練、<mark class="m-method" data-t="METHOD/IDEA">以「全域座標下的球速」為指令</mark>的全身控制策略;再用三招跨越 sim-to-real:<mark class="m-method" data-t="METHOD/IDEA">在魚眼影像上微調 YOLOv7 找球</mark>、<mark class="m-method" data-t="METHOD/IDEA">隨機化球–地面拖曳模型</mark>、<mark class="m-method" data-t="METHOD/IDEA">跌倒後自動起身的 recovery policy</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">DribbleBot lets a 40 cm-tall <b>Unitree Go1</b> quadruped <b>dribble a soccer ball while running</b> across sand, gravel, mud, snow and grass, <b>using only two body-mounted 210° fisheye cameras and onboard Jetson compute</b> (in the wild: no tether, no external cameras). The core is a whole-body policy trained with PPO in Isaac Gym and <mark class="m-method" data-t="METHOD/IDEA">commanded by the ball velocity in the global frame</mark>; three measures bridge sim-to-real: <mark class="m-method" data-t="METHOD/IDEA">a YOLOv7 ball detector fine-tuned on fisheye images</mark>, <mark class="m-method" data-t="METHOD/IDEA">a randomized ball-terrain drag model</mark>, and <mark class="m-method" data-t="METHOD/IDEA">a recovery policy that stands the robot back up after a fall</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Ji2023/fig1_teaser.png" alt="Figure 1 teaser: dribbling on diverse terrains and fall recovery">
+        <figcaption data-lang="zh"><b>Fig.1</b> 左:在 MIT 草地上不接線、靠板載感知盤帶;右:沙、碎石、泥、雪四種地形;下:被外力推倒後<b>自己翻身站起、再追回球</b>。注意右欄每種地形下球與腳的滑動方式都不同——這正是論文說「球–地面動力學獨立於機器人–地面動力學」的視覺證據。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> Left: untethered, onboard-perception dribbling on an MIT lawn; right: sand, gravel, mud and snow; bottom: after an extreme shove the robot <b>rights itself, stands up and re-acquires the ball</b>. Notice that ball and feet slip differently on each terrain in the right column—the visual evidence for the claim that ball-terrain dynamics vary independently of robot-terrain dynamics.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — <mark class="m-problem" data-t="PROBLEM/GAP">動態移動操作(dynamic mobile manipulation)</mark>要同時解決視覺感知、動態運動與物體操作。先前的四足足球研究不是在<b>平滑場地</b>、就是靠<b>室內外部相機/動捕</b>,或只做「推球」與「球停下才踢」的<b>靜態盤帶</b>。</li>
+          <li data-lang="en"><b>Problem</b> — <mark class="m-problem" data-t="PROBLEM/GAP">Dynamic mobile manipulation</mark> couples visual perception, dynamic locomotion and object manipulation. Prior legged-soccer work used <b>flat smooth fields</b>, <b>indoor external cameras / mocap</b>, or only pushed the ball with the body / did <b>static dribbling</b> where the ball stops before each kick.</li>
+          <li data-lang="zh"><b>方法</b> — 策略 \(\mathbf a_t=\pi_d(\mathbf o_t,\mathbf c_t)\) 在模擬中吃<b>真值球位置</b>(加雜訊、延遲、瞬移)與 15 步本體感知歷史,指令 \(\mathbf c_t\) 是<mark class="m-method" data-t="METHOD/IDEA">全域座標的目標球速</mark>;部署時球位置改由<b>微調 YOLOv7 + 魚眼等距模型</b>估出;球拖曳 \(F_D=C_Dv^2\) 隨機化;跌倒時 FSM 切到 recovery policy。</li>
+          <li data-lang="en"><b>Method</b> — The policy \(\mathbf a_t=\pi_d(\mathbf o_t,\mathbf c_t)\) sees the <b>ground-truth ball position</b> in sim (with noise, delay, teleports) plus a 15-step proprioceptive history; the command \(\mathbf c_t\) is a <mark class="m-method" data-t="METHOD/IDEA">target ball velocity in the global frame</mark>. At deployment the ball position comes from a <b>fine-tuned YOLOv7 + equidistant fisheye model</b>; ball drag \(F_D=C_Dv^2\) is randomized; on a fall, an FSM hands control to a recovery policy.</li>
+          <li data-lang="zh"><b>結果</b> — 模擬中可追蹤<mark class="m-result" data-t="RESULT/EVIDENCE">最高 1.5 m/s 的盤帶速度與最多 180° 的瞬間轉向指令</mark>;真機腳本測試在磁磚、草地、沙地 <b>4/4</b>、雪地 3/4、路緣下階 2/4、斜坡 0/4;拿掉 YOLO 微調則<mark class="m-result" data-t="RESULT/EVIDENCE">所有地形 0/4</mark>。</li>
+          <li data-lang="en"><b>Results</b> — In sim it tracks <mark class="m-result" data-t="RESULT/EVIDENCE">dribbling speeds up to 1.5 m/s and instantaneous command-direction changes up to 180°</mark>. On hardware, scripted trials succeed <b>4/4</b> on tile, grass and sand, 3/4 on snow, 2/4 on a curb step-down and 0/4 on a ramp; without YOLO fine-tuning it scores <mark class="m-result" data-t="RESULT/EVIDENCE">0/4 on every terrain</mark>.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">到 2023 年,<mark class="m-method" data-t="METHOD/IDEA">模擬中訓練 RL、零樣本轉移到真機</mark>已經是四足運動的主流配方:樓梯、登山步道、沙地、泥地都能走([2]–[11],含同實驗室的 Rapid Locomotion 與 Walk These Ways);同一套配方也在<b>靈巧手內操作</b>上成功([12]–[15])。作者問的是:<b>這套配方能否延伸到「邊跑邊操作物體」的動態移動操作?</b></p>
+        <p data-lang="en">By 2023, <mark class="m-method" data-t="METHOD/IDEA">training RL in simulation and transferring zero-shot to hardware</mark> was the dominant recipe for quadruped locomotion—stairs, hiking trails, sand, mud ([2]–[11], including this lab's Rapid Locomotion and Walk These Ways); the same recipe also worked for <b>dexterous in-hand manipulation</b> ([12]–[15]). The authors ask: <b>can it be extended to dynamic mobile manipulation—manipulating an object while running?</b></p>
+        <p data-lang="zh">足球盤帶是一個好的案例:它需要<mark class="m-method" data-t="METHOD/IDEA">whole-body control</mark>——同一組腿既要支撐平衡、又要追球、又要在對的時機施加對的踢力。RoboCup 早期多用規則式踢球;近期學習式方法多半<mark class="m-problem" data-t="PROBLEM/GAP">在模擬、或在裝了外部相機的室內實驗室</mark>完成(如 [22] 的射門、[23] 的守門、[21] 的模仿學習靜態盤帶)。</p>
+        <p data-lang="en">Soccer dribbling is a good case study: it needs <mark class="m-method" data-t="METHOD/IDEA">whole-body control</mark>—the same legs must balance, pursue the ball and apply the right kick at the right moment. Early RoboCup used rule-based kicking; recent learned approaches mostly live <mark class="m-problem" data-t="PROBLEM/GAP">in simulation or in instrumented indoor labs with external cameras</mark> (e.g. shooting in [22], goalkeeping in [23], imitation-learned static dribbling in [21]).</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這是一篇<b>系統論文</b>:沒有新的 RL 演算法(就是 PPO + MLP),貢獻在於<b>辨認出「運動+操作」這個組合任務特有的 sim-to-real 缺口</b>(球的動力學、近距離感知、跌倒後失球),並為每個缺口找到<b>最便宜但有效</b>的補丁。讀的時候要問的不是「新在哪個公式」,而是「哪些工程選擇才是真正必要的」——而論文的消融正好回答了一部分。</p>
+          <p data-lang="en" style="margin-top:6px">This is a <b>systems paper</b>: no new RL algorithm (it is PPO + MLP). The contribution is <b>identifying the sim-to-real gaps specific to the locomotion + manipulation combination</b> (ball dynamics, close-range perception, losing the ball after a fall) and patching each with the <b>cheapest effective fix</b>. The question to ask is not "which new equation" but "which engineering choices were actually necessary"—and the ablation partly answers that.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是「機器狗會踢球」這個 demo,而是底下這幾個設計觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">The takeaway is not the "robot dog plays soccer" demo but these design ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">指令下給「物體」,不是給「身體」。</b> 介面是<mark class="m-method" data-t="METHOD/IDEA">球在全域座標的 2D 速度</mark>,而不是身體速度或步態參數。踢、追、轉身對位、掉球後折返等行為都不必手寫,由 RL <b>自己湧現</b>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Command the object, not the body.</b> The interface is <mark class="m-method" data-t="METHOD/IDEA">the ball 2D velocity in the global frame</mark>, not body velocity or gait parameters. Kicking, chasing, re-orienting and doubling back after losing the ball are never scripted—they <b>emerge</b> from RL.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">感知與控制解耦,各自跨 sim-to-real。</b> 策略只吃「球的 3D 位置」(模擬中用真值+雜訊/延遲/瞬移);影像問題全交給一個<b>在真實魚眼影像上監督微調</b>的偵測器。避免了在模擬中渲染魚眼影像的慢與 visual gap。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Decouple perception from control; bridge each gap separately.</b> The policy only consumes the ball 3D position (ground truth + noise / delay / teleports in sim); all image issues go to a detector <b>fine-tuned with supervision on real fisheye images</b>. This avoids slow fisheye rendering and the visual sim-to-real gap.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">物體–地形動力學是另一條獨立的隨機化軸。</b> 球輕、是滾動接觸,所以<mark class="m-assume" data-t="ASSUMPTION/CLAIM">球在草地/柏油上的減速跟腳的打滑無關</mark>;要另外隨機化球的拖曳、質量與速度擾動,不能只靠既有的機器人動力學隨機化。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Object-terrain dynamics are a separate randomization axis.</b> The ball is light and rolls, so <mark class="m-assume" data-t="ASSUMPTION/CLAIM">its deceleration on grass vs pavement is unrelated to foot slip</mark>; ball drag, mass and velocity perturbations must be randomized on top of the usual robot-dynamics randomization.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">最脆弱的一環是感知,而且便宜就能補。</b> 只用 254 張手標魚眼影像微調 YOLOv7,就從<mark class="m-result" data-t="RESULT/EVIDENCE">所有地形 0/4 變成 4/4</mark>——是整個消融中影響最大的一項。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Perception is the weakest link—and cheap to fix.</b> Fine-tuning YOLOv7 on just 254 hand-labeled fisheye images moves success from <mark class="m-result" data-t="RESULT/EVIDENCE">0/4 to 4/4 on every terrain</mark>—the largest effect in the ablation.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">模組化安全網延伸工作範圍。</b> 主策略只在平地訓練;超出分佈時用<b>另一條在惡劣地形訓練的 recovery policy</b> + 帶遲滯的狀態機接手,讓「跌倒」不必等於「任務失敗」。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">A modular safety net extends the operating envelope.</b> The main policy trains on flat ground only; out of distribution, <b>a separate recovery policy trained on harsh terrain</b> plus a hysteretic state machine takes over, so a fall need not mean task failure.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">操作任務蓋在運動「堆疊」之上。</b> 步態時序變數、步態獎勵、PD 增益、actuator network、PPO 超參數幾乎全部沿用 <a class="lk" href="Margolis2022_WalkTheseWays.html">Walk These Ways</a>;換掉的主要是<b>指令介面與任務獎勵</b>。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Manipulation built on a locomotion stack.</b> Gait timing variables, gait rewards, PD gains, the actuator network and PPO hyperparameters are almost all inherited from <a class="lk" href="Margolis2022_WalkTheseWays.html">Walk These Ways</a>; what changes is mainly <b>the command interface and task rewards</b>. <span class="add">[guide note]</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">DribbleBot: Dynamic Legged Manipulation in the Wild</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Yandong Ji*, Gabriel B. Margolis*, Pulkit Agrawal <small>(*equal)</small></span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Improbable AI Lab, MIT</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2023 · ICRA(arXiv:2304.01159)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Legged manipulation</span>
+          <b><span data-lang="zh">影片/程式</span><span data-lang="en">Video/code</span></b><span>gmargo11.github.io/dribblebot</span>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:10px 0 0"><span data-lang="zh"><span class="add">[導讀補充]</span> arXiv v1 PDF 本身沒有會議戳記;ICRA 2023 為已知的發表場合。</span><span data-lang="en"><span class="add">[guide note]</span> The arXiv v1 PDF carries no venue stamp; ICRA 2023 is the known publication venue.</span></p>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它把「四足機器人 + RL」從<b>移動</b>推到<b>移動中操作</b>,而且是在<mark class="m-result" data-t="RESULT/EVIDENCE">真實戶外、全板載</mark>的條件下。論文自己的定位是:證明<b>現成的低價四足平台與感測器</b>已足以研究「直接從感測觀測做動態全身控制」的問題。</span>
+        <span data-lang="en">It pushes "quadrupeds + RL" from <b>locomotion</b> to <b>manipulation while moving</b>, and does so <mark class="m-result" data-t="RESULT/EVIDENCE">outdoors and fully onboard</mark>. The paper positions itself as evidence that <b>off-the-shelf, low-cost quadrupeds and sensors</b> already suffice for studying dynamic whole-body control directly from sensory observations.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">同實驗室脈絡</span><span data-lang="en">Lab lineage</span></span>
+        <span data-lang="zh">Margolis &amp; Agrawal 的 <a class="lk" href="Margolis2022_WalkTheseWays.html">Walk These Ways</a>(CoRL 2022,本文 [9])提供了這裡的整套運動基礎:同一台 Go1、同一組步態時序變數 \(\boldsymbol\theta^{\text{cmd}}\) 與步態獎勵、同一組 PD 增益與 PPO 超參數。WTW 問「<b>如何讓一條策略有多種走法</b>」,DribbleBot 問「<b>腿除了走,還能拿來操作物體嗎</b>」。<span class="add">[導讀補充] [22] 的第一作者同為 Y. Ji(四足射門),本文可視為其足球技能研究線的延續。</span></span>
+        <span data-lang="en">Margolis &amp; Agrawal's <a class="lk" href="Margolis2022_WalkTheseWays.html">Walk These Ways</a> (CoRL 2022, ref [9] here) supplies the whole locomotion base: the same Go1, the same gait-timing variables \(\boldsymbol\theta^{\text{cmd}}\) and gait rewards, the same PD gains and PPO hyperparameters. WTW asks "<b>how can one policy walk in many ways</b>"; DribbleBot asks "<b>can legs do more than walk—can they manipulate?</b>" <span class="add">[guide note] The first author of [22] (quadruped soccer shooting) is also Y. Ji; this paper reads as a continuation of that soccer-skills line.</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Dynamic mobile manipulation</span><span class="chip">Whole-body control</span>
+          <span class="chip">Ball-velocity command</span><span class="chip">Fisheye YOLOv7</span>
+          <span class="chip">Ball drag randomization</span><span class="chip">Fall recovery FSM</span>
+          <span class="chip">Isaac Gym · PPO</span><span class="chip">Unitree Go1</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">規則式 RoboCup 足球</span><span data-lang="en">Rule-based RoboCup soccer</span></b><br><small>[17]–[19]</small></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">平坦光滑場地</mark>,不需處理地形變化;多半是用身體推球,而非邊跑邊踢。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">Flat, smooth fields</mark> with no terrain variation; often pushing the ball with the body rather than kicking while running.</span></td></tr>
+          <tr><td><b><span data-lang="zh">靜態盤帶</span><span data-lang="en">Static dribbling</span></b><br><small>[20]–[22]</small></td><td><span data-lang="zh"><mark class="m-problem" data-t="PROBLEM/GAP">球每次停下才踢下一腳</mark>,不是運動與踢球同時進行;[21] 用模仿學習 + 動捕輔助。</span><span data-lang="en"><mark class="m-problem" data-t="PROBLEM/GAP">The ball comes to rest before each kick</mark>; locomotion and kicking are not simultaneous. [21] uses imitation learning assisted by motion capture.</span></td></tr>
+          <tr><td><b><span data-lang="zh">實驗室 RL 足球技能</span><span data-lang="en">Lab RL soccer skills</span></b><br><small>[22] shooting · [23] goalkeeping</small></td><td><span data-lang="zh">依賴<mark class="m-problem" data-t="PROBLEM/GAP">多台室內靜態外部相機</mark>,繞過了板載視覺的雜訊與光照問題;一次只學單一技能。</span><span data-lang="en">Rely on <mark class="m-problem" data-t="PROBLEM/GAP">multiple static external cameras indoors</mark>, bypassing noisy onboard vision and lighting variation; one skill at a time.</span></td></tr>
+          <tr><td><b><span data-lang="zh">模擬角色足球</span><span data-lang="en">Simulated-character soccer</span></b><br><small>[38], [40], [42], [44]</small></td><td><span data-lang="zh">不在實體機器人上;[44] 的盤帶等低階技能<mark class="m-problem" data-t="PROBLEM/GAP">依賴人類動捕資料,四足形態沒有</mark>。</span><span data-lang="en">Not on physical robots; low-level skills like dribbling in [44] <mark class="m-problem" data-t="PROBLEM/GAP">depend on human mocap data, which does not exist for quadrupeds</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">四足 + 機械臂</span><span data-lang="en">Quadruped + mounted arm</span></b><br><small>[49]–[51]</small></td><td><span data-lang="zh">需要額外手臂硬體;研究的是互補的移動操作子問題,不是用腿本身做高動態操作。</span><span data-lang="en">Need an extra arm; they study complementary mobile-manipulation subproblems rather than highly dynamic manipulation with the legs themselves.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>能否把「模擬 RL → 真機」的配方,推到一個需要<mark class="m-problem" data-t="PROBLEM/GAP">同時做運動、操作、板載感知</mark>的戶外動態任務上?</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>can the "RL in sim → real robot" recipe be pushed to an outdoor dynamic task that needs <mark class="m-problem" data-t="PROBLEM/GAP">simultaneous locomotion, manipulation and onboard perception</mark>?</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 盤帶「進野外」的獨特難處,與 DribbleBot 的補法</span><span data-lang="en">Gap table — what makes in-the-wild dribbling hard, and how DribbleBot patches it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">挑戰</span><span data-lang="en">Challenge</span></th><th><span data-lang="zh">為何難</span><span data-lang="en">Why it is hard</span></th><th><span data-lang="zh">DribbleBot 的補法</span><span data-lang="en">DribbleBot fix</span></th></tr>
+          <tr>
+            <td><b><span data-lang="zh">球–地面動力學</span><span data-lang="en">Ball-terrain dynamics</span></b></td>
+            <td><span data-lang="zh">球輕、滾動接觸,<mark class="m-problem" data-t="PROBLEM/GAP">隨地形獨立變化</mark>:柏油上球滾得比狗跑得快;草地上球很快停下,要更頻繁更用力踢。剛體模擬器不模擬這種滾動阻力。</span><span data-lang="en">Light ball, rolling contact, <mark class="m-problem" data-t="PROBLEM/GAP">varying independently with terrain</mark>: on pavement it outruns the robot; on grass it slows quickly and needs frequent, stronger kicks. The rigid-body simulator does not model this rolling drag.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">自訂拖曳模型</mark> \(F_D=C_Dv^2\),隨機化 \(C_D\)、球質量、球速擾動。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Custom drag model</mark> \(F_D=C_Dv^2\); randomize \(C_D\), ball mass and velocity perturbations.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">近距離看球</span><span data-lang="en">Seeing a close ball</span></b></td>
+            <td><span data-lang="zh">球可能離機身只有 10 cm;RealSense 類深度相機視野僅 105°,<mark class="m-problem" data-t="PROBLEM/GAP">只看得到球的一小塊</mark>。在模擬中渲染魚眼影像則又慢、gap 又大。</span><span data-lang="en">The ball can be 10 cm from the body; RealSense-type depth cameras have a 105° FOV and <mark class="m-problem" data-t="PROBLEM/GAP">see only a sliver of it</mark>. Rendering fisheye images in sim is slow and has a large gap.</span></td>
+            <td><span data-lang="zh">前向 + 下向兩顆 210° 魚眼;<mark class="m-method" data-t="METHOD/IDEA">YOLOv7 在 254 張魚眼影像上微調</mark>,等距模型換算 3D 位置;策略在模擬中吃帶雜訊的真值。</span><span data-lang="en">Forward + downward 210° fisheyes; <mark class="m-method" data-t="METHOD/IDEA">YOLOv7 fine-tuned on 254 fisheye images</mark>, equidistant model to 3D position; the policy trains on noisy ground truth.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">分佈外地形 → 跌倒 → 失球</span><span data-lang="en">OOD terrain → fall → ball lost</span></b></td>
+            <td><span data-lang="zh">盤帶策略<mark class="m-assume" data-t="ASSUMPTION/CLAIM">只在平地訓練</mark>(地形隨機化會讓盤帶變得不可行);遇到陡路緣就可能摔倒。</span><span data-lang="en">The dribbling policy <mark class="m-assume" data-t="ASSUMPTION/CLAIM">trains on flat ground only</mark> (terrain randomization made dribbling infeasible); a steep curb can topple it.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">在更惡劣地形訓練的 recovery policy</mark> + 依 roll/pitch 切換的有限狀態機。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">A recovery policy trained on harsher terrain</mark> + a finite-state machine switching on roll/pitch.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">指令介面</span><span data-lang="en">Command interface</span></b></td>
+            <td><span data-lang="zh">盤帶<mark class="m-problem" data-t="PROBLEM/GAP">很難用身體速度或步態參數表達</mark>,對人類操作者也不直觀;機器人與球的局部座標在踢球時快速變化。</span><span data-lang="en">Dribbling is <mark class="m-problem" data-t="PROBLEM/GAP">hard to express as body-velocity or gait commands</mark> and unintuitive for a human operator; the robot and ball local frames change rapidly during kicks.</span></td>
+            <td><span data-lang="zh">直接下<mark class="m-method" data-t="METHOD/IDEA">全域座標的球速指令</mark>(以第一個時間步的機身座標為全域座標)。</span><span data-lang="en">Command the <mark class="m-method" data-t="METHOD/IDEA">ball velocity in the global frame</mark> (the body frame at the first time step).</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">板載運算</span><span data-lang="en">Onboard compute</span></b></td>
+            <td><span data-lang="zh">Go1 的運算、通訊頻寬、電力都有限。</span><span data-lang="en">Go1 has limited compute, bandwidth and power.</span></td>
+            <td><span data-lang="zh">每顆 Jetson Xavier NX 各自處理全解析度影像(TensorRT,400×480 @ 30 Hz),<b>只傳球位置</b>給跑策略的電腦。</span><span data-lang="en">Each Jetson Xavier NX processes full-resolution images locally (TensorRT, 400×480 @ 30 Hz) and <b>sends only ball positions</b> to the policy computer.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意作者<b>刻意不做端到端視覺 RL</b>:理由是模擬慢、高維觀測樣本效率差、影像 sim-to-real gap 大。這是一個務實的切法——把「看」變成一個可以用 254 張圖監督學好的子問題,把「控制」留在乾淨的低維狀態上學。代價是:策略<mark class="m-limit" data-t="LIMITATION/FUTURE">對球以外的環境完全無感</mark>(不知道牆、柱子、坡),這在 Discussion 也被列為限制。</p>
+          <p data-lang="en" style="margin-top:6px">Note the authors <b>deliberately avoid end-to-end visual RL</b>: slow simulation, poor sample efficiency from high-dimensional observations, and a large image sim-to-real gap. It is a pragmatic split—"seeing" becomes a subproblem learnable from 254 supervised images, while "control" is learned on clean low-dimensional state. The price: the policy is <mark class="m-limit" data-t="LIMITATION/FUTURE">blind to everything except the ball</mark> (walls, poles, slopes), which the Discussion lists as a limitation.</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">「in the wild」<b>不等於</b>「在野外地形上訓練」。盤帶策略<mark class="m-assume" data-t="ASSUMPTION/CLAIM">只在平地上訓練</mark>,地形多樣性在模擬裡只以<b>一個標量拖曳係數 \(C_D\)</b> 加上機器人摩擦/恢復係數隨機化來代表;沙、雪、泥上的表現是<b>泛化</b>出來的,不是覆蓋出來的。</span>
+        <span data-lang="en">"In the wild" does <b>not</b> mean "trained on wild terrain." The dribbling policy <mark class="m-assume" data-t="ASSUMPTION/CLAIM">is trained on flat ground only</mark>; terrain diversity is represented in sim by <b>a single scalar drag coefficient \(C_D\)</b> plus robot friction/restitution randomization. Performance on sand, snow and mud is <b>generalization</b>, not coverage.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">外部相機與動捕是實驗室結果「出不了門」的主因。DribbleBot 證明<b>全板載</b>(兩顆魚眼 + 兩顆 Jetson)就能撐起動態操作,這讓移動操作研究可以真正走到戶外、走到大空間。</span>
+        <span data-lang="en">External cameras and mocap are the main reason lab results do not leave the lab. DribbleBot shows that <b>fully onboard</b> sensing (two fisheyes + two Jetsons) can sustain dynamic manipulation, letting mobile-manipulation research move outdoors and into large spaces.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">拖曳模型的物理</span><span data-lang="en">drag physics</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">缺 baseline</span><span data-lang="en">missing baseline</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">總覽:狀態式策略 + 獨立的視覺模組</span><span data-lang="en">Overview: a state-based policy + a separate vision module</span></h3>
+        <p data-lang="zh">在模擬中訓練盤帶策略,再轉移到真機:</p>
+        <p data-lang="en">The dribbling policy is trained in simulation and transferred to hardware:</p>
+        <div class="eq">$$\mathbf a_t=\pi_d(\mathbf o_t,\mathbf c_t),\qquad \hat{\mathbf b}_t=\mathbf Y(\mathbf o^{v}_t)$$</div>
+        <p data-lang="zh">\(\mathbf o_t\) 包含本體感知與<mark class="m-method" data-t="METHOD/IDEA">球位置 \(\mathbf b_t\)</mark>;\(\mathbf c_t\) 是人類操作者給的<b>球速指令</b>。模擬中 \(\mathbf b_t\) 直接取真值;真機上由另外訓練的偵測模型 \(\mathbf Y\) 從板載相機影像 \(\mathbf o^v_t\) 估出 \(\hat{\mathbf b}_t\)。動作 \(\mathbf a_t\) 是 12 顆馬達(每腿 3 顆)的<b>關節位置目標</b>,頻率 50 Hz,以 PPO 訓練。</p>
+        <p data-lang="en">\(\mathbf o_t\) contains proprioception and the <mark class="m-method" data-t="METHOD/IDEA">ball position \(\mathbf b_t\)</mark>; \(\mathbf c_t\) is the <b>ball-velocity command</b> from a human operator. In sim \(\mathbf b_t\) is ground truth; on hardware a separately trained detector \(\mathbf Y\) estimates \(\hat{\mathbf b}_t\) from onboard images \(\mathbf o^v_t\). The action \(\mathbf a_t\) is the <b>joint position target</b> for the 12 motors (3 per leg) at 50 Hz; training uses PPO.</p>
+        <figure class="fig"><img src="figs/Ji2023/fig3_system.png" alt="Figure 3 system architecture">
+          <figcaption data-lang="zh"><b>Fig.3</b> 系統架構。魚眼 RGB → <b>微調 YOLOv7</b> → 相機模型 → 球位置,與手把給的球速指令、關節編碼器/IMU 一起餵進盤帶策略 \(\pi_d\)。<b>Fall Detector</b> 像一個開關,決定由 \(\pi_d\) 或 recovery policy \(\pi_r\) 輸出 \(\mathbf q^{\text{des}}\)。注意 \(\pi_r\) <b>不吃視覺</b>——它只負責站起來。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> System architecture. Fisheye RGB → <b>fine-tuned YOLOv7</b> → camera model → ball position, fed with the gamepad ball-velocity command and joint encoders / IMU into the dribbling policy \(\pi_d\). The <b>Fall Detector</b> acts as a switch selecting whether \(\pi_d\) or the recovery policy \(\pi_r\) outputs \(\mathbf q^{\text{des}}\). Note that \(\pi_r\) <b>takes no vision</b>—it only stands the robot up.</figcaption></figure>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STEP 1</span><b><span data-lang="zh">魚眼偵測</span><span data-lang="en">Fisheye detection</span></b><small data-lang="zh">兩顆 210° 魚眼,各自的 Jetson 跑 TensorRT 版 YOLOv7,400×480 @ 30 Hz</small><small data-lang="en">Two 210° fisheyes, each Jetson runs TensorRT YOLOv7 at 400×480 @ 30 Hz</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 2</span><b><span data-lang="zh">bbox → 3D 位置</span><span data-lang="en">bbox → 3D position</span></b><small data-lang="zh">等距魚眼模型估方向與距離,外參轉到機身座標;兩相機取信心高者</small><small data-lang="en">Equidistant fisheye model gives direction + range; extrinsics to body frame; keep the higher-confidence camera</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 3</span><b><span data-lang="zh">盤帶策略 \(\pi_d\)</span><span data-lang="en">Dribbling policy \(\pi_d\)</span></b><small data-lang="zh">MLP [512, 256, 128],吃 15 步歷史(37×15)+ 球速指令,輸出 12 維關節目標 @ 50 Hz</small><small data-lang="en">MLP [512, 256, 128] on a 15-step history (37×15) + ball-velocity command; 12-D joint targets @ 50 Hz</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 4</span><b><span data-lang="zh">PD + 跌倒切換</span><span data-lang="en">PD + fall switch</span></b><small data-lang="zh">高頻 PD(\(k_p=20, k_d=0.5\));roll/pitch 超過 1.0 rad 切到 \(\pi_r\)</small><small data-lang="en">High-rate PD (\(k_p=20, k_d=0.5\)); roll/pitch above 1.0 rad switches to \(\pi_r\)</small></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">環境設計與指令介面</span><span data-lang="en">Environment design and command interface</span></h3>
+        <p data-lang="zh">模擬在 <b>Isaac Gym</b>(廠商 URDF),單張 RTX 3090 完成模擬與訓練。每個 episode 40 s、控制 50 Hz;開場時機器人 yaw 隨機、腿部姿態在標稱姿態附近隨機、球隨機放在機器人 <b>2 m 內</b>、目標球速均勻隨機——以學會<b>全方向</b>的運動與盤帶。地面是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">平地</mark>,物理參數隨機化。</p>
+        <p data-lang="en">Simulation runs in <b>Isaac Gym</b> (manufacturer URDF); simulation and training fit on one RTX 3090. Episodes last 40 s at 50 Hz control. At reset the robot yaw is random, leg positions are randomized around a nominal pose, the ball is placed randomly <b>within 2 m</b>, and the target ball velocity is uniformly random—so the robot learns <b>omnidirectional</b> locomotion and dribbling. The ground is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">flat</mark>, with randomized physical parameters.</p>
+        <p data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">指令 = 球在 2D 地面上的線速度,表達在全域座標系</mark>。為什麼不用機身座標或球的座標?球是全旋轉對稱的,而機器人在踢球時朝向變化很快,兩者的局部座標都在劇烈變動,對人類操作者沒有意義。全域座標定義為<b>第一個時間步的機身座標</b>,所以策略必須知道自己在全域座標的朝向——觀測裡因此加入 IMU 的全域 yaw \(\psi_t\)。</p>
+        <p data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Command = the ball linear velocity on the 2D ground plane, expressed in the global frame</mark>. Why not the body or ball frame? The ball is rotationally symmetric and the robot heading changes quickly while kicking, so both local frames churn and mean little to a human operator. The global frame is the <b>body frame at the first time step</b>, so the policy must know its own global heading—hence the IMU global yaw \(\psi_t\) in the observation.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">觀測與動作空間</span><span data-lang="en">Observation and action spaces</span></h3>
+        <p data-lang="zh">觀測是 <b>15 步歷史</b>的堆疊,每步 37 維:</p>
+        <p data-lang="en">The observation stacks a <b>15-step history</b>, 37 dimensions per step:</p>
+        <div class="eq">$$\mathbf o_t=\Big[\underbrace{\mathbf c_k}_{2}\;\underbrace{\mathbf b_k}_{3}\;\underbrace{\mathbf q_k}_{12}\;\underbrace{\dot{\mathbf q}_k}_{12}\;\underbrace{\mathbf g_k}_{3}\;\underbrace{\psi_k}_{1}\;\underbrace{\boldsymbol\theta^{\text{cmd}}_k}_{4}\Big]_{k=t-14}^{t}\in\mathbb R^{37\times 15}$$</div>
+        <p data-lang="zh">\(\mathbf c=(v^{\text{cmd}}_x,v^{\text{cmd}}_y)\) 是全域球速指令;\(\mathbf b\) 是機身座標下的球位置;\(\mathbf q,\dot{\mathbf q}\) 是關節角與角速度;\(\mathbf g\) 是機身座標下的重力單位向量;\(\psi\) 是全域 yaw;\(\boldsymbol\theta^{\text{cmd}}\) 是沿用自 Walk These Ways 的<b>步態時序參考變數</b>(4 維時鐘)。動作是 12 個關節的目標位置,由高頻 PD 控制器追蹤:</p>
+        <p data-lang="en">\(\mathbf c=(v^{\text{cmd}}_x,v^{\text{cmd}}_y)\) is the global ball-velocity command; \(\mathbf b\) the ball position in the body frame; \(\mathbf q,\dot{\mathbf q}\) joint angles and velocities; \(\mathbf g\) the gravity unit vector in the body frame; \(\psi\) the global yaw; \(\boldsymbol\theta^{\text{cmd}}\) the <b>gait timing reference variables</b> inherited from Walk These Ways (a 4-D clock). Actions are 12 joint position targets tracked by a high-rate PD controller:</p>
+        <div class="eq">$$\boldsymbol\tau=k_p\big(\mathbf q^{\text{des}}-\mathbf q\big)-k_d\,\dot{\mathbf q},\qquad k_p=20.0,\;k_d=0.5$$</div>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted)"><span class="add">[導讀補充]</span> PD 力矩式是標準寫法,論文只給增益值。37 = 2+3+12+12+3+1+4 是導讀依 Table II 的維度加總,與論文標註的 37×15 吻合。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted)"><span class="add">[guide note]</span> The PD torque law is the standard form; the paper gives only the gains. 37 = 2+3+12+12+3+1+4 is the guide author's sum of the Table II dimensions, matching the paper's stated 37×15.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">獎勵:乘法式組合</span><span data-lang="en">Rewards: a multiplicative composition</span></h3>
+        <p data-lang="zh">總獎勵沿用 [34] 的形式,正向任務獎勵乘上負向懲罰的指數:</p>
+        <p data-lang="en">The total reward follows the form of [34]: positive task reward times the exponential of the negative penalties:</p>
+        <div class="eq">$$r_t=r^{\text{pos}}_t\,\exp\!\big(r^{\text{neg}}_t\big),\qquad r^{\text{pos}}_t=\sum_{i\in\text{pos}}w_i\,r_{i,t}\ge 0,\quad r^{\text{neg}}_t=\sum_{j\in\text{neg}}w_j\,r_{j,t}\le 0$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><span class="add">[導讀補充]</span> 懲罰只能把任務獎勵「打折」到 \((0,1]\) 倍,不會讓總獎勵變負——避免策略學到「早點結束 episode 比較划算」。這與 Walk These Ways 的 \(r_{\text{task}}\exp(c_{\text{aux}}r_{\text{aux}})\) 是同一精神。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><span class="add">[guide note]</span> Penalties can only discount the task reward by a factor in \((0,1]\), never make the total negative—so the policy is not tempted to end episodes early. Same spirit as Walk These Ways' \(r_{\text{task}}\exp(c_{\text{aux}}r_{\text{aux}})\).</p>
+        <table class="rw">
+          <tr><th><span data-lang="zh">項目</span><span data-lang="en">Term</span></th><th><span data-lang="zh">式子</span><span data-lang="en">Expression</span></th><th><span data-lang="zh">權重</span><span data-lang="en">Weight</span></th></tr>
+          <tr><td><span data-lang="zh">投影球速追蹤</span><span data-lang="en">Projected ball velocity</span></td><td>\(\exp\{-\delta_v\|\mathbf v_b-\mathbf v^{\text{cmd}}\|^2\}\)</td><td>0.5</td></tr>
+          <tr><td><span data-lang="zh">機器人–球距離</span><span data-lang="en">Robot-ball distance</span></td><td>\(\exp\{-\delta_p\|\mathbf b-\mathbf p_{\text{FRHip}}\|^2\}\)</td><td>4.0</td></tr>
+          <tr><td><span data-lang="zh">朝向對齊</span><span data-lang="en">Yaw alignment</span></td><td>\(\exp\{-\delta_\psi(e^2_{\text{rbcmd}}+e^2_{\text{rbbase}})\}\)</td><td>4.0</td></tr>
+          <tr><td><span data-lang="zh">球速大小</span><span data-lang="en">Ball velocity norm</span></td><td>\(\exp\{-\delta_n(\|\mathbf v^{\text{cmd}}\|-\|\mathbf v_b\|)^2\}\)</td><td>4.0</td></tr>
+          <tr><td><span data-lang="zh">球速方向</span><span data-lang="en">Ball velocity angle</span></td><td>\(1-(\psi_b-\psi^{\text{cmd}})^2/\pi^2\)</td><td>4.0</td></tr>
+          <tr><td><span data-lang="zh">擺動相時程</span><span data-lang="en">Swing phase schedule</span></td><td>\([1-\kappa]\exp\{-\delta_{cf}\|\mathbf f^{\text{foot}}\|^2\}\)</td><td>4.0</td></tr>
+          <tr><td><span data-lang="zh">支撐相時程</span><span data-lang="en">Stance phase schedule</span></td><td>\(\kappa\exp\{-\delta_{cv}\|\mathbf v^{\text{foot}}_{xy}\|^2\}\)</td><td>4.0</td></tr>
+          <tr><td><span data-lang="zh">關節極限</span><span data-lang="en">Joint limit violation</span></td><td>\(\mathbf 1_{\,q_i\gt q_{\max}\,\lor\,q_i\lt q_{\min}}\)</td><td>\(-10\)</td></tr>
+          <tr><td><span data-lang="zh">關節力矩 / 速度 / 加速度</span><span data-lang="en">Joint torque / vel / acc</span></td><td>\(\|\boldsymbol\tau\|^2,\ \|\dot{\mathbf q}\|,\ \|\ddot{\mathbf q}\|\)</td><td>\(-10^{-4},-10^{-4},-2.5\!\times\!10^{-7}\)</td></tr>
+          <tr><td><span data-lang="zh">髖/大腿碰撞</span><span data-lang="en">Hip/thigh collision</span></td><td>\(\mathbf 1_{\text{collision}}\)</td><td>\(-5\)</td></tr>
+          <tr><td><span data-lang="zh">投影重力(保持水平)</span><span data-lang="en">Projected gravity (stay level)</span></td><td>\(\|\mathbf g_{xy}\|^2\)</td><td>\(-5\)</td></tr>
+          <tr><td><span data-lang="zh">動作平滑 1 / 2</span><span data-lang="en">Action smoothing 1 / 2</span></td><td>\(\|\mathbf a_{t-1}-\mathbf a_t\|^2,\ \|\mathbf a_{t-2}-2\mathbf a_{t-1}+\mathbf a_t\|^2\)</td><td>\(-0.1,-0.1\)</td></tr>
+        </table>
+        <p data-lang="zh">讀法:<mark class="m-method" data-t="METHOD/IDEA">任務獎勵分成三類</mark>——(1) 追蹤指令球速(向量誤差、大小、方向各一項);(2) shaping:讓機器人靠近球(以<b>右前髖</b>為錨點)並<b>面向球</b>,因為相機視野有限,要鼓勵球留在畫面中;(3) 沿用 WTW 的<b>擺動/支撐相時程</b>(\(\kappa\) 是期望接觸狀態 \(C^{\text{cmd}}_{\text{foot}}(\boldsymbol\theta^{\text{cmd}},t)\)),讓步態成形。其餘是標準安全懲罰。\(e_{\text{rbcmd}}\) 是「機器人→球」向量與 \(\psi_b\) 的夾角,\(e_{\text{rbbase}}\) 是機身 yaw 與 \(\psi_b\) 的夾角。</p>
+        <p data-lang="en">Reading guide: <mark class="m-method" data-t="METHOD/IDEA">task rewards fall into three groups</mark>—(1) tracking the commanded ball velocity (vector error, magnitude and direction terms); (2) shaping: stay close to the ball (anchored at the <b>front-right hip</b>) and <b>face the ball</b>, since the camera FOV is limited and the ball should stay in view; (3) WTW-style <b>swing/stance schedules</b> (\(\kappa\) is the desired contact state \(C^{\text{cmd}}_{\text{foot}}(\boldsymbol\theta^{\text{cmd}},t)\)) so gaits are well formed. The rest are standard safety penalties. \(e_{\text{rbcmd}}\) is the angle between the robot-to-ball vector and \(\psi_b\); \(e_{\text{rbbase}}\) the angle between the base yaw and \(\psi_b\).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">感知:直接在魚眼畫面上找球</span><span data-lang="en">Perception: find the ball directly in the fisheye view</span></h3>
+        <figure class="fig"><img src="figs/Ji2023/fig2_sim2real_measures.png" alt="Figure 2 sim-to-real measures">
+          <figcaption data-lang="zh"><b>Fig.2</b> 三項 sim-to-real 措施。左:球貼近機身時,<b>標準校正視角</b>只看到球的一角,<b>原始魚眼視角</b>能看到整顆球;中:模擬中對球施加拖曳力 \(F_d\) 並隨機化,部署到磁磚、草地、沙、雪;右:在分佈外地形跌倒後,整合 recovery controller 與切換邏輯恢復盤帶。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> The three sim-to-real measures. Left: with the ball close to the body, the <b>standard rectified view</b> sees only a corner of it while the <b>raw fisheye view</b> sees the whole ball; middle: a randomized drag force \(F_d\) on the ball in sim, deployed to tile, grass, sand, snow; right: after a fall on out-of-distribution terrain, a recovery controller with transition logic resumes dribbling.</figcaption></figure>
+        <p data-lang="zh">size-3 足球直徑 18 cm,可能貼近到離機身 10 cm。魚眼校正(rectification)會把球<mark class="m-problem" data-t="PROBLEM/GAP">嚴重扭曲</mark>,所以網路上窄視角影像預訓練的模型直接用效果不好;作者在 <b>254 張手標魚眼影像</b>(含球在畫面邊緣的情況)上微調 COCO 預訓練的 YOLOv7,資料增強只用水平翻轉、15° 內旋轉與模糊,<mark class="m-result" data-t="RESULT/EVIDENCE">就在整個視野恢復良好偵測</mark>。</p>
+        <p data-lang="en">A size-3 ball is 18 cm in diameter and can come within 10 cm of the body. Rectifying the fisheye <mark class="m-problem" data-t="PROBLEM/GAP">heavily warps</mark> the sphere, so off-the-shelf detectors trained on narrow-view internet images do poorly. Fine-tuning a COCO-pretrained YOLOv7 on <b>254 hand-labeled fisheye images</b> (including balls at the image edge), with only horizontal flips, rotations up to 15° and blur as augmentation, <mark class="m-result" data-t="RESULT/EVIDENCE">recovers good detection across the whole field of view</mark>.</p>
+        <p data-lang="zh">bounding box 到 3D 位置用<mark class="m-method" data-t="METHOD/IDEA">近似的等距(equidistant)魚眼模型</mark>:像素到影像中心的距離 \(r\) 與入射角 \(\theta\) 成正比,球的像素尺寸 \(\Delta r\) 與已知半徑 \(R\) 給出距離 \(z\)(忽略扭曲):</p>
+        <p data-lang="en">From bounding box to 3D position, an <mark class="m-method" data-t="METHOD/IDEA">approximate equidistant fisheye model</mark> is used: the pixel distance from the image center \(r\) is proportional to the incidence angle \(\theta\), and the ball pixel size \(\Delta r\) with the known radius \(R\) gives the range \(z\) (ignoring warping):</p>
+        <div class="eq">$$r=f\,\theta\;\Rightarrow\;\theta=\frac{r}{f},\qquad z\approx\frac{f\,R}{\Delta r}$$</div>
+        <p data-lang="zh">方向(由 \(\theta\) 與像素方位角 \(\phi\))加上距離即得相機座標下的球位置,再用已知外參轉到機身座標;兩顆相機都看到時,<b>取信心值較高的那個</b>(不做融合)。<span class="add">[導讀補充]</span> 寫成式子即</p>
+        <p data-lang="en">Direction (from \(\theta\) and the pixel azimuth \(\phi\)) plus range gives the ball position in the camera frame, then known extrinsics map it to the body frame; if both cameras see it, the <b>higher-confidence detection wins</b> (no fusion). <span class="add">[guide note]</span> Written out:</p>
+        <div class="eq">$$\mathbf p^{c}=z\begin{bmatrix}\sin\theta\cos\phi\\ \sin\theta\sin\phi\\ \cos\theta\end{bmatrix},\qquad \hat{\mathbf b}=\mathbf R_{bc}\,\mathbf p^{c}+\mathbf t_{bc}$$</div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">縮小 sim-to-real 差距的其他措施</span><span data-lang="en">Other measures that shrink the sim-to-real gap</span></h3>
+        <p data-lang="zh"><b>1) 視覺雜訊模型。</b>訓練時在球位置上加<b>均勻分佈雜訊</b>;每 7.0 s 把球<mark class="m-method" data-t="METHOD/IDEA">瞬移</mark>到 1.0 m 內的隨機位置(模擬人把球踢走或球出視野);相機延遲以 Poisson 過程模擬下一幀到達時間,平均到達時間每個 episode 在 20–60 ms 間隨機。</p>
+        <p data-lang="en"><b>1) Vision noise model.</b> During training, <b>uniform noise</b> is added to the ball position; every 7.0 s the ball is <mark class="m-method" data-t="METHOD/IDEA">teleported</mark> to a random spot within 1.0 m (emulating a human kicking it away or it leaving the FOV); camera delay is modeled as a Poisson arrival process with mean arrival time randomized per episode between 20 and 60 ms.</p>
+        <p data-lang="zh"><b>2) 機器人系統辨識。</b>(a) 用真實力矩資料訓練 <b>actuator network</b> 模擬非理想馬達;(b) 辨識並建模「觀測量測 → 動作施加」之間的延遲。兩者都是 WTW 等前作的標準做法。</p>
+        <p data-lang="en"><b>2) Robot system identification.</b> (a) An <b>actuator network</b> trained on real torque data models non-ideal motors; (b) the lag between observation and action application is identified and modeled. Both are standard in WTW and other prior work.</p>
+        <p data-lang="zh"><b>3) 球–地面互動模型。</b>剛體模擬器不模擬滾動接觸的可變阻力,作者加了一個<mark class="m-method" data-t="METHOD/IDEA">與速度平方成正比的拖曳力</mark>(借用空氣阻力的標準形式),以不同 \(C_D\) 模擬高草(高 \(C_D\))到柏油(低 \(C_D\)):</p>
+        <p data-lang="en"><b>3) Ball-terrain interaction model.</b> The rigid-body simulator does not model variable rolling-contact drag, so the authors add a <mark class="m-method" data-t="METHOD/IDEA">drag force proportional to velocity squared</mark> (borrowing the standard aerodynamic form), with different \(C_D\) emulating tall grass (high \(C_D\)) to pavement (low \(C_D\)):</p>
+        <div class="eq">$$F_D=C_D\,v^2,\qquad C_D\sim\mathcal U[0,\,1.5],\quad m_{\text{ball}}\sim\mathcal U[0.159,\,0.254]\ \text{kg}$$</div>
+        <p data-lang="zh">此外隨機改變球速(擾動 0–0.3 m/s),模擬人的介入或不平地面的碰撞。</p>
+        <p data-lang="en">Ball velocity is also randomly perturbed (0–0.3 m/s) to emulate human intervention or bumps on uneven terrain.</p>
+        <table>
+          <tr><th><span data-lang="zh">隨機化參數(Table IV)</span><span data-lang="en">Randomized parameter (Table IV)</span></th><th><span data-lang="zh">範圍</span><span data-lang="en">Range</span></th></tr>
+          <tr><td><span data-lang="zh">負載質量 / 馬達強度 / 關節校正</span><span data-lang="en">Payload / motor strength / joint calibration</span></td><td>[−1, 3] kg · [90, 110]% · [−0.02, 0.02] rad</td></tr>
+          <tr><td><span data-lang="zh">機器人–地面摩擦 / 恢復係數</span><span data-lang="en">Robot-terrain friction / restitution</span></td><td>[0.40, 1.00] · [0.00, 1.00]</td></tr>
+          <tr><td><span data-lang="zh">質心偏移</span><span data-lang="en">Center-of-mass displacement</span></td><td>[−0.15, 0.15] m</td></tr>
+          <tr><td><span data-lang="zh">球質量 / 拖曳係數 / 速度擾動</span><span data-lang="en">Ball mass / drag coeff. / velocity perturbation</span></td><td>[0.159, 0.254] kg · [0, 1.5] · [0, 0.3] m/s</td></tr>
+          <tr><td><span data-lang="zh">相機幀到達率 / 瞬移距離</span><span data-lang="en">Camera frame arrival rate / teleport distance</span></td><td>[0.3, 0.7] · [0, 1.0] m</td></tr>
+          <tr><td><span data-lang="zh">指令 \(v^{\text{cmd}}_x, v^{\text{cmd}}_y\)</span><span data-lang="en">Command \(v^{\text{cmd}}_x, v^{\text{cmd}}_y\)</span></td><td>[−1.5, 1.5] m/s</td></tr>
+          <tr><td><span data-lang="zh">Perlin 地形高度 / 重力雜訊(僅 recovery)</span><span data-lang="en">Perlin terrain height / gravity noise (recovery only)</span></td><td>[0, 10] cm · [−1, 1] \(\text{m/s}^2\)</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">跌倒恢復策略與切換邏輯</span><span data-lang="en">Fall-recovery policy and switching logic</span></h3>
+        <p data-lang="zh">recovery policy \(\pi_r\) 在<mark class="m-method" data-t="METHOD/IDEA">比盤帶更惡劣的領域</mark>訓練:Perlin 雜訊不平地形、每 6.0 s 擾動重力向量模擬斜坡。先從不同姿態隨機丟下機器人,產生 <b>1000 個初始跌倒姿態</b>,再以身體朝向、身高、姿勢、腳高為獎勵訓練(\(g_z\) 是機身座標重力的垂直分量,直立時 \(g_z=-1\);\(\mathbb I=\mathbf 1_{g_z\lt -0.6}\) 表示只有接近直立時才給身高/姿勢/腳高獎勵):</p>
+        <p data-lang="en">The recovery policy \(\pi_r\) trains in <mark class="m-method" data-t="METHOD/IDEA">harsher domains than dribbling</mark>: Perlin-noise rough terrain, and a gravity vector perturbed every 6.0 s to emulate slopes. Robots are first dropped from random orientations to build <b>1000 initial fall configurations</b>, then trained with rewards on body orientation, height, pose and foot height (\(g_z\) is the vertical gravity component in the body frame, \(g_z=-1\) when upright; \(\mathbb I=\mathbf 1_{g_z\lt -0.6}\) gates the height/pose/foot rewards to near-upright states):</p>
+        <div class="eq">$$\begin{aligned}r^{\text{rec}}=&\;(0.5-0.5\,g_z)^2+\mathbb I\Big(1-\operatorname{clamp}\Big[\Big(\tfrac{h^{\text{target}}_{\text{body}}-h_{\text{body}}}{h^{\text{target}}_{\text{body}}}\Big)^2\Big]\Big)+\mathbb I\Big(1-\operatorname{clamp}\big[\|\mathbf q-\mathbf q_{\text{standing}}\|^2/20\big]\Big)\\&+\mathbb I\exp\Big(-10\sum_i\big(h^{\text{foot}}_i\big)^2\Big)-10^{-3}\|\mathbf a_t\|^2-10^{-5}\|\boldsymbol\tau\|^2\end{aligned}$$</div>
+        <p data-lang="zh">兩條策略之間用<mark class="m-method" data-t="METHOD/IDEA">依機身朝向切換的有限狀態機</mark>:roll 或 pitch 大於 1.0 rad 視為運動失敗,切到 \(\pi_r\) 回到站姿;roll 與 pitch 都小於 0.5 rad 時重新啟用 \(\pi_d\)。<span class="add">[導讀補充]</span> 兩個門檻之間的空隙就是遲滯(hysteresis),避免在邊界附近來回抖動切換:</p>
+        <p data-lang="en">The two policies are joined by a <mark class="m-method" data-t="METHOD/IDEA">finite-state machine keyed on body orientation</mark>: roll or pitch above 1.0 rad signals locomotion failure and hands over to \(\pi_r\) to return to standing; once both roll and pitch are below 0.5 rad, \(\pi_d\) is reactivated. <span class="add">[guide note]</span> The gap between the two thresholds is hysteresis, preventing chattering near the boundary:</p>
+        <div class="eq">$$\text{mode}_t=\begin{cases}\pi_r, & \max(|\phi_t|,|\vartheta_t|)\gt 1.0\ \text{rad}\\[2pt] \pi_d, & \max(|\phi_t|,|\vartheta_t|)\lt 0.5\ \text{rad}\\[2pt] \text{mode}_{t-1}, & \text{otherwise}\end{cases}$$</div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">網路與最佳化</span><span data-lang="en">Network and optimization</span></h3>
+        <p data-lang="zh">策略是三層 MLP <b>[512, 256, 128]</b>,PPO 訓練 <mark class="m-result" data-t="RESULT/EVIDENCE">70 億 timesteps(約 48 小時)收斂</mark>,4096 個平行環境;PPO 超參數(\(\gamma=0.99\)、GAE \(\lambda=0.95\)、clip 0.2、lr \(10^{-3}\)、每次 rollout 21 步、5 epochs、4 minibatches、entropy 0.01)<b>與 WTW 訓練此機器人的設定相同</b>,盤帶與 recovery 共用。另有一個兩層 [256, 128] 的回歸網路,從 \(\mathbf o_t\) 預測<b>機身速度、球速、球–地面拖曳係數</b>(做法同 [34]),預測值也接到策略輸入——但作者坦言<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有評估它對 sim-to-real 的影響</mark>,主要用於視覺化與除錯。</p>
+        <p data-lang="en">The policy is a three-layer MLP <b>[512, 256, 128]</b>, trained by PPO and <mark class="m-result" data-t="RESULT/EVIDENCE">converging after 7 billion timesteps (about 48 hours)</mark> on 4096 parallel environments. PPO hyperparameters (\(\gamma=0.99\), GAE \(\lambda=0.95\), clip 0.2, lr \(10^{-3}\), 21 steps per rollout, 5 epochs, 4 minibatches, entropy 0.01) are <b>the same settings WTW used on this robot</b>, shared by dribbling and recovery. A separate two-layer [256, 128] regressor predicts <b>body velocity, ball velocity and the ball-terrain drag coefficient</b> from \(\mathbf o_t\) (as in [34]), and its outputs are appended to the policy input—but the authors admit they <mark class="m-limit" data-t="LIMITATION/FUTURE">did not evaluate its effect on sim-to-real</mark>; it mainly serves visualization and debugging.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\pi_d,\ \pi_r\)</td><td><span data-lang="zh">盤帶策略 / 跌倒恢復策略(兩者都是 RL 訓練的 MLP)。</span><span data-lang="en">Dribbling policy / recovery policy (both RL-trained MLPs).</span></td></tr>
+          <tr><td>\(\mathbf Y\)</td><td><span data-lang="zh">微調後的 YOLOv7 球偵測器。</span><span data-lang="en">The fine-tuned YOLOv7 ball detector.</span></td></tr>
+          <tr><td>\(\mathbf c_t=\mathbf v^{\text{cmd}}\)</td><td><span data-lang="zh">人給的目標球速(2D,全域座標)。</span><span data-lang="en">Human-given target ball velocity (2D, global frame).</span></td></tr>
+          <tr><td>\(\mathbf b_t,\ \hat{\mathbf b}_t\)</td><td><span data-lang="zh">機身座標的球位置:模擬真值 / 視覺估計值。</span><span data-lang="en">Ball position in the body frame: sim ground truth / visual estimate.</span></td></tr>
+          <tr><td>\(\mathbf v_b,\ \psi_b\)</td><td><span data-lang="zh">實際球速與其方向(全域座標)。</span><span data-lang="en">Actual ball velocity and its direction (global frame).</span></td></tr>
+          <tr><td>\(\psi_t\)</td><td><span data-lang="zh">IMU 給的全域 yaw,讓策略能解讀全域指令。</span><span data-lang="en">Global yaw from the IMU, letting the policy interpret global commands.</span></td></tr>
+          <tr><td>\(\boldsymbol\theta^{\text{cmd}},\ \kappa\)</td><td><span data-lang="zh">步態時鐘(承自 WTW)/ 由它算出的期望足部接觸狀態。</span><span data-lang="en">Gait clock (from WTW) / the desired foot contact state derived from it.</span></td></tr>
+          <tr><td>\(\mathbf p_{\text{FRHip}}\)</td><td><span data-lang="zh">右前髖在機身座標的位置——「靠近球」獎勵的錨點。</span><span data-lang="en">Front-right hip position in the body frame—the anchor of the "stay close" reward.</span></td></tr>
+          <tr><td>\(C_D\)</td><td><span data-lang="zh">球–地面拖曳係數:大 = 高草,小 = 柏油。</span><span data-lang="en">Ball-terrain drag coefficient: large = tall grass, small = pavement.</span></td></tr>
+          <tr><td>\(f,\ \theta,\ \Delta r,\ R\)</td><td><span data-lang="zh">魚眼焦距、入射角、球的像素尺寸、球的實際半徑。</span><span data-lang="en">Fisheye focal length, incidence angle, ball pixel size, physical ball radius.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">在模擬裡用<b>真值球位置</b>練一條「讓球照指令速度走」的全身策略,同時故意把球位置弄髒、讓球亂滾、讓球突然消失;到了真機,只要偵測器給出夠準的球位置,策略就認得這個世界。</span>
+        <span data-lang="en">In sim, train a whole-body policy to "make the ball move at the commanded velocity" from <b>ground-truth ball positions</b>—while deliberately corrupting those positions, varying how the ball rolls, and making it vanish. On hardware, as long as the detector delivers a good-enough ball position, the policy recognizes the world.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">右前髖錨點的副作用</span><span data-lang="en">Side effect of the FR-hip anchor</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 「靠近球」獎勵把球拉向<b>右前髖</b>而非機身中線。這很可能就是 Fig.4d 中右前腿成為主要盤帶腿、左右轉彎用腿不對稱的原因之一。論文沒有檢查左右轉彎的表現是否對稱。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> The "stay close" reward pulls the ball toward the <b>front-right hip</b>, not the body midline. That is plausibly one reason the front-right leg becomes the main dribbling leg in Fig.4d, with asymmetric leg use in left vs right turns. The paper does not check whether left and right turns perform symmetrically.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">拖曳模型的物理</span><span data-lang="en">The physics of the drag model</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 純二次拖曳下 \(m\dot v=-C_Dv^2\Rightarrow v(t)=\dfrac{v_0}{1+(C_D/m)\,v_0\,t}\):高速時減速很快,低速時幾乎不減速(球永遠不會真的停下)。真實草地的<b>滾動阻力</b>較接近 \(m\dot v=-\mu_r m g\) 的定值減速、有限時間停下。所以 \(C_Dv^2\) 與其說是精確物理,不如說是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「讓球的減速度足夠多樣」的隨機化工具</mark>。另外 \(C_D\) 的單位(應為 kg/m)在表中被標為無因次。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> Pure quadratic drag gives \(m\dot v=-C_Dv^2\Rightarrow v(t)=\dfrac{v_0}{1+(C_D/m)\,v_0\,t}\): strong deceleration at speed, almost none at low speed (the ball never truly stops). Real grass <b>rolling resistance</b> is closer to a constant deceleration \(m\dot v=-\mu_r m g\) that stops the ball in finite time. So \(C_Dv^2\) is less accurate physics than <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a randomization tool for diversifying ball deceleration</mark>. Also, \(C_D\) (which should carry kg/m) is listed as dimensionless.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">\(\boldsymbol\theta^{\text{cmd}}\) 在 WTW 裡是<b>可調的步態參數</b>;本文把它放進觀測,卻<mark class="m-assume" data-t="ASSUMPTION/CLAIM">沒說盤帶時用哪種步態、什麼步頻</mark>,獎勵中各 \(\delta\) 尺度也沒給。要復現細節得看釋出的程式碼。</span>
+        <span data-lang="en">In WTW, \(\boldsymbol\theta^{\text{cmd}}\) is a <b>tunable gait parameter</b>; here it enters the observation, but the paper <mark class="m-assume" data-t="ASSUMPTION/CLAIM">does not say which gait or stepping frequency is used while dribbling</mark>, nor the \(\delta\) scales in the rewards. Reproducing the details requires the released code.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">模擬:盤帶控制的品質</span><span data-lang="en">Simulation: quality of dribbling control</span></h3>
+        <p data-lang="zh">在與訓練相同的條件下評估。<mark class="m-result" data-t="RESULT/EVIDENCE">策略能追蹤最高 1.5 m/s 的盤帶速度,以及整個範圍(最多 180°)的瞬間方向變化</mark>。與一般運動不同,改變球速可能要<b>好幾秒</b>:機器人得先建立對球的控制、再連續踢好幾腳。</p>
+        <p data-lang="en">Evaluated under the same conditions as training. <mark class="m-result" data-t="RESULT/EVIDENCE">The policy tracks dribbling speeds up to 1.5 m/s and the entire range of instantaneous direction changes, up to 180°</mark>. Unlike ordinary locomotion, changing the ball velocity can take <b>several seconds</b>: the robot must first establish control of the ball and then execute multiple kicks.</p>
+        <figure class="fig"><img src="figs/Ji2023/fig4_sim_tracking.png" alt="Figure 4 simulated dribbling evaluation">
+          <figcaption data-lang="zh"><b>Fig.4</b> 一段 60 s 的模擬盤帶。(a) 球的軌跡(越深越晚)與兩次轉彎的快照;(b) 球速:<b>鋸齒狀</b>——每個尖峰是一腳踢,之後隨拖曳衰減,所以球速在指令值上下擺盪而非平滑追蹤;(c) 球速方向:注意約 10 s 的大轉向指令,球的方向要到約 18–20 s 才逐步到位(導讀者從圖上判讀),這就是 Discussion 說的「轉向反應慢」;(d) 右前腿關節角:藍色區(約 20 s 左轉)右前腿負責踢球、動作明顯改變;橙色區(約 50 s 右轉)改由左前腿踢,右前腿調整以穩定身體。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> A 60 s simulated dribbling run. (a) Ball trajectory (darker = later) with snapshots of two turns; (b) ball speed is a <b>sawtooth</b>—each spike is a kick followed by drag decay, so speed oscillates around the command rather than tracking it smoothly; (c) ball-velocity direction: after the large turn command near 10 s, the ball direction only reaches it around 18–20 s (read off the plot by the guide author)—the "slow turning response" admitted in the Discussion; (d) front-right leg joints: in the blue band (left turn, ~20 s) the FR leg kicks and its motion changes markedly; in the orange band (right turn, ~50 s) the front-left leg kicks while the FR leg adjusts to stabilize.</figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">作者據此主張盤帶需要<mark class="m-assume" data-t="ASSUMPTION/CLAIM">任務導向的全身協調(whole-body control)</mark>:同一條腿在左轉與右轉時扮演完全不同的角色(踢球 vs 穩定)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">From this the authors argue that dribbling needs <mark class="m-assume" data-t="ASSUMPTION/CLAIM">task-oriented whole-body coordination</mark>: the same leg plays entirely different roles in left vs right turns (kicking vs stabilizing).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">真機定量測試與消融(Table I,成功次數 / 4)</span><span data-lang="en">Real-world quantitative test and ablation (Table I, successes / 4)</span></h3>
+        <p data-lang="zh" style="font-size:14px">協定:<b>全自主</b>執行腳本軌跡——以 1.5 m/s 向前盤帶 10 s、停球 5 s、再以 1.5 m/s 帶回起跑線。<b>失去對球的控制即算失敗</b>;若因跌倒失球,允許自主起身後繼續。消融:-R 無 recovery controller;-Y 無 YOLO 微調;-D 訓練時無球拖曳模型。「–」表示未測。</p>
+        <p data-lang="en" style="font-size:14px">Protocol: a <b>fully autonomous</b> scripted trajectory—dribble forward at 1.5 m/s for 10 s, stop the ball for 5 s, then return to the start line at 1.5 m/s. <b>Losing control of the ball is a failure</b>; if the loss is due to a fall, the robot may recover autonomously and continue. Ablations: -R no recovery controller; -Y no YOLO fine-tuning; -D no ball drag model in training. "–" means not tested.</p>
+        <table class="t1">
+          <tr><th><span data-lang="zh">地形</span><span data-lang="en">Terrain</span></th><th>Full</th><th>-R</th><th>-Y</th><th>-D</th></tr>
+          <tr><td><span data-lang="zh">磁磚</span><span data-lang="en">Tile</span></td><td class="win">4/4</td><td>4/4</td><td class="bad">0/4</td><td>4/4</td></tr>
+          <tr><td><span data-lang="zh">草地</span><span data-lang="en">Grass</span></td><td class="win">4/4</td><td>4/4</td><td class="bad">0/4</td><td>4/4 <small><span data-lang="zh">(較慢,僅影片)</span><span data-lang="en">(slower, video only)</span></small></td></tr>
+          <tr><td><span data-lang="zh">沙地</span><span data-lang="en">Sand</span></td><td class="win">4/4</td><td>4/4</td><td class="bad">0/4</td><td class="bad">2/4</td></tr>
+          <tr><td><span data-lang="zh">雪地</span><span data-lang="en">Snow</span></td><td class="win">3/4</td><td>3/4</td><td class="bad">0/4</td><td>–</td></tr>
+          <tr><td><span data-lang="zh">路緣下階</span><span data-lang="en">Curb step-down</span></td><td class="win">2/4</td><td class="bad">1/4</td><td>–</td><td>–</td></tr>
+          <tr><td><span data-lang="zh">斜坡</span><span data-lang="en">Ramp</span></td><td class="bad">0/4</td><td class="bad">0/4</td><td>–</td><td>–</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">完整系統在磁磚、草地、沙地<mark class="m-result" data-t="RESULT/EVIDENCE">連續 4 次成功</mark>;雪地、下階、斜坡逐漸變難。下階與斜坡在訓練中從未出現,屬於<mark class="m-limit" data-t="LIMITATION/FUTURE">分佈外地形</mark>。下階失敗:一次摔進雪堆後起不來,一次跌倒時把球踢遠、起身後看不到球。斜坡:遙控下能過,但預設腳本下<b>球在兩腳之間滾回坡下</b>,機器人得轉身回去撿。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">The full system scores <mark class="m-result" data-t="RESULT/EVIDENCE">four consecutive successes</mark> on tile, grass and sand; snow, step-down and ramp are progressively harder. Step-down and ramp never appear in training—they are <mark class="m-limit" data-t="LIMITATION/FUTURE">out-of-distribution terrain</mark>. Step-down failures: once the robot fell into a snow pile and failed to recover; once it knocked the ball far away as it fell and could not see it after recovering. Ramp: traversable under teleoperation, but with pre-specified commands <b>the ball rolled back down between kicks</b> and the robot had to turn around to fetch it.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融怎麼讀</span><span data-lang="en">Reading the ablation</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">拿掉什麼</span><span data-lang="en">Removed</span></th><th><span data-lang="zh">代價</span><span data-lang="en">Cost</span></th><th><span data-lang="zh">證明了什麼</span><span data-lang="en">What it shows</span></th></tr>
+          <tr><td><b>-Y</b><br><small><span data-lang="zh">YOLO 微調</span><span data-lang="en">YOLO fine-tuning</span></small></td><td class="bad"><span data-lang="zh">四種地形全部 0/4</span><span data-lang="en">0/4 on all four terrains</span></td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">微調是整個系統最關鍵的一環</mark>;現成 COCO 偵測器在魚眼畫面上根本不堪用。這是唯一在每種地形都產生落差的消融。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Fine-tuning is the single most critical component</mark>; an off-the-shelf COCO detector is unusable on fisheye images. The only ablation that hurts on every terrain.</span></td></tr>
+          <tr><td><b>-D</b><br><small><span data-lang="zh">球拖曳模型</span><span data-lang="en">ball drag model</span></small></td><td><span data-lang="zh">沙地 4/4 → 2/4;草地仍 4/4 但「明顯較慢」(僅影片)</span><span data-lang="en">Sand 4/4 → 2/4; grass still 4/4 but "substantially slower" (video only)</span></td><td><span data-lang="zh">沙地的失敗都在<b>轉彎時漏踢一腳</b>後發生;作者推論拖曳模型帶來的魯棒性<mark class="m-assume" data-t="ASSUMPTION/CLAIM">也幫助應對滑地等其他原因造成的意外球運動</mark>——這是推論,不是被隔離驗證的結論。</span><span data-lang="en">Both sand failures follow <b>a missed kick during a turn</b>; the authors infer that the robustness from the drag model <mark class="m-assume" data-t="ASSUMPTION/CLAIM">also helps with unexpected ball motion from other causes like slippery terrain</mark>—an inference, not an isolated test.</span></td></tr>
+          <tr><td><b>-R</b><br><small><span data-lang="zh">recovery 策略</span><span data-lang="en">recovery policy</span></small></td><td><span data-lang="zh">只有路緣下階 2/4 → 1/4</span><span data-lang="en">Only curb step-down 2/4 → 1/4</span></td><td><span data-lang="zh">平地類地形幾乎沒有跌倒,所以 -R 不影響;它的價值只在困難地形顯現,且<mark class="m-limit" data-t="LIMITATION/FUTURE">證據只有一次試驗的差距</mark>。</span><span data-lang="en">Flat-ish terrains rarely cause falls, so -R changes nothing there; its value shows only on hard terrain, and <mark class="m-limit" data-t="LIMITATION/FUTURE">the evidence is a one-trial difference</mark>.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted);margin-top:8px"><span class="add">[導讀補充]</span> 以 Fisher exact test 粗估:4/4 vs 0/4 的雙尾 \(p\approx 0.029\)(每種地形各自都勉強顯著,四種合起來則非常明確);4/4 vs 2/4 的 \(p\approx 0.43\);2/4 vs 1/4 的 \(p=1\)。也就是說,<b>只有 -Y 的效果在統計上站得住</b>,-D 與 -R 的差距在 \(n=4\) 下無法與隨機波動區分。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted);margin-top:8px"><span class="add">[guide note]</span> A rough Fisher exact test: 4/4 vs 0/4 gives two-sided \(p\approx 0.029\) (barely significant per terrain, unambiguous pooled over four); 4/4 vs 2/4 gives \(p\approx 0.43\); 2/4 vs 1/4 gives \(p=1\). In other words, <b>only the -Y effect is statistically solid</b>; the -D and -R gaps cannot be told apart from chance at \(n=4\).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">定性展示:大範圍、多地形、與人互動</span><span data-lang="en">Qualitative demos: large spaces, many terrains, human play</span></h3>
+        <figure class="fig"><img src="figs/Ji2023/fig5_overhead.png" alt="Figure 5 overhead drone images">
+          <figcaption data-lang="zh"><b>Fig.5</b> 空拍拼接的真機盤帶軌跡(藍線為球路徑)。(a) 草地上 180° 大迴轉:注意迴轉半徑很大——轉向需要好幾腳才完成;(b) 跨越磁磚、碎石、凹凸苔蘚的連續地形;(c) 10 m 帶球衝向球門,途中做一次閃避轉向。這些是<b>遙控</b>下的展示,證明了不接線、無外部感測時可以在大空間連續操作。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> Stitched drone footage of real dribbling (blue line = ball path). (a) A 180° turn on grass: note the large turning radius—the turn takes many kicks; (b) continuous terrain spanning tile, gravel and bumpy moss; (c) a 10 m run toward a goal with an evasive turn. These are <b>teleoperated</b> demos, showing continuous operation across large spaces with no tether or external sensing.</figcaption></figure>
+        <p data-lang="zh">遙控下在<mark class="m-result" data-t="RESULT/EVIDENCE">草地、柏油、碎石、雪、沙、凹凸地面</mark>都能完成盤帶與轉向:草地高拖曳讓球很快慢下;柏油低拖曳讓球容易跑掉;碎石上球滾但狗腳滑;雪與沙上球與狗都會滑;凹凸地面上球撞地後方向不可預測。與人互動時,機器人表現出<mark class="m-result" data-t="RESULT/EVIDENCE">長時間、非週期的行為</mark>——繞去追球、調整身體朝向準備踢、掉球後折返——全部未經明確設計。</p>
+        <p data-lang="en">Under teleoperation it dribbles and turns on <mark class="m-result" data-t="RESULT/EVIDENCE">grass, pavement, gravel, snow, sand and bumpy ground</mark>: high drag on grass slows the ball; low drag on pavement lets it run away; on gravel the ball rolls but the robot slips; on snow and sand both slip; on bumpy ground the ball changes direction unpredictably. When playing with a human, the robot shows <mark class="m-result" data-t="RESULT/EVIDENCE">extended aperiodic behaviors</mark>—circling to reach the ball, orienting the body for a kick, doubling back after losing it—none explicitly designed.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">完整系統在常見戶外地形上<b>可靠</b>(磁磚/草/沙 4/4),在分佈外幾何上<b>不可靠</b>(下階 2/4、斜坡 0/4);消融裡唯一壓倒性的訊號是<b>感知微調</b>。</span>
+        <span data-lang="en">The full system is <b>reliable</b> on common outdoor surfaces (tile/grass/sand 4/4) and <b>unreliable</b> on out-of-distribution geometry (step-down 2/4, ramp 0/4); the only overwhelming signal in the ablation is <b>perception fine-tuning</b>.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">實驗做與沒做的</span><span data-lang="en">What the experiments do and don't show</span></div>
+        <span data-lang="zh"><b>做到了</b>:全板載、戶外、多地形盤帶可行;魚眼微調不可或缺。<b>沒做到</b>:真機的<mark class="m-limit" data-t="LIMITATION/FUTURE">速度追蹤誤差、球定位誤差、轉向延遲都沒有量化</mark>;沒有任何外部 baseline;每格只有 4 次、單一腳本軌跡;泥地、碎石只有定性展示。</span>
+        <span data-lang="en"><b>Shown</b>: fully onboard, outdoor, multi-terrain dribbling works; fisheye fine-tuning is indispensable. <b>Not shown</b>: <mark class="m-limit" data-t="LIMITATION/FUTURE">real-world velocity-tracking error, ball-localization error and turning lag are never quantified</mark>; no external baseline; only 4 trials per cell on one scripted trajectory; mud and gravel are qualitative only.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何 -D 在草地沒掉分</span><span data-lang="en">Why -D did not fail on grass</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 成功判準是「不失控」,不是「追上指令速度」。高拖曳的草地讓球<b>更不容易跑掉</b>,所以沒學過拖曳的策略只是「帶得慢」而不會失敗;真正危險的是球會意外滑走的低拖曳/滑地場景(如沙地轉彎)。二元成功率因此低估了 -D 的影響。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> The success criterion is "keep control," not "reach the commanded speed." High-drag grass makes the ball <b>less likely to escape</b>, so a drag-unaware policy just dribbles slowly instead of failing; the dangerous cases are low-drag or slippery settings where the ball can get away (e.g. turning on sand). A binary success rate therefore understates the -D effect.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">定位誤差</span><span data-lang="en">localization error</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">樣本數</span><span data-lang="en">sample size</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>任務範圍很窄。</b> 「dynamic legged manipulation」的標題遠大於實際任務:<mark class="m-limit" data-t="LIMITATION/FUTURE">單一物體(一顆 size-3、黑白花紋的標準足球)、單一技能(依速度指令盤帶)、由人遙控或腳本給指令</mark>。沒有射門、沒有目標位置、沒有對手。能否推廣到其他物體(形狀不對稱、會翻滾的箱子)完全沒有證據。</li>
+          <li data-lang="en"><b>Narrow task scope.</b> The title "dynamic legged manipulation" is far broader than the task: <mark class="m-limit" data-t="LIMITATION/FUTURE">one object (a standard black-and-white size-3 soccer ball), one skill (velocity-commanded dribbling), with commands from a human or a script</mark>. No shooting, no goal positions, no opponent. There is no evidence about other objects (asymmetric shapes, boxes that tumble).</li>
+          <li data-lang="zh"><b>地形多樣性的主張大於證據。</b> 盤帶策略<mark class="m-assume" data-t="ASSUMPTION/CLAIM">只在平地訓練</mark>,球–地面差異只用一個標量 \(C_D\) 的二次拖曳表示(物理上更接近空氣阻力而非滾動阻力,見 METHOD 側欄);沙、雪等可變形地形對機器人足部的影響只靠摩擦/恢復係數隨機化。定量測試只涵蓋 6 種場景,泥地、碎石、苔蘚只有影片與空拍。</li>
+          <li data-lang="en"><b>Terrain-diversity claims exceed the evidence.</b> The dribbling policy <mark class="m-assume" data-t="ASSUMPTION/CLAIM">trains on flat ground only</mark>; ball-terrain variation is a single scalar \(C_D\) with quadratic drag (physically closer to air drag than rolling resistance; see the METHOD sidebar); deformable terrain like sand and snow affects the feet only through friction/restitution randomization. The quantitative test covers 6 scenes; mud, gravel and moss are video and drone footage only.</li>
+          <li data-lang="zh"><b>感知失效模式幾乎沒被量化。</b> 整個系統<mark class="m-problem" data-t="PROBLEM/GAP">押在 254 張影像微調出的偵測器上</mark>(-Y 全部 0/4),但論文沒報偵測率、誤檢率、3D 定位誤差隨距離/畫面位置的分佈。已知的失效:強烈直射陽光的眩光、跌倒後球出視野、高速時漏停球後失去視線。等距模型「忽略扭曲」的近似在畫面邊緣與 10 cm 近距離時誤差多大?兩相機取高信心者而非融合、沒有任何濾波器(只靠策略的 15 步歷史隱式平滑),遮擋(自己的腿、人的腳)與干擾物(其他球、圓形物)都沒討論。</li>
+          <li data-lang="en"><b>Perception failure modes are barely quantified.</b> The whole system <mark class="m-problem" data-t="PROBLEM/GAP">rests on a detector fine-tuned on 254 images</mark> (-Y is 0/4 everywhere), yet no detection rate, false-positive rate, or 3D localization error vs distance / image position is reported. Known failures: glare in bright direct sunlight, the ball leaving view after a fall, losing sight after a missed stop at speed. How large is the error of the "ignore warping" equidistant approximation at the image edge and at 10 cm? The two cameras are arbitrated by confidence rather than fused, with no filter (only implicit smoothing via the 15-step history); occlusion (own legs, human feet) and distractors (other balls, round objects) are not discussed.</li>
+          <li data-lang="zh"><b>沒有任何比較基準。</b> 所有比較都是「拿掉自己的元件」。缺少的關鍵 baseline 包括:<mark class="m-problem" data-t="PROBLEM/GAP">現成運動控制器(如 WTW)+ 手寫「追球/推球」高階邏輯</mark>——這能直接回答「是否真的需要學一條全身盤帶策略」;或用身體速度指令的分層方法(類似 [22] 的設計)。沒有這些,「whole-body control 是必要的」只是由 Fig.4d 的腿部動作圖支撐的論述。</li>
+          <li data-lang="en"><b>No external baseline at all.</b> Every comparison removes one of the system's own components. Missing key baselines: <mark class="m-problem" data-t="PROBLEM/GAP">an off-the-shelf locomotion controller (e.g. WTW) + a scripted "chase / push the ball" high-level layer</mark>—which would directly test whether a learned whole-body dribbling policy is needed—or a hierarchical body-velocity design like [22]. Without them, "whole-body control is necessary" is an argument supported only by the leg-motion plot of Fig.4d.</li>
+          <li data-lang="zh"><b>統計力不足、指標粗糙。</b> 每格 4 次、單一腳本軌跡、二元成功率、多格未測(「–」)。-D 在草地「明顯較慢」只在影片裡,沒有數字;模擬結果只展示一段 60 s 的軌跡,沒有跨種子、跨指令的彙總統計。</li>
+          <li data-lang="en"><b>Low statistical power, coarse metrics.</b> Four trials per cell, one scripted trajectory, binary success, several untested cells ("–"). The -D slowdown on grass exists only in the video, with no number; the simulation results show a single 60 s trajectory with no aggregate statistics across seeds or commands.</li>
+          <li data-lang="zh"><b>可復現的細節缺漏。</b> 獎勵中的 \(\delta\) 尺度、視覺雜訊的均勻分佈範圍、盤帶時使用的步態/步頻都未給;相機延遲在文中寫「平均 20–60 ms」,表中卻是「幀到達率 0.3–0.7」<span class="add">[導讀補充] 若把到達率解讀為每個 20 ms 控制步的到達機率,對應平均間隔約 29–67 ms,與文中數字不完全一致</span>。速度/拖曳估計器接到策略輸入,但其影響未評估。</li>
+          <li data-lang="en"><b>Missing reproducibility details.</b> The reward \(\delta\) scales, the range of the uniform vision noise, and the gait / stepping frequency used while dribbling are not given; camera delay is "mean 20–60 ms" in the text but "frame arrival rate 0.3–0.7" in the table <span class="add">[guide note] reading the rate as the per-20-ms-step arrival probability implies mean intervals of about 29–67 ms, not quite matching the text</span>. The velocity/drag estimator feeds the policy, but its effect is not evaluated.</li>
+          <li data-lang="zh"><b>全域座標指令的隱藏假設。</b> <span class="add">[導讀補充]</span> 全域座標 = 第一步的機身座標,方向靠 IMU 的 yaw 維持;長時間運行下 yaw 漂移會讓「向北帶球」慢慢變成「向東北」。對短程 demo 無妨,對真正的長程任務(送貨、比賽)就是問題,論文未討論。</li>
+          <li data-lang="en"><b>A hidden assumption in global-frame commands.</b> <span class="add">[guide note]</span> The global frame is the first-step body frame, maintained through IMU yaw; over long runs yaw drift would slowly turn "dribble north" into "dribble north-east." Harmless for short demos, a real issue for long-horizon tasks (delivery, matches); not discussed.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>拖曳模型在做什麼?</b> 把 \(C_Dv^2\) 換成定值減速的滾動阻力模型,或只把球速擾動範圍加大,沙地與草地的結果會變嗎?\(C_D\) 隨機化是在模擬「地形」,還是只是一般性的「球動力學魯棒性」?</li>
+          <li data-lang="en"><b>What is the drag model really doing?</b> If \(C_Dv^2\) were replaced by constant-deceleration rolling resistance, or the ball-velocity perturbation range were simply widened, would sand and grass results change? Does \(C_D\) randomization model "terrain," or just generic "ball-dynamics robustness"?</li>
+          <li data-lang="zh"><b>感知誤差預算。</b> \(z\approx fR/\Delta r\) 在畫面邊緣、球貼近 10 cm 時的定位誤差是多少?策略能容忍多大的定位誤差與延遲,超過後成功率如何下降?</li>
+          <li data-lang="en"><b>Perception error budget.</b> What is the localization error of \(z\approx fR/\Delta r\) at the image edge and at 10 cm? How much localization error and delay can the policy tolerate, and how does success decay beyond it?</li>
+          <li data-lang="zh"><b>學全身盤帶是必要的嗎?</b> 「WTW 運動控制器 + 手寫追球邏輯」在同一腳本軌跡上能拿幾分?如果也能 4/4,本文的貢獻就主要在感知與系統整合,而非控制。</li>
+          <li data-lang="en"><b>Is learning whole-body dribbling necessary?</b> How would "WTW locomotion + scripted ball-chasing" score on the same scripted trajectory? If it also gets 4/4, the contribution is mainly perception and system integration, not control.</li>
+          <li data-lang="zh"><b>樣本數夠嗎?</b> 以 \(n=4\),-D 在沙地的 4/4 vs 2/4 與 -R 在路緣的 2/4 vs 1/4 都不顯著;作者的結論在多少次試驗後才站得住?</li>
+          <li data-lang="en"><b>Is the sample size enough?</b> With \(n=4\), neither -D on sand (4/4 vs 2/4) nor -R on the curb (2/4 vs 1/4) is significant; how many trials would the conclusions need?</li>
+          <li data-lang="zh"><b>為何指令是速度而非目標位置?</b> 對「帶到球門前」這類目標導向任務,有數秒延遲的速度指令需要人在迴路中修正;改成位置/航點指令會更好嗎?</li>
+          <li data-lang="en"><b>Why velocity commands rather than goal positions?</b> For goal-directed tasks like "dribble to the goal," a velocity command with seconds of lag needs a human in the loop to correct it; would position / waypoint commands work better?</li>
+          <li data-lang="zh"><b>左右是否對稱?</b> 「靠近球」錨定在右前髖,左轉與右轉的成功率與延遲是否不同?</li>
+          <li data-lang="en"><b>Is it left-right symmetric?</b> With "stay close" anchored at the front-right hip, do left and right turns differ in success rate and lag?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把 DribbleBot 讀成「<b>從像素端到端學會踢球</b>」。實際上策略<mark class="m-assume" data-t="ASSUMPTION/CLAIM">從來沒看過影像</mark>:它吃的是一個 3D 球位置,由另一個用監督學習微調的偵測器加上手寫的魚眼幾何算出。「perceptive」是系統層面的,不是策略層面的。</span>
+        <span data-lang="en">Reading DribbleBot as "<b>learning to kick end-to-end from pixels</b>." In fact the policy <mark class="m-assume" data-t="ASSUMPTION/CLAIM">never sees an image</mark>: it consumes a 3D ball position computed by a separately, supervised-fine-tuned detector plus hand-written fisheye geometry. "Perceptive" holds at the system level, not the policy level.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">Discussion 對限制很坦白(轉向慢、怕陽光眩光、高速不精確、沒有幾何感知),專案網站也放了失敗影片;並且<b>老實承認</b>估計器的作用沒被評估。全板載、戶外、開源,讓後續工作能直接站在這個 baseline 上。</span>
+        <span data-lang="en">The Discussion is candid about limits (slow turning, sun glare, imprecision at speed, no geometry awareness), failure videos are on the project site, and the paper <b>openly admits</b> the estimator was not evaluated. Fully onboard, outdoors and open-source, it gives follow-up work a baseline to stand on.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">作者列出的限制</span><span data-lang="en">Author-listed limitations</span></span>
+        <span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">轉向反應慢</mark>;<mark class="m-limit" data-t="LIMITATION/FUTURE">強光眩光下感知變差</mark>;低拖曳地形高速時漏停球會失去視線;<mark class="m-limit" data-t="LIMITATION/FUTURE">缺乏環境幾何感知</mark>(陡坡、樓梯、柱子、牆)。</span>
+        <span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">Slow turning response</mark>; <mark class="m-limit" data-t="LIMITATION/FUTURE">perception degrades under glare</mark>; at speed on low-drag terrain a missed stop loses sight of the ball; <mark class="m-limit" data-t="LIMITATION/FUTURE">no awareness of environment geometry</mark> (steep slopes, stairs, poles, walls).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>物體中心的指令介面</b>:做移動操作時,讓指令描述「物體該怎麼動」而不是「身體該怎麼動」,可以讓 RL 自己發現接觸策略(踢、推、夾、繞)。這也是「<b>腿可以當操作器</b>」路線的核心想法。</li>
+          <li data-lang="en"><b>Object-centric command interfaces</b>: in mobile manipulation, letting commands describe "how the object should move" rather than "how the body should move" lets RL discover contact strategies (kick, push, trap, circle) on its own—the core idea of the "<b>legs as manipulators</b>" line of work.</li>
+          <li data-lang="zh"><b>特權狀態訓練 + 真實資料微調感知</b>是很划算的 sim-to-real 切法:策略用低維狀態學、對狀態估計加入雜訊/延遲/消失;感知用少量真實影像監督學。先問「控制需要的是什麼狀態」,再決定感知要多強。</li>
+          <li data-lang="en"><b>Privileged-state training + real-data perception fine-tuning</b> is a cost-effective sim-to-real split: the policy learns on low-dimensional state with noise / delay / dropouts injected; perception is supervised on a few real images. Ask first "what state does control need," then decide how strong perception must be.</li>
+          <li data-lang="zh"><b>為被操作物體單獨做動力學隨機化</b>:物體與環境的互動(滾動、滑動、拖曳)不會被機器人動力學隨機化涵蓋,需要另外一條隨機化軸——但要小心所選的物理形式是否合理。</li>
+          <li data-lang="en"><b>Randomize the manipulated object's dynamics separately</b>: object-environment interaction (rolling, sliding, drag) is not covered by robot-dynamics randomization and needs its own axis—but check whether the chosen physical form is sensible.</li>
+          <li data-lang="zh"><b>模組化的失效處理</b>:與其讓主策略學會所有極端情況,不如訓練專門的 recovery policy + 帶遲滯的切換邏輯。<span class="add">[導讀補充]</span> 但要記得 recovery 後「重新找回物體」是另一個問題(本文下階失敗之一就是起身後看不到球)。</li>
+          <li data-lang="en"><b>Modular failure handling</b>: rather than teaching the main policy every extreme case, train a dedicated recovery policy plus hysteretic switching. <span class="add">[guide note]</span> Remember that re-acquiring the object after recovery is a separate problem (one step-down failure here was not seeing the ball after standing up).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What to cite this paper for</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「低價四足 + 板載感知就能做戶外動態操作」</span><span data-lang="en">"Low-cost quadrupeds with onboard sensing can do outdoor dynamic manipulation"</span></td><td><span data-lang="zh">代表性的系統示範(Go1、兩顆魚眼、兩顆 Jetson、無外部感測)。</span><span data-lang="en">A flagship system demonstration (Go1, two fisheyes, two Jetsons, no external sensing).</span></td></tr>
+          <tr><td><span data-lang="zh">「以物體速度為指令的足式操作介面」</span><span data-lang="en">"Object-velocity commands as a legged-manipulation interface"</span></td><td><span data-lang="zh">全域座標球速指令的設計與理由。</span><span data-lang="en">The global-frame ball-velocity command and its rationale.</span></td></tr>
+          <tr><td><span data-lang="zh">「物體–地形動力學需要獨立隨機化」</span><span data-lang="en">"Object-terrain dynamics need separate randomization"</span></td><td><span data-lang="zh">球拖曳模型與 -D 消融(注意證據強度有限)。</span><span data-lang="en">The ball drag model and the -D ablation (mind the limited evidence).</span></td></tr>
+          <tr><td><span data-lang="zh">「少量真實資料微調偵測器即可跨越視覺 gap」</span><span data-lang="en">"A few real images suffice to fine-tune a detector across the visual gap"</span></td><td><span data-lang="zh">254 張魚眼影像、-Y 全 0/4 的消融。</span><span data-lang="en">254 fisheye images; the -Y ablation at 0/4 everywhere.</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">DribbleBot 證明了把 Walk These Ways 那套平地 sim-to-real 運動堆疊,換上「球速指令」與「球的狀態」,再補上魚眼感知、球拖曳隨機化與跌倒恢復,就能讓四足機器人在真實戶外地形上邊跑邊盤帶;它是<b>系統可行性</b>的有力證明,但對「哪個設計真正必要」與「能推廣到多遠」的回答,受限於小樣本、無外部 baseline 與單一物體任務。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">DribbleBot shows that taking the flat-ground sim-to-real locomotion stack of Walk These Ways, swapping in a ball-velocity command and ball state, and adding fisheye perception, ball-drag randomization and fall recovery is enough for a quadruped to dribble while running on real outdoor terrain. It is strong evidence of <b>system feasibility</b>, but its answers to "which design choices are truly necessary" and "how far does it generalize" are limited by small samples, no external baseline and a single-object task.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip"><a class="lk" href="Margolis2022_WalkTheseWays.html">Walk These Ways [9]</a></span>
+          <span class="chip">Rapid Locomotion [8]</span>
+          <span class="chip">Soccer shooting [22]</span>
+          <span class="chip">Quadruped goalkeeper [23]</span>
+          <span class="chip">Circus ANYmal [41]</span>
+          <span class="chip">NeRF2Real [43]</span>
+          <span class="chip">Concurrent estimator [34]</span>
+        </div>
+        <p style="font-size:12.5px;margin:10px 0 0"><span data-lang="zh"><span class="add">[導讀補充]</span> 同期與後續的「腿當操作器 / 足式足球」工作,如 <i>Legs as Manipulator</i>(Cheng et al., ICRA 2023)、DeepMind 雙足小型人形足球(Haarnoja et al., 2023)、DexDribbler(2024),可與本文對照閱讀。</span><span data-lang="en"><span class="add">[guide note]</span> Concurrent and follow-up "legs as manipulators / legged soccer" works—e.g. <i>Legs as Manipulator</i> (Cheng et al., ICRA 2023), DeepMind small-humanoid soccer (Haarnoja et al., 2023), DexDribbler (2024)—make good companion reads.</span></p>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">與 WTW 的對照</span><span data-lang="en">Versus WTW</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> WTW 讓<b>人調整「怎麼走」</b>(8 維行為參數)來應對分佈外情況;DribbleBot 讓<b>人只說「球往哪走」</b>,怎麼走由策略決定。兩者都只在平地訓練、都靠泛化進入野外;前者把多樣性放在行為空間,後者把多樣性放在物體動力學。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> WTW has <b>the human tune "how to walk"</b> (an 8-D behavior vector) to handle OOD situations; DribbleBot has <b>the human say only "where the ball goes,"</b> leaving how to move to the policy. Both train on flat ground and reach the wild by generalization; the former puts diversity in behavior space, the latter in object dynamics.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論,其餘事實與數據均出自原論文(arXiv:2304.01159v1)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences; all other facts and figures come from the original paper (arXiv:2304.01159v1).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Ji, Margolis &amp; Agrawal 2023 (DribbleBot) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'DribbleBot reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

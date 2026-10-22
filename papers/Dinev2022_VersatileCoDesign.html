@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Versatile Co-Design for Legged Robots — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"A Versatile Co-Design Approach for Dynamic Legged Robots","authors":"Traiko Dinev, Carlos Mastalli, Vladimir Ivan, Steve Tonneau, Sethu Vijayakumar","year":"2022","venue":"IROS","tags":["Legged Robotics","Co-Design","Optimal Control","Trajectory Optimization","Actuator Design","Quadruped","Bilevel Optimization","DDP"],"tldr":"雙層共同設計:下層用 Crocoddyl Box-FDDP 解含全身動力學、接觸與扭矩上限的最佳控制,上層把它當黑箱、以平行有限差分取梯度交給 KNITRO,在硬性設計約束下同時優化 Solo 四足的形態、酬載配置與馬達質量/減速比;trot 與 jump 能耗約降 73-77%(模擬驗證 62-75%)。","tldr_en":"Bilevel co-design: a Crocoddyl Box-FDDP optimal-control solver with full dynamics, contacts and torque limits sits in the lower level, while KNITRO in the upper level treats it as a black box with parallel finite-difference gradients, optimizing the morphology, payload placement and motor mass / gear ratio of a Solo quadruped under hard design constraints; trot and jump energy drops by about 73-77% (62-75% in simulation checks)."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:118px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">這篇提出一個<b>雙層(bilevel)機器人共同設計(co-design)框架</b>:下層用 Crocoddyl 的 <b>Box-FDDP</b> 對每個候選設計解一個<mark class="m-method" data-t="METHOD/IDEA">含全身動力學、接觸切換、摩擦錐與扭矩上限的最佳控制問題</mark>;上層把「設計 → 最佳動作 → 能耗」整條鏈當成黑箱函數,用<mark class="m-method" data-t="METHOD/IDEA">平行的單邊有限差分</mark>取梯度,交給通用 NLP 求解器 <b>KNITRO</b>,在<mark class="m-method" data-t="METHOD/IDEA">硬性設計約束</mark>下最小化馬達能耗。在 12 自由度的 <b>Solo</b> 四足上,為 trot 與 jump 各找到一個<mark class="m-result" data-t="RESULT/EVIDENCE">能耗約降 73–77%</mark>(PyBullet 驗證約 62–75%)的設計。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">The paper proposes a <b>bilevel robot co-design framework</b>: the lower level uses Crocoddyl&#39;s <b>Box-FDDP</b> to solve, for each candidate design, an <mark class="m-method" data-t="METHOD/IDEA">optimal control problem with full-body dynamics, contact switches, friction cones and torque limits</mark>; the upper level treats the whole chain "design → optimal motion → energy" as a black box, gets its gradient by <mark class="m-method" data-t="METHOD/IDEA">parallel one-sided finite differences</mark>, and hands it to the general-purpose NLP solver <b>KNITRO</b>, minimizing motor energy under <mark class="m-method" data-t="METHOD/IDEA">hard design constraints</mark>. On the 12-DoF <b>Solo</b> quadruped it finds trot and jump designs that <mark class="m-result" data-t="RESULT/EVIDENCE">cut energy by about 73–77%</mark> (about 62–75% when re-checked in PyBullet).</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Dinev2022/fig1_bilevel_overview.png" alt="Figure 1 bilevel overview">
+        <figcaption data-lang="zh"><b>Fig.1</b> 雙層共同設計的概念圖。左:Solo 上被優化的三類設計量——<b>酬載</b>(黃色電子盒)、<b>致動器</b>、<b>連桿</b>。右:上層 NLP 接收設計、約束、成本與梯度;注意梯度與成本都是從<b>下層 motion planning 解出的動作</b>分岔出來的——motion planner 是一個可替換的模組。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> Concept of bilevel co-design. Left: the three kinds of design quantities optimized on Solo—<b>payload</b> (yellow electronics boxes), <b>actuators</b>, and <b>links</b>. Right: the upper-level NLP receives design, constraints, cost and gradient; note that both cost and gradient branch off from the <b>motion solved by the lower-level planner</b>—the motion planner is a swappable module.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 共同設計需要「能規劃<b>物理可行</b>的動態動作」與「能加<b>任意硬性設計約束</b>」兩者兼得。既有做法各缺一角:<mark class="m-problem" data-t="PROBLEM/GAP">取樣法(CMA-ES)無法處理硬約束、維度一高就難收斂</mark>;<mark class="m-problem" data-t="PROBLEM/GAP">單一大 NLP 太複雜且不模組化</mark>;敏感度分析法需為特定 planner 手推、且多以懲罰代替物理約束。</li>
+          <li data-lang="en"><b>Problem</b> — Co-design needs both "planning <b>physically feasible</b> dynamic motions" and "imposing <b>arbitrary hard design constraints</b>." Each existing approach misses one: <mark class="m-problem" data-t="PROBLEM/GAP">sampling methods (CMA-ES) cannot do hard constraints and struggle as dimension grows</mark>; <mark class="m-problem" data-t="PROBLEM/GAP">a single giant NLP is complex and non-modular</mark>; sensitivity-analysis methods need planner-specific derivations and often replace physics with penalties.</li>
+          <li data-lang="zh"><b>方法</b> — <mark class="m-method" data-t="METHOD/IDEA">上層 KNITRO + 下層 Box-FDDP</mark>。設計向量 \(\rho\in\mathbb{R}^{17}\)(腿長、肩關節安裝點、機身寬高深、兩個電子盒位置、馬達質量、減速比);每個梯度只需 \(\dim(\rho)+1=18\) 次平行的下層求解;成本是由致動器回歸模型算出的<b>馬達電能 + 傳動摩擦損耗</b>。</li>
+          <li data-lang="en"><b>Method</b> — <mark class="m-method" data-t="METHOD/IDEA">KNITRO on top, Box-FDDP below</mark>. Design vector \(\rho\in\mathbb{R}^{17}\) (leg lengths, shoulder attachment points, base width/height/depth, positions of two electronics boxes, motor mass, gear ratio); each gradient needs only \(\dim(\rho)+1=18\) parallel lower-level solves; the cost is <b>motor electrical energy + transmission friction loss</b> from an actuator regression model.</li>
+          <li data-lang="zh"><b>結果</b> — Trot:馬達 0.053→<b>0.179 kg</b>、減速比 9→<b>16.06</b>、全機 2.42→3.81 kg;Jump:0.168 kg、17.33、3.59 kg。兩者能耗皆<mark class="m-result" data-t="RESULT/EVIDENCE">大降約 7 成</mark>,主因是<b>用較大的摩擦損耗換掉大量焦耳熱</b>。與 CMA-ES 相比最佳成本相近、trot 收斂更快;17 維 jump 最壞情況 <b>252 s vs 600 s</b>。</li>
+          <li data-lang="en"><b>Results</b> — Trot: motor 0.053→<b>0.179 kg</b>, gear ratio 9→<b>16.06</b>, total 2.42→3.81 kg; Jump: 0.168 kg, 17.33, 3.59 kg. Both <mark class="m-result" data-t="RESULT/EVIDENCE">cut energy by roughly 70%</mark>, mainly by <b>trading a little more friction loss for much less Joule heating</b>. Versus CMA-ES: similar best cost, faster on trot; worst case on the 17-D jump <b>252 s vs 600 s</b>.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">傳統機器人設計是「機構工程師畫圖 → 控制工程師規劃動作 → 發現不夠好再改圖」的人工迭代(例如 HyQ 的設計)。<mark class="m-method" data-t="METHOD/IDEA">共同設計(co-design)</mark>想把這個迴圈自動化:設計者只需指定<b>設計參數、設計約束、任務、評估指標</b>,演算法同時找出最佳設計與最佳動作。</p>
+        <p data-lang="en">Traditional robot design is a manual loop: "mechanical engineers draw → control engineers plan motions → not good enough, redraw" (e.g., the design of HyQ). <mark class="m-method" data-t="METHOD/IDEA">Co-design</mark> aims to automate this loop: the designer only specifies <b>design parameters, design constraints, tasks, and evaluation metrics</b>, and the algorithm finds the best design and motion together.</p>
+        <p data-lang="zh">要讓設計改善「真實」,內層必須能規劃<mark class="m-assume" data-t="ASSUMPTION/CLAIM">考慮全身動力學與致動極限的可行動作</mark>——這正是 <b>Crocoddyl</b>(多接觸最佳控制框架,快到可做 MPC)這類模型派工具的強項。本文的定位就是:<b>把現成的頂尖 motion planner 原封不動地塞進設計優化迴圈</b>。</p>
+        <p data-lang="en">For design improvements to be "real," the inner level must plan <mark class="m-assume" data-t="ASSUMPTION/CLAIM">feasible motions that respect full-body dynamics and actuation limits</mark>—exactly the strength of model-based tools like <b>Crocoddyl</b> (a multi-contact optimal-control framework fast enough for MPC). This paper&#39;s position: <b>plug an off-the-shelf state-of-the-art motion planner, unmodified, into the design-optimization loop</b>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這是一篇<b>系統整合型</b>的貢獻:沒有發明新的最佳控制演算法,也沒有推導解析敏感度,而是抓住一個工程上的不對稱——<b>設計只有 17 維、動作卻有 9163 維</b>——於是用最笨但最通用的有限差分,換來「任何 planner 都能接、任何設計約束都能加」的模組性。值不值得,取決於你更在乎精確梯度還是工程彈性。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">This is a <b>systems-integration</b> contribution: no new optimal-control algorithm and no analytic sensitivity derivation. Instead it exploits an engineering asymmetry—<b>the design has 17 dimensions, the motion 9163</b>—and uses the dumbest but most general tool, finite differences, to buy modularity: "any planner plugs in, any design constraint can be added." Whether that is worth it depends on whether you value exact gradients or engineering flexibility more. <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是「Solo 可以省 7 成電」,而是底下這幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What is worth taking away is not "Solo can save 70% energy" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">把 motion planner 當成「可微的黑箱模組」。</b> 上層只需要 \(\rho\mapsto J_{cd}(\rho,\mathrm{MP}(\rho))\) 這個函數值與其梯度;下層換成任何可微的 planner 都不用改碼。這是本文自稱 <i>versatile</i> 的真正含意——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">模組上的通用,而非任務上的通用</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Treat the motion planner as a "differentiable black-box module."</b> The upper level only needs the value and gradient of \(\rho\mapsto J_{cd}(\rho,\mathrm{MP}(\rho))\); swapping in any differentiable planner needs no code change. That is the real meaning of the paper&#39;s <i>versatile</i>—<mark class="m-assume" data-t="ASSUMPTION/CLAIM">versatile as a module, not versatile across tasks</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">低維設計 × 高維動作的不對稱,讓有限差分變便宜。</b> trot 實驗 \(\dim(\rho)=17\)、\(\dim(m)=9163\);一次梯度 = 18 次可平行的 DDP 求解,比對 9163 維動作做敏感度分析簡單得多。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">The low-dim design × high-dim motion asymmetry makes finite differences cheap.</b> In the trot experiment \(\dim(\rho)=17\), \(\dim(m)=9163\); one gradient = 18 parallelizable DDP solves—far simpler than sensitivity analysis through a 9163-D motion.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">硬約束分層放:物理在下層、設計在上層。</b> 摩擦錐、扭矩上限、接觸動力學由 DDP 保證;電子盒不碰撞、肩關節在機身內等<mark class="m-method" data-t="METHOD/IDEA">設計約束由 KNITRO 以硬約束處理</mark>——這是 CMA-ES 只能用懲罰項做的事。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Layer the hard constraints: physics below, design above.</b> Friction cones, torque limits and contact dynamics are guaranteed by DDP; design constraints such as non-colliding electronics boxes and shoulders inside the base are <mark class="m-method" data-t="METHOD/IDEA">handled as hard constraints by KNITRO</mark>—something CMA-ES can only do with penalties.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">能耗的大頭在致動器,而不是形態。</b> Fig.4 中只優化腿長(4 維)時最佳成本約 20,加入馬達質量與減速比(6 維)後驟降到約 7–8,之後再加機身與電子盒(9→17 維)幾乎不再下降。<span class="add">[導讀補充:由 Fig.4 讀圖]</span></li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Most of the energy lever is the actuator, not the morphology.</b> In Fig.4, optimizing only leg lengths (4-D) gives a best cost of about 20; adding motor mass and gear ratio (6-D) drops it to about 7–8, and adding base and electronics boxes (9→17-D) barely lowers it further. <span class="add">[guide note: read from Fig.4]</span></li>
+          <li data-lang="zh"><b style="color:var(--c-result)">用摩擦換焦耳。</b> 優化器選擇<mark class="m-result" data-t="RESULT/EVIDENCE">更重的馬達 + 更高的減速比</mark>:焦耳熱 \(\propto \tau^2/K_m\) 隨兩者快速下降,代價是與馬達轉速成正比的傳動摩擦上升——結果電能大降、摩擦小增。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Trade friction for Joule heating.</b> The optimizer picks <mark class="m-result" data-t="RESULT/EVIDENCE">heavier motors + higher gear ratios</mark>: Joule heat \(\propto \tau^2/K_m\) falls quickly with both, at the cost of transmission friction that grows with motor speed—so electrical energy drops a lot while friction rises a little.</li>
+          <li data-lang="zh"><b style="color:var(--c-limit)">局部梯度法「追得上」CMA-ES,但從沒贏過它的解。</b> 作者坦承 CMA-ES(族群 50)在所有問題上取得<mark class="m-limit" data-t="LIMITATION/FUTURE">相同或更低</mark>的成本;本文的優勢是時間與確定性,而非解的品質。</li>
+          <li data-lang="en"><b style="color:var(--c-limit)">The local gradient method "keeps up with" CMA-ES but never beats its solutions.</b> The authors admit CMA-ES (population 50) reaches <mark class="m-limit" data-t="LIMITATION/FUTURE">the same or lower</mark> cost on every problem; the edge here is time and determinism, not solution quality.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">A Versatile Co-Design Approach for Dynamic Legged Robots</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Traiko Dinev, Carlos Mastalli, Vladimir Ivan, Steve Tonneau, Sethu Vijayakumar</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Edinburgh Centre for Robotics, University of Edinburgh<span data-lang="zh">(Mastalli 另屬 Heriot-Watt)</span><span data-lang="en"> (Mastalli also Heriot-Watt)</span></span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2022 · IROS<span data-lang="zh">(arXiv:2103.04660,v3 2022/07)</span><span data-lang="en"> (arXiv:2103.04660, v3 Jul 2022)</span></span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Co-Design · Legged Robots</span>
+          <b><span data-lang="zh">影片</span><span data-lang="en">Video</span></b><span>youtu.be/Yxn7K1HXt_I</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span><span data-lang="zh">論文未附連結(使用開源 Crocoddyl / Pinocchio / KNITRO / pycma)</span><span data-lang="en">No link in paper (built on open-source Crocoddyl / Pinocchio, plus KNITRO / pycma)</span></span>
+        </div>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">檔名與作者</span><span data-lang="en">File key vs. authors</span></div>
+        <span data-lang="zh">本頁檔名沿用論文庫批次指派的 key <code>Fadini2022</code>,但<b>第一作者其實是 Traiko Dinev(愛丁堡大學)</b>。Fadini et al.(LAAS-CNRS,ICRA 2021)是本文引用的 [9],本文的<b>致動器回歸模型與能耗成本正是沿用它</b>。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">This page keeps the batch-assigned key <code>Fadini2022</code>, but <b>the first author is actually Traiko Dinev (University of Edinburgh)</b>. Fadini et al. (LAAS-CNRS, ICRA 2021) is the cited [9], whose <b>actuator regression model and energy cost this paper reuses</b>. <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">示範了一條「<b>不重寫 motion planner 也能做 co-design</b>」的路:只要 planner 對設計參數夠平滑,就能直接把 Crocoddyl 這種處理接觸、摩擦錐、扭矩上限的頂級 OCP 求解器放進設計迴圈,同時保留設計者熟悉的「硬約束 NLP」介面。</span>
+        <span data-lang="en">It shows a route to "<b>co-design without rewriting the motion planner</b>": as long as the planner is smooth enough in the design parameters, a top OCP solver like Crocoddyl—with contacts, friction cones and torque limits—goes straight into the design loop, while keeping the designer-friendly "hard-constrained NLP" interface.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Bilevel optimization</span><span class="chip">Box-FDDP</span>
+          <span class="chip">Crocoddyl</span><span class="chip">KNITRO</span>
+          <span class="chip">Finite differences</span><span class="chip">Joule loss</span>
+          <span class="chip">Gear ratio</span><span class="chip">Solo quadruped</span>
+          <span class="chip">CMA-ES</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">人工迭代</span><span data-lang="en">Manual iteration</span></b><br><small>(HyQ [1])</small></td><td><span data-lang="zh">機構設計 ↔ 動作規劃來回改,<mark class="m-problem" data-t="PROBLEM/GAP">需要兩個領域的專家</mark>,對動態機器人尤其困難。</span><span data-lang="en">Back-and-forth between mechanical design and motion planning; <mark class="m-problem" data-t="PROBLEM/GAP">needs experts in both</mark>, especially hard for dynamic robots.</span></td></tr>
+          <tr><td><b><span data-lang="zh">取樣式 co-design</span><span data-lang="en">Sampling-based co-design</span></b><br><small>(CMA-ES: Wampler, Digumarti, Ha 2016, Vitruvio, Fadini 2021)</small></td><td><span data-lang="zh">可用不平滑的 planner,但<mark class="m-problem" data-t="PROBLEM/GAP">設計約束只能是軟懲罰</mark>、要調權重;複雜度隨設計維度急遽上升(維度詛咒),難擴展到多任務、多環境。</span><span data-lang="en">Can use non-smooth planners, but <mark class="m-problem" data-t="PROBLEM/GAP">design constraints are only soft penalties</mark> requiring weight tuning; complexity grows steeply with design dimension (curse of dimensionality), hard to scale to multiple tasks/environments.</span></td></tr>
+          <tr><td><b><span data-lang="zh">單一 NLP 同時解</span><span data-lang="en">One joint NLP</span></b><br><small>(Mombaur, Buondonno, Spielberg)</small></td><td><span data-lang="zh">動作 + 設計塞進一個大 NLP,<mark class="m-problem" data-t="PROBLEM/GAP">演算法複雜度高</mark>;每加一個設計需求就要改 motion planning 的寫法——<b>不模組化</b>。</span><span data-lang="en">Motion + design in one big NLP: <mark class="m-problem" data-t="PROBLEM/GAP">high algorithmic complexity</mark>; every new design requirement means rewriting the motion-planning formulation—<b>non-modular</b>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">敏感度分析</span><span data-lang="en">Sensitivity analysis</span></b><br><small>(Ha 2018 IFT; Desai adjoint; Geilinger)</small></td><td><span data-lang="zh">Ha [16] 一次只優化一個使用者選定的參數;[17]–[19] 對動作物理只用<mark class="m-problem" data-t="PROBLEM/GAP">懲罰成本而非硬約束,可能違反物理</mark>;且<b>都不支援設計約束</b>,更新規則還要針對 planner 手推。</span><span data-lang="en">Ha [16] optimizes one user-picked parameter at a time; [17]–[19] use <mark class="m-problem" data-t="PROBLEM/GAP">penalty costs instead of hard physics constraints, risking physics violations</mark>; <b>none support design constraints</b>, and the update rule must be hand-derived per planner.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">作者因此訂出三項需求:<b>(1)</b> 對連續設計變數可定義任意成本與約束;<b>(2)</b> motion planning 是一個模組;<b>(3)</b> 能用處理動態足式運動、含動作約束的頂尖 planner。</p>
+        <p data-lang="en" style="margin-top:14px">Hence three requirements: <b>(1)</b> arbitrary costs and constraints on continuous design variables; <b>(2)</b> motion planning as a module; <b>(3)</b> use state-of-the-art planners for dynamic legged motion with constraints on the motion.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,本文怎麼補</span><span data-lang="en">Gap table — who lacks what, and how this paper fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">本文如何補上</span><span data-lang="en">How this paper fills it</span></th></tr>
+          <tr>
+            <td><b>CMA-ES co-design</b></td>
+            <td><span data-lang="zh">軟約束;每代 50 次 planner 呼叫;非確定性。</span><span data-lang="en">Soft constraints; 50 planner calls per generation; non-deterministic.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">KNITRO 處理硬性設計約束</mark>;每步只需 \(\dim(\rho)+1\) 次呼叫;確定性。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">KNITRO handles hard design constraints</mark>; only \(\dim(\rho)+1\) calls per step; deterministic.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">單一大 NLP</span><span data-lang="en">Joint NLP</span></b></td>
+            <td><span data-lang="zh">複雜、不模組化。</span><span data-lang="en">Complex, non-modular.</span></td>
+            <td><span data-lang="zh">分成上下兩層,<mark class="m-method" data-t="METHOD/IDEA">下層 planner 原封不動</mark>,可直接用 Crocoddyl 的結構化求解效率。</span><span data-lang="en">Split into two levels with the <mark class="m-method" data-t="METHOD/IDEA">lower-level planner untouched</mark>, directly reusing Crocoddyl&#39;s structure-exploiting efficiency.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">IFT / adjoint</span><span data-lang="en">IFT / adjoint</span></b></td>
+            <td><span data-lang="zh">要針對 planner 推導;懲罰式物理;無設計約束。</span><span data-lang="en">Planner-specific derivation; penalty physics; no design constraints.</span></td>
+            <td><span data-lang="zh">直接對 \(\rho\mapsto J_{cd}\) 做<mark class="m-method" data-t="METHOD/IDEA">數值微分</mark>,不假設 planner 形式;下層保留硬性控制上限(Box-FDDP)。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Numerically differentiate</mark> \(\rho\mapsto J_{cd}\) directly with no assumption on planner form; the lower level keeps hard control limits (Box-FDDP).</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意本文的「痛點」大多是<b>工程可用性</b>(模組化、約束表達力、可擴展性),而不是「既有方法找不到好設計」。這也意味著評估的重點應是<b>同樣的解品質下,是否更快、更好用</b>——而實驗確實是這樣設計的(Fig.4 比時間,並承認最佳成本相近)。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">Note that the "pain points" here are mostly about <b>engineering usability</b> (modularity, constraint expressiveness, scalability), not "existing methods find bad designs." So the right evaluation is <b>at equal solution quality, is it faster and easier to use</b>—which is indeed how the experiments are set up (Fig.4 compares time and concedes similar best costs). <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">摘要說「exploits the derivatives of the motion planning sub-problem」,很容易讀成<b>解析地對 DDP 求導</b>(像 differentiable MPC)。實際上本文是把 planner 當黑箱,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">用單邊有限差分估梯度</mark>;解析導數被列為未來工作。</span>
+        <span data-lang="en">The abstract says it "exploits the derivatives of the motion planning sub-problem," which is easy to read as <b>analytically differentiating DDP</b> (like differentiable MPC). In fact the planner is a black box and <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the gradient is estimated by one-sided finite differences</mark>; analytic derivatives are listed as future work.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">對設計者而言,「電子盒不能撞在一起」「肩關節必須在機身內」這類條件是<b>不可妥協的</b>。用懲罰項處理,調不好就會得到物理上做不出來的設計;能以硬約束表達,是把 co-design 變成實用工具的關鍵一步。</span>
+        <span data-lang="en">For a designer, conditions like "electronics boxes must not collide" or "shoulders must be inside the base" are <b>non-negotiable</b>. With penalties, poor tuning yields designs that cannot be built; expressing them as hard constraints is a key step toward co-design as a practical tool.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">有限差分可靠嗎</span><span data-lang="en">FD reliability</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">versatile?</span><span data-lang="en">versatile?</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">整體流程(Algorithm 1)</span><span data-lang="en">Pipeline (Algorithm 1)</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STEP 1</span><b><span data-lang="zh">設計 → 模型</span><span data-lang="en">Design → model</span></b><small><span data-lang="zh">由 \(\rho\) 更新連桿長度、質量、慣量(Pinocchio)與扭矩上限 \(\bar u(m_m)\)</span><span data-lang="en">From \(\rho\), update link lengths, masses, inertias (Pinocchio) and torque bounds \(\bar u(m_m)\)</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 2</span><b><span data-lang="zh">任務實例化</span><span data-lang="en">Instantiate task</span></b><small><span data-lang="zh">IK 求初始姿態 \(q_0\)(最短腿膝角 45°),FK 定腳位,依 TASK 設步態序列與時序</span><span data-lang="en">IK for initial \(q_0\) (shortest-leg knee at 45°), FK for foot positions, gait sequence/timing from TASK</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 3</span><b><span data-lang="zh">下層 OCP</span><span data-lang="en">Lower-level OCP</span></b><small><span data-lang="zh">Box-FDDP(Crocoddyl)解出 \(m=\{X,U\}\)</span><span data-lang="en">Box-FDDP (Crocoddyl) solves for \(m=\{X,U\}\)</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 4</span><b><span data-lang="zh">成本 + 梯度</span><span data-lang="en">Cost + gradient</span></b><small><span data-lang="zh">致動器模型算 \(J_{cd}\);\(\dim(\rho)+1\) 次平行呼叫做有限差分</span><span data-lang="en">Actuator model gives \(J_{cd}\); \(\dim(\rho)+1\) parallel calls for finite differences</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STEP 5</span><b><span data-lang="zh">上層 NLP 一步</span><span data-lang="en">One upper NLP step</span></b><small><span data-lang="zh">KNITRO interior-point/direct,含邊界與 \(g,h\);直到 \(J_{cd}\) 不再下降</span><span data-lang="en">KNITRO interior-point/direct with bounds and \(g,h\); repeat until \(J_{cd}\) stops decreasing</span></small></div>
+        </div>
+        <figure class="fig"><img src="figs/Dinev2022/fig2_framework.png" alt="Figure 2 co-design framework">
+          <figcaption data-lang="zh"><b>Fig.2</b> 框架示意。注意資訊流的方向:下層 <b>Motion Planning (DDP)</b> 只輸出動作 \(X,U=MP(\rho)\);成本 \(J_{cd}\) 與梯度 \(\nabla J_{cd}\) 都在「Co-Design Problem」這一層從動作算出,再和設計 \(\rho\)、約束一起交給 <b>KNITRO</b>。下層完全不知道自己在被優化設計——這就是模組化的來源。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> Framework schematic. Note the information flow: the lower-level <b>Motion Planning (DDP)</b> only outputs the motion \(X,U=MP(\rho)\); the cost \(J_{cd}\) and gradient \(\nabla J_{cd}\) are computed from it in the "Co-Design Problem" layer, then passed with design \(\rho\) and constraints to <b>KNITRO</b>. The lower level never knows a design is being optimized—this is where the modularity comes from.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">步驟 1:把 co-design 寫成雙層優化</span><span data-lang="en">Step 1: co-design as bilevel optimization</span></h3>
+        <p data-lang="zh">設計向量 \(\rho\) 編碼連桿長度、機身形狀(寬、高、深)、酬載配置與致動器參數(馬達質量、減速比)。上層問題(Eq.1):</p>
+        <p data-lang="en">The design vector \(\rho\) encodes link lengths, base shape (width, height, depth), payload placement and actuator parameters (motor mass, gear ratio). The upper-level problem (Eq.1):</p>
+        <div class="eq">$$\begin{aligned}\min_{\rho,\,X,\,U}\quad &amp; J_{cd}(\rho, X, U) &amp;&amp; \text{(co-design metric)}\\ \text{s.t.}\quad &amp; X,U=\mathrm{MP}(\rho;\,\text{TASK}) &amp;&amp; \text{(motion planning)}\\ &amp; \underline{\rho}\le\rho\le\bar{\rho} &amp;&amp; \text{(design bounds)}\\ &amp; g(\rho)=0,\quad h(\rho)\le 0 &amp;&amp; \text{(design constraints)}\end{aligned}$$</div>
+        <p data-lang="zh">關鍵在第二行:<mark class="m-method" data-t="METHOD/IDEA">\(X,U\) 不是自由變數,而是下層 OCP 的解</mark>。\(X=\{x_0,\dots,x_N\}\)、\(U=\{u_0,\dots,u_{N-1}\}\),\(N\) 為規劃 horizon(屬於任務描述)。把 MP 視為 \(\rho\) 的非線性函數後,上層實際上只是一個關於 \(\rho\) 的低維 NLP。</p>
+        <p data-lang="en">The key is the second line: <mark class="m-method" data-t="METHOD/IDEA">\(X,U\) are not free variables but the solution of the lower-level OCP</mark>. \(X=\{x_0,\dots,x_N\}\), \(U=\{u_0,\dots,u_{N-1}\}\), with horizon \(N\) part of the task description. Viewing MP as a nonlinear function of \(\rho\), the upper level is really just a low-dimensional NLP in \(\rho\).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">步驟 2:梯度——為什麼不做敏感度分析,而用有限差分</span><span data-lang="en">Step 2: the gradient—why finite differences instead of sensitivity analysis</span></h3>
+        <p data-lang="zh">令動作 \(m=\{X,U\}=\mathrm{MP}(\rho;\text{TASK})\),由連鎖律(Eq.2):</p>
+        <p data-lang="en">With motion \(m=\{X,U\}=\mathrm{MP}(\rho;\text{TASK})\), the chain rule gives (Eq.2):</p>
+        <div class="eq">$$\nabla_\rho J_{cd}=\frac{dJ_{cd}(\rho,m)}{d\rho}=\frac{\partial J_{cd}}{\partial m}\,\frac{\partial m}{\partial \rho}+\frac{\partial J_{cd}}{\partial \rho}=\frac{\partial J_{cd}}{\partial m}\,\frac{\partial\,\mathrm{MP}(\rho;\text{TASK})}{\partial \rho}+\frac{\partial J_{cd}}{\partial \rho}$$</div>
+        <p data-lang="zh">難點是 \(\partial m/\partial\rho\):要對一個<b>帶約束的非線性規劃的解</b>求導(敏感度分析 / 隱函數定理),結果<mark class="m-problem" data-t="PROBLEM/GAP">依賴下層用哪個演算法,不模組化,推導也繁瑣</mark>。作者的觀察是:</p>
+        <p data-lang="en">The hard part is \(\partial m/\partial\rho\): differentiating <b>the solution of a constrained nonlinear program</b> (sensitivity analysis / implicit function theorem), whose result <mark class="m-problem" data-t="PROBLEM/GAP">depends on the lower-level algorithm—non-modular and tedious</mark>. The authors observe:</p>
+        <div class="eq">$$\dim(\rho)=17\;\ll\;\dim(m)=9163\qquad\text{(trot experiment)}$$</div>
+        <p data-lang="zh">所以乾脆跳過 \(\partial m/\partial\rho\),<mark class="m-method" data-t="METHOD/IDEA">直接對整條複合函數 \(\rho\mapsto J_{cd}(\rho,\mathrm{MP}(\rho))\) 做單邊有限差分</mark>(Eq.3),每個分量:</p>
+        <p data-lang="en">So skip \(\partial m/\partial\rho\) entirely and <mark class="m-method" data-t="METHOD/IDEA">apply one-sided finite differences directly to the composite \(\rho\mapsto J_{cd}(\rho,\mathrm{MP}(\rho))\)</mark> (Eq.3), per component:</p>
+        <div class="eq">$$\nabla_{\rho_i}J_{cd}\;\approx\;\frac{J_{cd}\big(\rho_i^{+},\,\mathrm{MP}(\rho_i^{+};\text{TASK})\big)-J_{cd}\big(\rho,\,\mathrm{MP}(\rho;\text{TASK})\big)}{\epsilon},\qquad \rho_i^{+}=\rho+\epsilon\,e_i$$</div>
+        <p data-lang="zh">一次梯度需 \(\dim(\rho)+1\) 次 planner 呼叫(一次 nominal + 每維一次擾動),彼此獨立,可用 multiprocessing 平行。代價:<mark class="m-limit" data-t="LIMITATION/FUTURE">有限差分會引入數值誤差</mark>,作者在結論中承認並列為未來工作(改用解析導數)。</p>
+        <p data-lang="en">One gradient costs \(\dim(\rho)+1\) planner calls (one nominal + one perturbation per dimension), all independent and parallelized via multiprocessing. The cost: <mark class="m-limit" data-t="LIMITATION/FUTURE">finite differences introduce numerical error</mark>, which the authors concede in the conclusion and list as future work (analytic derivatives).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">步驟 3:下層——混合系統最佳控制(Eq.4)</span><span data-lang="en">Step 3: lower level—hybrid optimal control (Eq.4)</span></h3>
+        <p data-lang="zh">給定設計 \(\rho\) 與任務,下層解一個<b>接觸序列與時序固定</b>的混合非線性 OCP:</p>
+        <p data-lang="en">Given design \(\rho\) and task, the lower level solves a hybrid nonlinear OCP with <b>fixed contact sequence and timings</b>:</p>
+        <div class="eq">$$\min_{X,U}\;\sum_{k=0}^{N-1}\|q_k\ominus q_{\text{ref}}\|^2_{Q}+\|v_k\|^2_{N}+\|u_k\|^2_{R}+\|\lambda_k\|_{K}$$</div>
+        <p data-lang="zh">對每個接觸相位 \(p\in\mathcal{P}=\{1,\dots,N_p\}\):在相位內用接觸動力學積分,在相位切換的那一步用衝擊(impulse)動力學:</p>
+        <p data-lang="en">For each contact phase \(p\in\mathcal{P}=\{1,\dots,N_p\}\): integrate contact dynamics inside the phase, and apply impulse dynamics at the switching step:</p>
+        <div class="eq">$$\text{in phase: }\; q_{k+1}=q_k\oplus\!\int_{t_k}^{t_k+\Delta t_k}\! v_k\,dt,\quad v_{k+1}=v_k+\!\int_{t_k}^{t_k+\Delta t_k}\!\dot v_k\,dt,\quad (\dot v_k,\lambda_k)=f_p(q_k,v_k,u_k)$$</div>
+        <div class="eq">$$\text{at switch: }\; q_{k+1}=q_k,\qquad (v_{k+1},\lambda_k)=\Delta_p(q_k,v_k)$$</div>
+        <div class="eq">$$g(q_k,v_k,u_k)=0,\quad h(q_k,v_k,u_k)\le 0,\quad \underline{x}\le x_k\le\bar{x},\quad \underline{u}\le u_k\le\bar{u}$$</div>
+        <p data-lang="zh">具體約束:接觸相位用<mark class="m-method" data-t="METHOD/IDEA">線性化摩擦錐 \(A\lambda_{C(k)}\le r\)</mark>(由錐邊數與最小/最大法向力決定);擺動相位用<b>落腳位置約束</b> \(\log\big(p^{-1}_{G(k)}\circ M_{p_{G(k)}}\big)=0\)(Lie 代數上的 log)。求解器是 <mark class="m-method" data-t="METHOD/IDEA">Box-FDDP</mark>:DDP 的變體,direct-indirect 混合、<b>控制上限是硬約束</b>;其餘不等式/等式/狀態約束則用<mark class="m-assume" data-t="ASSUMPTION/CLAIM">軟性二次障礙(quadratic barrier)</mark>。</p>
+        <p data-lang="en">Concretely: contact phases use a <mark class="m-method" data-t="METHOD/IDEA">linearized friction cone \(A\lambda_{C(k)}\le r\)</mark> (from a number of cone edges and min/max normal force); swing phases use a <b>foot-placement constraint</b> \(\log\big(p^{-1}_{G(k)}\circ M_{p_{G(k)}}\big)=0\) (log on the Lie algebra). The solver is <mark class="m-method" data-t="METHOD/IDEA">Box-FDDP</mark>: a DDP variant with direct-indirect hybridization and <b>hard control limits</b>; the remaining inequality/equality/state constraints use a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">soft quadratic barrier</mark>.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">注意下層成本是<b>姿態追蹤 + 速度 + 扭矩平方 + 接觸力</b>的正則化,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不是能耗</mark>;且下層動力學是<b>無摩擦</b>的——致動器摩擦與焦耳損耗只出現在上層成本。作者稱之為「弱耦合」:下層的 \(\|u\|_R^2\) 與上層的焦耳項都是扭矩平方。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Note the lower-level cost is a regularization of <b>posture tracking + velocity + squared torque + contact force</b>, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">not energy</mark>; and lower-level dynamics are <b>frictionless</b>—actuator friction and Joule loss appear only in the upper-level cost. The authors call this a "weak coupling": both the lower-level \(\|u\|_R^2\) and the upper-level Joule term are squared torques.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">步驟 4:致動器模型與能耗成本(Eq.5–9),逐步推導</span><span data-lang="en">Step 4: actuator model and energy cost (Eq.5–9), step by step</span></h3>
+        <p data-lang="zh"><b>(a) 扭矩上限隨馬達質量縮放。</b> 沿用 Fadini et al. [9] 在 Antigravity、Turnigy、MultiStar、PropDrive 等馬達規格表上擬合的指數回歸:</p>
+        <p data-lang="en"><b>(a) Torque limits scale with motor mass.</b> Reusing the exponential regression of Fadini et al. [9], fitted on datasheets of Antigravity, Turnigy, MultiStar and PropDrive motors:</p>
+        <div class="eq">$$\bar u=-\underline{u}=5.48\,m_m^{0.97}\qquad(5)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><span class="add">[導讀補充]</span> 代入 Solo 的 \(m_m=0.053\) kg 得約 0.32 N·m,乘上減速比 9 約 2.9 N·m,與 Solo 的關節扭矩量級相符——所以 Eq.(5) 應理解為<b>馬達端</b>扭矩,關節上限再乘 \(n\)(論文未明說)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><span class="add">[guide note]</span> Plugging in Solo&#39;s \(m_m=0.053\) kg gives about 0.32 N·m; times gear ratio 9 is about 2.9 N·m, matching the order of Solo&#39;s joint torque—so Eq.(5) is best read as a <b>motor-side</b> torque, with the joint limit multiplied by \(n\) (not stated explicitly).</p>
+
+        <p data-lang="zh"><b>(b) 馬達要出的總扭矩</b> = 反射到馬達端的關節扭矩 + 傳動摩擦(Eq.6–7):</p>
+        <p data-lang="en"><b>(b) Total motor torque</b> = joint torque reflected to the motor side + transmission friction (Eq.6–7):</p>
+        <div class="eq">$$\tau_t=\frac{u}{n}+\tau_f,\qquad \tau_f=\tau_\mu\,\mathrm{sign}(\omega_m)+b\,\omega_m,\qquad \omega_m=n\,\dot q$$</div>
+        <p data-lang="zh">\(\tau_\mu\) 為 Coulomb 摩擦、\(b\) 為黏滯摩擦、\(\omega_m\) 是馬達轉速(關節角速度的 \(n\) 倍)。</p>
+        <p data-lang="en">\(\tau_\mu\) is Coulomb friction, \(b\) viscous friction, and \(\omega_m\) the motor speed (\(n\) times the joint angular speed).</p>
+
+        <p data-lang="zh"><b>(c) 三種功率。</b> 焦耳熱的物理來源是繞組電阻:\(P=R\,i^2\),而扭矩 \(\tau=k_t\,i\),故</p>
+        <p data-lang="en"><b>(c) Three power terms.</b> Joule heating comes from winding resistance: \(P=R\,i^2\), and torque \(\tau=k_t\,i\), so</p>
+        <div class="eq">$$P_{\text{joule}}=R\,i^2=R\Big(\frac{\tau_t}{k_t}\Big)^2=\frac{\tau_t^2}{K_m},\qquad K_m\equiv\frac{k_t^2}{R}=0.15\,m_m^{1.39}$$</div>
+        <p data-lang="zh">論文把 \(K_m\) 稱為 speed-torque gradient,同樣用馬達質量的指數回歸。三項功率為:</p>
+        <p data-lang="en">The paper calls \(K_m\) the speed-torque gradient, again an exponential regression on motor mass. The three powers are:</p>
+        <div class="eq">$$P_{\text{mech}}=\frac{u}{n}\,\omega_m=u\,\dot q,\qquad P_{\text{joule}}=\frac{\tau_t^2}{K_m},\qquad P_{\text{fric}}=\tau_f\,\omega_m=\tau_\mu\,n|\dot q|+b\,n^2\dot q^2$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><span class="add">[導讀補充]</span> 論文 Eq.(8) 的排版把三項都寫成 \(\tau_f\)(\(P_{\text{mech}}=\tau_f\omega_m\)、\(P_{\text{joule}}=\tau_f^2/K_m\)、\(P_{\text{fric}}=\tau_f\omega_m\)),\(P_{\text{mech}}\) 與 \(P_{\text{fric}}\) 因此完全相同,顯然是筆誤;上式是依 Eq.(6)(7) 與 [9] 的物理意義重建的解讀。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><span class="add">[guide note]</span> The typeset Eq.(8) writes all three with \(\tau_f\) (\(P_{\text{mech}}=\tau_f\omega_m\), \(P_{\text{joule}}=\tau_f^2/K_m\), \(P_{\text{fric}}=\tau_f\omega_m\)), making \(P_{\text{mech}}\) and \(P_{\text{fric}}\) identical—clearly a typo; the expressions above are a reconstruction from the physics of Eq.(6)(7) and [9].</p>
+
+        <p data-lang="zh"><b>(d) 成本 = 不回收的正功。</b> 不同設計的腳起訖位置不同,總機械能不守恆,所以(與 [9] 不同)<mark class="m-assume" data-t="ASSUMPTION/CLAIM">機械功率不能忽略</mark>;並<b>不計再生回收</b>(取正部),對 12 顆馬達加總、沿 horizon 積分(Eq.9):</p>
+        <p data-lang="en"><b>(d) Cost = non-regenerative positive work.</b> Different designs have different foot start/end positions, so total mechanical energy is not conserved and (unlike [9]) <mark class="m-assume" data-t="ASSUMPTION/CLAIM">mechanical power cannot be ignored</mark>; <b>regeneration is ignored</b> (positive part only), summed over the 12 motors and integrated over the horizon (Eq.9):</p>
+        <div class="eq">$$J_{cd}=\int_{t_0}^{t_N}\sum_{\text{motor}}\Big[P_{\text{elec}}+\max(P_{\text{fric}},0)\Big]dt,\qquad P_{\text{elec}}=\max(P_{\text{mech}}+P_{\text{joule}},\,0)$$</div>
+
+        <p data-lang="zh"><b>(e) 這個模型預示了什麼樣的最佳設計?</b> <span class="add">[導讀補充]</span> 忽略摩擦對 \(\tau_t\) 的貢獻,焦耳項約為</p>
+        <p data-lang="en"><b>(e) What optimum does this model predict?</b> <span class="add">[guide note]</span> Ignoring friction&#39;s share of \(\tau_t\), the Joule term is roughly</p>
+        <div class="eq">$$P_{\text{joule}}\;\approx\;\frac{u^2}{n^2\cdot 0.15\,m_m^{1.39}}$$</div>
+        <p data-lang="zh">→ <mark class="m-method" data-t="METHOD/IDEA">提高減速比 \(n\)(\(\propto 1/n^2\))與加重馬達(\(\propto m_m^{-1.39}\))都讓焦耳熱快速下降</mark>;反方向的力量是:摩擦功率隨 \(n\) 與 \(n^2\) 上升,而馬達變重讓整機變重、需要的 \(u\) 與機械功都變大。最佳點就是這幾股力量的平衡——正是 Results 裡看到的「電能大降、摩擦小升」。且因 Solo 的齒輪箱是客製的、與馬達無關,\(n\) 與 \(m_m\) 可當成兩個獨立設計變數。</p>
+        <p data-lang="en">→ <mark class="m-method" data-t="METHOD/IDEA">Raising gear ratio \(n\) (\(\propto 1/n^2\)) and heavier motors (\(\propto m_m^{-1.39}\)) both cut Joule heat fast</mark>; the opposing forces: friction power grows with \(n\) and \(n^2\), and heavier motors make the whole robot heavier, raising the needed \(u\) and mechanical work. The optimum balances these—exactly the "electrical energy down a lot, friction up a little" seen in Results. Because Solo&#39;s gearbox is custom and independent of the motor, \(n\) and \(m_m\) are treated as two independent design variables.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">步驟 5:設計向量與設計約束(Eq.10–11)</span><span data-lang="en">Step 5: design vector and design constraints (Eq.10–11)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">子集</span><span data-lang="en">Subset</span></th><th><span data-lang="zh">內容</span><span data-lang="en">Contents</span></th><th>\(\dim(\rho)\)</th></tr>
+          <tr><td>1</td><td><span data-lang="zh">前、後腿的上/下腿長</span><span data-lang="en">Upper/lower leg lengths, front and hind</span></td><td>4</td></tr>
+          <tr><td>2</td><td><span data-lang="zh">+ 馬達質量 \(m_m\)、減速比 \(n\)(12 顆馬達共用)</span><span data-lang="en">+ motor mass \(m_m\), gear ratio \(n\) (shared by all 12 motors)</span></td><td>6</td></tr>
+          <tr><td>3</td><td><span data-lang="zh">+ 機身寬 \(w_b\)、高、深 \(d_b\)</span><span data-lang="en">+ base width \(w_b\), height, depth \(d_b\)</span></td><td>9</td></tr>
+          <tr><td>4</td><td><span data-lang="zh">+ IMU 盒與主機板盒的 x、z 位置</span><span data-lang="en">+ x, z positions of the IMU box and motherboard box</span></td><td>13</td></tr>
+          <tr><td>5</td><td><span data-lang="zh">+ 前、後肩關節安裝點的 x、z(完整模型)</span><span data-lang="en">+ x, z of front and hind shoulder attachment points (full model)</span></td><td>17</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">沿運動方向(x)隱含對稱設計;連桿體積隨長度線性縮放,作為<mark class="m-assume" data-t="ASSUMPTION/CLAIM">結構強度的簡單代理</mark>;所有質量、慣量都隨 \(\rho\) 更新進機器人模型。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">A symmetric design along the direction of motion (x) is implied; limb volume scales linearly with length as a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">simple proxy for structural integrity</mark>; all masses and inertias are updated in the robot model from \(\rho\).</p>
+        <p data-lang="zh"><b>電子盒不碰撞</b>(以外接球半徑 \(r_{mb}=0.0361\) m、\(r_{imu}=0.0282\) m 近似)。物理上應為「兩球心距離 \(\ge\) 半徑和」:</p>
+        <p data-lang="en"><b>Electronics boxes must not collide</b> (approximated by circumscribed spheres, \(r_{mb}=0.0361\) m, \(r_{imu}=0.0282\) m). Physically this should read "center distance \(\ge\) sum of radii":</p>
+        <div class="eq">$$(x_{mb}-x_{imu})^2+(z_{mb}-z_{imu})^2\;\ge\;(r_{mb}+r_{imu})^2\qquad(10)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)"><span class="add">[導讀補充]</span> 論文排版為 \((x_{mb}-z_{imu})^2+(x_{mb}-z_{imu})^2\le(r_{mb}+r_{imu})^2\),變數與不等號方向看起來都是筆誤;上式為依文意(collision constraint)的解讀。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)"><span class="add">[guide note]</span> The paper typesets \((x_{mb}-z_{imu})^2+(x_{mb}-z_{imu})^2\le(r_{mb}+r_{imu})^2\); both the variables and the inequality direction look like typos. The form above follows the stated intent (a collision constraint).</p>
+        <p data-lang="zh"><b>元件必須在機身內</b>(線性約束,Eq.11),例如:</p>
+        <p data-lang="en"><b>Components must lie inside the base</b> (linear constraints, Eq.11), e.g.:</p>
+        <div class="eq">$$-\tfrac{w_b}{2}\le x_{imu},\,x_{mb},\,x_{fr},\,x_{hr}\le\tfrac{w_b}{2},\qquad -\tfrac{d_b}{2}\le z_{imu},\,z_{mb},\,z_{fr},\,z_{hr}\le\tfrac{d_b}{2}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">這些全是上層的<mark class="m-method" data-t="METHOD/IDEA">硬約束</mark>,由 KNITRO 直接處理。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">All of these are upper-level <mark class="m-method" data-t="METHOD/IDEA">hard constraints</mark> handled directly by KNITRO.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">步驟 6:任務設定與模擬驗證</span><span data-lang="en">Step 6: task setup and simulation check</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">任務</span><span data-lang="en">Task</span></th><th><span data-lang="zh">設定</span><span data-lang="en">Setup</span></th></tr>
+          <tr><td><b>Trot</b></td><td><span data-lang="zh">向前走兩步、每步 0.05 m,固定抬腳高 0.05 m(否則最佳抬腳高恆為 0);擺動相 22 knots、雙支撐相 37 knots</span><span data-lang="en">Two forward steps of 0.05 m each, fixed step height 0.05 m (otherwise the optimal step height is always 0); 22 knots swing, 37 knots double support</span></td></tr>
+          <tr><td><b>Jump</b></td><td><span data-lang="zh">向前跳 0.1 m、高 0.15 m;飛行相 20 knots、起跳與落地相各 40 knots</span><span data-lang="en">Jump forward 0.1 m with height 0.15 m; 20 knots flight, 40 knots each for take-off and landing</span></td></tr>
+          <tr><td><span data-lang="zh">共通</span><span data-lang="en">Common</span></td><td><span data-lang="zh">symplectic Euler、\(\Delta t=10\) ms;初始設計 \(\rho_0\) = Solo 原設計</span><span data-lang="en">Symplectic Euler, \(\Delta t=10\) ms; initial design \(\rho_0\) = original Solo</span></td></tr>
+        </table>
+        <p data-lang="zh">驗證:在 <b>PyBullet</b> 中以 PD + 前饋追蹤規劃出的動作</p>
+        <p data-lang="en">Verification: track the planned motion in <b>PyBullet</b> with PD + feed-forward</p>
+        <div class="eq">$$u=u^{*}+K_p\,(q_j^{*}-q_j)+K_d\,(v_j^{*}-v_j)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(K_p,K_d\) 對 nominal 與最佳設計<b>各自</b>在 20×20 網格上搜尋(\(K_p\in[1,20]\)),取追蹤誤差最小者,以公平比較不同尺寸/重量的機器人;再比較能耗改善百分比 \(\Delta J_{cd}\)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(K_p,K_d\) are grid-searched <b>separately</b> for the nominal and optimized designs on a 20×20 grid (\(K_p\in[1,20]\)), picking the smallest tracking error, to compare robots of different size/weight fairly; then the percentage energy improvement \(\Delta J_{cd}\) is compared.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(\rho\)</td><td><span data-lang="zh">設計向量(最多 17 維):腿長、安裝點、機身尺寸、電子盒位置、馬達質量、減速比。</span><span data-lang="en">Design vector (up to 17-D): leg lengths, attachment points, base size, box positions, motor mass, gear ratio.</span></td></tr>
+          <tr><td>\(\mathrm{MP}(\rho;\text{TASK})\)</td><td><span data-lang="zh">下層 motion planner:給設計與任務,回傳最佳動作。</span><span data-lang="en">Lower-level motion planner: given design and task, returns the optimal motion.</span></td></tr>
+          <tr><td>\(m=\{X,U\}\)</td><td><span data-lang="zh">動作:狀態序列 \(x_k=(q_k,v_k)\) 與扭矩序列 \(u_k\)(trot 共 9163 維)。</span><span data-lang="en">Motion: state sequence \(x_k=(q_k,v_k)\) and torque sequence \(u_k\) (9163-D for trot).</span></td></tr>
+          <tr><td>\(J_{cd}\)</td><td><span data-lang="zh">共同設計指標:整段動作 12 顆馬達的不回收能耗(J)。</span><span data-lang="en">Co-design metric: non-regenerative energy of all 12 motors over the motion (J).</span></td></tr>
+          <tr><td>\(g,h\)</td><td><span data-lang="zh">設計等式/不等式約束(電子盒不碰撞、元件在機身內)。</span><span data-lang="en">Design equality/inequality constraints (no box collision, parts inside base).</span></td></tr>
+          <tr><td>\(Q,N,R,K\)</td><td><span data-lang="zh">下層成本的正定權重矩陣(此處 \(N\) 是速度權重,與 horizon 的 \(N\) 同名,論文沿用)。</span><span data-lang="en">Positive-definite weights of the lower-level cost (here \(N\) weights velocity—same letter as horizon \(N\), as in the paper).</span></td></tr>
+          <tr><td>\(f_p,\ \Delta_p\)</td><td><span data-lang="zh">相位 \(p\) 的接觸動力學 / 接觸建立瞬間的衝擊映射。</span><span data-lang="en">Contact dynamics of phase \(p\) / impulse map at contact gain.</span></td></tr>
+          <tr><td>\(\lambda_k\)</td><td><span data-lang="zh">接觸力;受線性化摩擦錐 \(A\lambda\le r\) 約束。</span><span data-lang="en">Contact forces; constrained by the linearized friction cone \(A\lambda\le r\).</span></td></tr>
+          <tr><td>\(m_m,\ n\)</td><td><span data-lang="zh">馬達質量(kg)、減速比。</span><span data-lang="en">Motor mass (kg), gear ratio.</span></td></tr>
+          <tr><td>\(\tau_t,\ \tau_f\)</td><td><span data-lang="zh">馬達總扭矩 / 傳動摩擦扭矩(Coulomb \(\tau_\mu\) + 黏滯 \(b\))。</span><span data-lang="en">Total motor torque / transmission friction torque (Coulomb \(\tau_\mu\) + viscous \(b\)).</span></td></tr>
+          <tr><td>\(K_m\)</td><td><span data-lang="zh">馬達常數(論文稱 speed-torque gradient),\(0.15\,m_m^{1.39}\);越大焦耳損耗越小。</span><span data-lang="en">Motor constant (paper: speed-torque gradient), \(0.15\,m_m^{1.39}\); larger means less Joule loss.</span></td></tr>
+          <tr><td>\(\epsilon\)</td><td><span data-lang="zh">有限差分步長(論文未報告數值)。</span><span data-lang="en">Finite-difference step (value not reported).</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">外層像一個「拿著卡尺的工程師」,每次把 17 個尺寸各撥一點點、叫內層的「動作規劃專家」(DDP)各重新規劃一次,看能耗變多少,再朝最省電、又不違反設計規範的方向走一步。</span>
+        <span data-lang="en">The outer loop is "an engineer with calipers": nudge each of the 17 dimensions a little, ask the inner "motion-planning expert" (DDP) to replan each time, see how energy changes, then step in the most energy-saving direction that still respects the design rules.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何有限差分在這裡可行</span><span data-lang="en">Why FD works here</span></span>
+        <span data-lang="zh">(1) 設計維度小(\(\le 17\));(2) 每次呼叫彼此獨立、可平行;(3) DDP 的解在設計參數上大致平滑(固定接觸序列、無離散選擇)。若下層換成有離散決策或解不唯一的 planner,<mark class="m-limit" data-t="LIMITATION/FUTURE">梯度可能變得很吵</mark>——作者在結論也提醒其他 planner 未必保證這點。</span>
+        <span data-lang="en">(1) Small design dimension (\(\le 17\)); (2) calls are independent and parallel; (3) the DDP solution is roughly smooth in design parameters (fixed contact sequence, no discrete choices). With a planner that has discrete decisions or non-unique solutions, <mark class="m-limit" data-t="LIMITATION/FUTURE">gradients could get very noisy</mark>—the conclusion itself warns other planners may not guarantee this.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">兩層成本不一樣</span><span data-lang="en">The two levels optimize different costs</span></div>
+        <span data-lang="zh">上層優化的是能耗,但被評估的動作是下層用<mark class="m-assume" data-t="ASSUMPTION/CLAIM">姿態/速度/扭矩正則化</mark>解出來的,不是「這個設計下最省電的動作」;下層也看不到摩擦。所以結果是「對這個 OCP 產生的動作而言最省電的設計」。</span>
+        <span data-lang="en">The upper level optimizes energy, but the evaluated motion comes from a lower level that minimizes <mark class="m-assume" data-t="ASSUMPTION/CLAIM">posture/velocity/torque regularization</mark>—not "the most energy-efficient motion for this design"; the lower level also never sees friction. So the result is "the most energy-efficient design for the motions this OCP produces."</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">最佳設計 vs Solo 原設計(17 維完整模型)</span><span data-lang="en">Optimized designs vs original Solo (17-D full model)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">項目</span><span data-lang="en">Item</span></th><th><span data-lang="zh">Solo 原設計</span><span data-lang="en">Solo baseline</span></th><th><span data-lang="zh">Trot 最佳</span><span data-lang="en">Trot optimum</span></th><th><span data-lang="zh">Jump 最佳</span><span data-lang="en">Jump optimum</span></th></tr>
+          <tr><td><span data-lang="zh">馬達質量 \(m_m\)</span><span data-lang="en">Motor mass \(m_m\)</span></td><td>0.053 kg</td><td>0.179 kg</td><td>0.168 kg</td></tr>
+          <tr><td><span data-lang="zh">減速比 \(n\)</span><span data-lang="en">Gear ratio \(n\)</span></td><td>9</td><td>16.062</td><td>17.325</td></tr>
+          <tr><td><span data-lang="zh">全機質量</span><span data-lang="en">Total mass</span></td><td>2.421 kg</td><td>3.805 kg</td><td>3.592 kg</td></tr>
+          <tr><td><span data-lang="zh">形態變化</span><span data-lang="en">Morphology change</span></td><td>—</td><td><span data-lang="zh">機身加深、上腿安裝點上移 → 重心降低</span><span data-lang="en">Deeper base, upper legs attached higher → lower CoM</span></td><td><span data-lang="zh">腿與機身變小(要整機被抬起)</span><span data-lang="en">Smaller legs and base (whole body must be lifted)</span></td></tr>
+          <tr><td><span data-lang="zh">電子盒</span><span data-lang="en">Electronics boxes</span></td><td>—</td><td colspan="2"><span data-lang="zh">兩者都移到機身中央</span><span data-lang="en">Both moved to the middle of the robot</span></td></tr>
+          <tr><td><span data-lang="zh">能耗改善 \(\Delta J_{cd}\)(優化中)</span><span data-lang="en">Energy improvement \(\Delta J_{cd}\) (optimization)</span></td><td>—</td><td class="win">≈ 77%</td><td class="win">≈ 73%</td></tr>
+          <tr><td><span data-lang="zh">能耗改善(PyBullet 模擬)</span><span data-lang="en">Energy improvement (PyBullet sim)</span></td><td>—</td><td class="ok">≈ 75%</td><td class="ok">≈ 62%</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:12.5px;color:var(--muted);margin-top:6px">設計數值出自論文正文;百分比為導讀者從 Fig.3b 長條圖目測 <span class="add">[導讀補充]</span>,論文正文只說「模擬改善與優化結果相差在 10% 以內」。</p>
+        <p data-lang="en" style="font-size:12.5px;color:var(--muted);margin-top:6px">Design values are from the paper text; percentages are the guide author&#39;s reading of the Fig.3b bars <span class="add">[guide note]</span>—the text only says "simulated improvements remain within 10% of the optimization ones."</p>
+        <figure class="fig"><img src="figs/Dinev2022/fig3a_designs.png" alt="Figure 3a resulting designs">
+          <figcaption data-lang="zh"><b>Fig.3a</b> 原設計(左)與 trot(中)、jump(右)最佳設計。看三件事:兩個最佳設計的<b>馬達都明顯變大</b>(紅色標註 Heavier Motors);trot 設計的<b>重心更低</b>(藍色 Lower CoM);兩者的 IMU/主機板盒都被推到<b>機身中央</b>(黃色)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3a</b> Baseline (left) vs the trot (middle) and jump (right) optima. Notice three things: both optima have <b>visibly bigger motors</b> (red "Heavier Motors"); the trot design has a <b>lower CoM</b> (blue); in both, the IMU/motherboard boxes move to the <b>center of the base</b> (yellow).</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">能耗拆解:用摩擦換焦耳</span><span data-lang="en">Energy breakdown: trading friction for Joule</span></h3>
+        <figure class="fig"><img src="figs/Dinev2022/fig3b_energy.png" alt="Figure 3b energy breakdown and cost improvement">
+          <figcaption data-lang="zh"><b>Fig.3b</b> 左:能耗拆成電能 \(P_{\text{elec}}\) 與傳動摩擦 \(P_{\text{fric}}\)(bl = 原設計、opt = 最佳)。<b>藍色(原設計電能,約 26–30 J)壓倒性地大</b>,最佳化後掉到約 4 J;而紅色(最佳設計摩擦)反而<b>高於</b>綠色(原設計摩擦)。右:優化中(藍)與模擬(橘)的改善百分比;注意 jump 的模擬改善明顯低於優化值。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3b</b> Left: energy split into electrical \(P_{\text{elec}}\) and transmission friction \(P_{\text{fric}}\) (bl = baseline, opt = optimized). <b>Blue (baseline electrical, ~26–30 J) dominates</b>, dropping to ~4 J after optimization, while red (optimized friction) is actually <b>higher</b> than green (baseline friction). Right: improvement in optimization (blue) vs simulation (orange); note jump&#39;s simulated gain is clearly below the optimized value.</figcaption></figure>
+        <p data-lang="zh">論文的解讀:<mark class="m-result" data-t="RESULT/EVIDENCE">演算法選擇壓低電-機損耗、接受摩擦損耗上升</mark>,因為小馬達的 \(1/K_m\) 很大、焦耳熱嚴重(與 [9] 結論一致)。trot 比較「靜態」、馬達轉速低,摩擦(與速度相關)較小,所以容許<b>更重、更大的馬達</b>;jump 要把整機抬起來,過重不利,因此馬達略輕(0.168 vs 0.179 kg),但減速比相近。</p>
+        <p data-lang="en">The paper&#39;s reading: <mark class="m-result" data-t="RESULT/EVIDENCE">the algorithm minimizes electro-mechanical loss while accepting more friction loss</mark>, because small motors have a large \(1/K_m\) and severe Joule heating (consistent with [9]). Trotting is more "static" with low motor speeds, so velocity-dependent friction is small, permitting <b>heavier, bigger motors</b>; jumping must lift the whole robot, so heaviness hurts and the motors are slightly lighter (0.168 vs 0.179 kg), with a similar gear ratio.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">導讀者的粗估檢查</span><span data-lang="en">Guide author&#39;s back-of-envelope check</span></span>
+          <p data-lang="zh" style="margin-top:6px"><span class="add">[導讀補充]</span> 用方法頁 (e) 的近似 \(P_{\text{joule}}\propto u^2/(n^2K_m)\):trot 最佳設計的 \(n^2K_m\) 是原設計的約 \(3.19\times5.43\approx17\) 倍;但整機重了 \(3.805/2.421\approx1.57\) 倍,支撐重力所需 \(u^2\) 約變 2.5 倍 → 焦耳熱約降為 1/7。Fig.3b 中 trot 電能約 29.5 → 4.3 J(約 1/7),量級吻合。jump 同法預測約 1/8.4、圖上約 1/6.7,差距可解釋為 jump 的機械功佔比更高(不隨 \(n\)、\(K_m\) 縮小)。另外:12 顆馬達共增重約 1.51 kg(trot)/1.38 kg(jump),而全機只增重 1.38/1.17 kg——<b>其餘結構其實變輕了</b>。</p>
+          <p data-lang="en" style="margin-top:6px"><span class="add">[guide note]</span> Using approximation (e) from the Method tab, \(P_{\text{joule}}\propto u^2/(n^2K_m)\): the trot optimum&#39;s \(n^2K_m\) is about \(3.19\times5.43\approx17\times\) the baseline&#39;s; but the robot is \(3.805/2.421\approx1.57\times\) heavier, so the \(u^2\) needed to hold up gravity grows ~2.5× → Joule heat drops to about 1/7. In Fig.3b, trot electrical energy goes ~29.5 → 4.3 J (about 1/7)—same order. The same estimate predicts ~1/8.4 for jump vs ~1/6.7 in the figure; the gap is plausibly jump&#39;s larger share of mechanical work (which does not shrink with \(n\), \(K_m\)). Also: the 12 motors add ~1.51 kg (trot) / 1.38 kg (jump), yet the total mass rises only 1.38 / 1.17 kg—<b>the rest of the structure actually got lighter</b>.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">最佳性與擴展性:對 CMA-ES(Fig.4)</span><span data-lang="en">Optimality and scalability vs CMA-ES (Fig.4)</span></h3>
+        <p data-lang="zh">設定:pycma;CMA-ES 對所有約束用<b>二次軟懲罰</b>;族群試過 10/20/50,選 50(在所有問題上達到與本文<b>相同或更低</b>的成本)。由於 CMA-ES 每代 50 次呼叫、本文每步 \(\dim(\rho)+1\) 次,比「每迭代」會嚴重偏袒本文,所以改比<b>收斂到 99% 的時間</b>;兩者都用 8 執行緒、相同計算預算,各跑 20 次取平均與標準差。設計子集為 4/6/9/13/17 維(見方法頁步驟 5)。</p>
+        <p data-lang="en">Setup: pycma; CMA-ES uses <b>quadratic soft penalties</b> for all constraints; populations 10/20/50 were tried and 50 chosen (it reached <b>the same or lower</b> cost than this method on all problems). Since CMA-ES makes 50 calls per generation vs \(\dim(\rho)+1\) here, a per-iteration comparison would heavily favor this method, so they compare <b>time to 99% convergence</b>; both use 8 threads and the same budget, 20 runs each (mean ± std). Design subsets are 4/6/9/13/17-D (see Method step 5).</p>
+        <figure class="fig"><img src="figs/Dinev2022/fig4_scalability.png" alt="Figure 4 scalability results">
+          <figcaption data-lang="zh"><b>Fig.4</b> 上:收斂到 99% 的時間;下:最佳 co-design 成本。看三點:(1) <b>trot(藍)</b>的時間幾乎不隨維度增長,而 CMA-ES(橘)從數十秒漲到約 280 秒;(2) <b>jump(綠)</b>本文的時間也隨維度明顯上升,17 維時與 CMA-ES(紅)平均相近,但 CMA-ES 誤差棒極大;(3) 下圖 4→6 維成本從約 20 掉到約 7–8,之後幾乎持平;且<b>4 維 jump 時 CMA-ES 找到更低的成本(約 13 vs 20)</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Top: time to 99% convergence; bottom: best co-design cost. Three things: (1) for <b>trot (blue)</b>, time barely grows with dimension, while CMA-ES (orange) climbs from tens of seconds to ~280 s; (2) for <b>jump (green)</b>, this method&#39;s time also rises clearly with dimension, and at 17-D its mean is close to CMA-ES (red), though CMA-ES has huge error bars; (3) bottom: cost falls from ~20 to ~7–8 going 4→6-D, then stays flat; and <b>at 4-D jump, CMA-ES finds a lower cost (~13 vs ~20)</b>.</figcaption></figure>
+        <table>
+          <tr><th><span data-lang="zh">觀察</span><span data-lang="en">Observation</span></th><th><span data-lang="zh">本文</span><span data-lang="en">Ours</span></th><th>CMA-ES</th></tr>
+          <tr><td><span data-lang="zh">Trot 收斂時間(4→17 維,讀圖)</span><span data-lang="en">Trot time to converge (4→17-D, read from plot)</span></td><td class="win"><span data-lang="zh">約 15–40 s</span><span data-lang="en">~15–40 s</span></td><td><span data-lang="zh">約 30–285 s</span><span data-lang="en">~30–285 s</span></td></tr>
+          <tr><td><span data-lang="zh">17 維 jump 最壞情況時間(正文)</span><span data-lang="en">17-D jump worst-case time (text)</span></td><td class="win">252 s</td><td>600 s</td></tr>
+          <tr><td><span data-lang="zh">17 維 jump 平均時間</span><span data-lang="en">17-D jump mean time</span></td><td colspan="2"><span data-lang="zh">相近(正文:comparable)</span><span data-lang="en">Comparable (per the text)</span></td></tr>
+          <tr><td><span data-lang="zh">最佳成本</span><span data-lang="en">Best cost</span></td><td><span data-lang="zh">多數維度與 CMA-ES 相近</span><span data-lang="en">Close to CMA-ES at most dimensions</span></td><td class="win"><span data-lang="zh">所有問題「相同或更低」</span><span data-lang="en">"Same or lower" on all problems</span></td></tr>
+          <tr><td><span data-lang="zh">確定性</span><span data-lang="en">Determinism</span></td><td class="ok"><span data-lang="zh">確定性</span><span data-lang="en">Deterministic</span></td><td><span data-lang="zh">隨機、變異大</span><span data-lang="en">Stochastic, high variance</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">作者據此推測:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">局部梯度式雙層方法「在實務上、對這類問題」可能達到全域最佳</mark>——注意這是 could indicate 等級的推測,不是證明。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">From this the authors suggest that <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the local gradient-based bilevel method may reach globally optimal solutions "in practice, for problems like these"</mark>—note this is a "could indicate"-level conjecture, not a proof.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">在 Solo 上,<b>加大馬達 + 提高減速比</b>就能讓 trot/jump 的能耗降約 7 成;本文的方法在 trot 上比 CMA-ES <b>快得多</b>、在 jump 上<b>較穩定</b>,解的品質則與 CMA-ES 相當而非更好。</span>
+        <span data-lang="en">On Solo, <b>bigger motors + higher gear ratio</b> cut trot/jump energy by about 70%; the method is <b>much faster</b> than CMA-ES on trot and <b>more consistent</b> on jump, with solution quality on par with—not better than—CMA-ES.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">實驗能 / 不能證明什麼</span><span data-lang="en">What the experiments do / don&#39;t prove</span></div>
+        <span data-lang="zh"><b>能:</b>在固定接觸序列的兩個 Solo 任務、17 維設計下,FD 梯度 + KNITRO 可穩定收斂且比 CMA-ES 省時。<b>不能:</b><mark class="m-limit" data-t="LIMITATION/FUTURE">實體機器人更省電</mark>(只有 PyBullet)、對多任務或其他機器人同樣有效、或解是全域最佳。</span>
+        <span data-lang="en"><b>Do:</b> for two Solo tasks with fixed contact sequences and a 17-D design, FD gradients + KNITRO converge stably and save time vs CMA-ES. <b>Don&#39;t:</b> that <mark class="m-limit" data-t="LIMITATION/FUTURE">a physical robot would save energy</mark> (PyBullet only), that it works equally for multiple tasks or other robots, or that the solutions are globally optimal.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">模型可信度</span><span data-lang="en">model fidelity</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">為何 CMA-ES 更好</span><span data-lang="en">why CMA-ES wins</span></span><span class="chip qchip" data-go="4">→ Q5 <span data-lang="zh">硬體</span><span data-lang="en">hardware</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>外層是局部、而且梯度是「估」出來的</b>:有限差分穿過一個<b>迭代求解器</b>,梯度精度受 DDP 收斂容差、步長 \(\epsilon\)(未報告)、是否 warm-start(未說明)影響;當設計改變使活躍約束切換(扭矩上限碰到/離開、摩擦錐邊界),\(\mathrm{MP}(\rho)\) <mark class="m-limit" data-t="LIMITATION/FUTURE">本身可能不平滑</mark>,FD 會給出誤導方向。起點固定為 Solo 原設計,也沒有多起點測試。</li>
+          <li data-lang="en"><b>The outer loop is local, and the gradient is "estimated"</b>: finite differences pass through an <b>iterative solver</b>, so gradient accuracy depends on DDP tolerance, the step \(\epsilon\) (not reported), and warm-starting (not described); when a design change switches active constraints (torque limits engaging/releasing, friction-cone edges), \(\mathrm{MP}(\rho)\) <mark class="m-limit" data-t="LIMITATION/FUTURE">may itself be non-smooth</mark> and FD can point the wrong way. The start is always the original Solo, with no multi-start test.</li>
+          <li data-lang="zh"><b>「CMA-ES 從沒輸」被輕描淡寫</b>:作者自己寫 CMA-ES 在<mark class="m-problem" data-t="PROBLEM/GAP">所有問題上都達到相同或更低成本</mark>,Fig.4 中 4 維 jump 差距明顯(約 13 vs 20)。這正是局部方法困在局部最佳的典型徵兆,與「可能達到全域最佳」的結論有張力。</li>
+          <li data-lang="en"><b>"CMA-ES never loses" is downplayed</b>: the authors write that CMA-ES reaches <mark class="m-problem" data-t="PROBLEM/GAP">the same or lower cost on every problem</mark>, and in Fig.4 the 4-D jump gap is clear (~13 vs ~20). That is a classic sign of a local method stuck in a local optimum, in tension with the "may reach global optima" conclusion.</li>
+          <li data-lang="zh"><b>比較對象單薄</b>:只比 CMA-ES,而且 CMA-ES 用軟懲罰(本文用硬約束,兩者其實在解略不同的問題);沒有和單一大 NLP(Spielberg、Buondonno)或 IFT/adjoint(Ha、Desai)方法比較——而這些才是「梯度式」的直接競爭者。另外正文說擴展性實驗做在 trot,圖中卻也有 jump。</li>
+          <li data-lang="en"><b>Thin comparison set</b>: only CMA-ES, and with soft penalties (vs hard constraints here—strictly a slightly different problem); no comparison with joint-NLP (Spielberg, Buondonno) or IFT/adjoint methods (Ha, Desai)—the direct "gradient-based" competitors. Also the text says the scalability study is on trot, yet the figure includes jump.</li>
+          <li data-lang="zh"><b>模型可信度</b>:致動器模型是從<b>無人機/航模馬達規格表</b>擬合的平滑回歸;減速比被當作連續變數(16.062、17.325),現實中是離散齒比;<mark class="m-assume" data-t="ASSUMPTION/CLAIM">摩擦參數 \(\tau_\mu,b\) 不隨減速比改變</mark>、齒輪箱質量與效率不隨 \(n\) 變;論文也沒提到<b>轉子反射慣量 \(n^2 I_{\text{rotor}}\)</b>——對 jump 這類動態動作、\(n\approx17\) 時可能不可忽略 <span class="add">[導讀補充]</span>。連桿以「體積隨長度線性縮放」代替結構強度,沒有應力或剛性約束。</li>
+          <li data-lang="en"><b>Model fidelity</b>: the actuator model is a smooth regression fitted on <b>drone/hobby motor datasheets</b>; gear ratio is continuous (16.062, 17.325) whereas real gearboxes are discrete; <mark class="m-assume" data-t="ASSUMPTION/CLAIM">friction parameters \(\tau_\mu,b\) don&#39;t change with gear ratio</mark>, nor do gearbox mass and efficiency; the paper never mentions <b>rotor reflected inertia \(n^2 I_{\text{rotor}}\)</b>—potentially non-negligible for dynamic jumps at \(n\approx17\) <span class="add">[guide note]</span>. Limbs use "volume linear in length" as a structural proxy, with no stress or stiffness constraint.</li>
+          <li data-lang="zh"><b>兩層成本不一致</b>:下層無摩擦、優化的是正則化而非能耗,上層卻用能耗挑設計。最佳設計可能部分是在「迎合下層權重 \(Q,N,R,K\)」(權重數值未報告),換一組權重結論是否改變?作者稱這種弱耦合「有益」,但沒有消融實驗支持。</li>
+          <li data-lang="en"><b>Mismatched costs between levels</b>: the lower level is frictionless and minimizes regularization, not energy, while the upper level selects designs by energy. The optimum may partly be "pleasing the lower-level weights \(Q,N,R,K\)" (values unreported)—would different weights change the conclusion? The authors call this weak coupling "beneficial" without an ablation to back it.</li>
+          <li data-lang="zh"><b>驗證只有模擬、且是同族模型</b>:PyBullet 與 Pinocchio 都是剛體模型,<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有實體機器人、沒有做出最佳設計</mark>;而 jump 的模擬改善(約 62%)比優化值(約 73%)低約 10 個百分點,正好在作者「10% 以內」說法的邊緣。最佳設計重了約 57%、馬達扭矩能力大幅提高 <span class="add">[導讀補充:依 Eq.5 推算約 6 倍關節扭矩]</span>,實際上已是另一個量級的機器人。</li>
+          <li data-lang="en"><b>Simulation-only validation, with a same-family model</b>: PyBullet and Pinocchio are both rigid-body models; <mark class="m-limit" data-t="LIMITATION/FUTURE">no physical robot, no optimized design built</mark>. Jump&#39;s simulated gain (~62%) is about 10 points below the optimized one (~73%)—right at the edge of the "within 10%" statement. The optimum is ~57% heavier with far more torque capacity <span class="add">[guide note: roughly 6× joint torque by Eq.5]</span>—effectively a robot of a different class.</li>
+          <li data-lang="zh"><b>「Versatile」的範圍</b>:兩個任務(5 cm 兩步 trot、10 cm 前跳)、一台機器人、平地、固定接觸序列與時序、<b>每個設計只針對單一任務</b>。這裡的 versatile 指的是「planner 可替換、約束可任意加」,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不是一台機器人適用多任務</mark>;多任務設計(同時對 trot+jump 優化)、步態時序也一起優化,都沒有展示。</li>
+          <li data-lang="en"><b>Scope of "versatile"</b>: two tasks (two 5 cm trot steps, a 10 cm forward jump), one robot, flat ground, fixed contact sequence and timing, and <b>each design tuned for a single task</b>. "Versatile" here means "swappable planner, arbitrary constraints," <mark class="m-assume" data-t="ASSUMPTION/CLAIM">not one robot that serves many tasks</mark>; multi-task design (optimizing for trot+jump jointly) and co-optimizing gait timing are never shown.</li>
+          <li data-lang="zh"><b>關鍵式子有筆誤</b>:Eq.(8) 三項功率都寫成 \(\tau_f\)、Eq.(10) 碰撞約束變數與不等號方向、Eq.(11) 重複 \(z_{imu}\)、\(K_d\) 範圍寫成 \([0.1,K_d/2]\)。對一篇以「可重現的模組化框架」為賣點的論文,這會<mark class="m-limit" data-t="LIMITATION/FUTURE">直接傷害可重現性</mark>,加上沒有公開程式碼。</li>
+          <li data-lang="en"><b>Typos in key equations</b>: Eq.(8) writes all three powers with \(\tau_f\); Eq.(10) has wrong variables and inequality direction; Eq.(11) repeats \(z_{imu}\); the \(K_d\) range reads \([0.1,K_d/2]\). For a paper selling a "reproducible modular framework," this <mark class="m-limit" data-t="LIMITATION/FUTURE">directly hurts reproducibility</mark>, especially without released code.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>FD 梯度的可靠性</b>:\(\epsilon\) 取多少?DDP 收斂容差多少?若把 \(\epsilon\) 改大或改小一個數量級,收斂軌跡與最終設計會不會變?在扭矩飽和的設計附近梯度是否會震盪?</li>
+          <li data-lang="en"><b>Reliability of FD gradients</b>: what \(\epsilon\), what DDP tolerance? If \(\epsilon\) changes by an order of magnitude, do the trajectory and final design change? Do gradients oscillate near torque-saturated designs?</li>
+          <li data-lang="zh"><b>模型可信度</b>:加入轉子反射慣量、隨 \(n\) 變的齒輪箱質量與摩擦、離散齒比後,「馬達加重 3 倍 + 減速比近翻倍」的結論還站得住嗎?</li>
+          <li data-lang="en"><b>Model fidelity</b>: with rotor reflected inertia, gear-ratio-dependent gearbox mass and friction, and discrete ratios, does "3× heavier motors + nearly doubled ratio" still hold?</li>
+          <li data-lang="zh"><b>為何 CMA-ES 解得更好</b>:4 維 jump 時 CMA-ES 的設計長什麼樣?若用 CMA-ES 的解當本文方法的起點,能否再往下?兩者混合(全域探索 + 局部精修)是否才是正解?</li>
+          <li data-lang="en"><b>Why CMA-ES finds better solutions</b>: what does CMA-ES&#39;s 4-D jump design look like? Starting this method from CMA-ES&#39;s solution, can it go lower? Is a hybrid (global exploration + local refinement) the real answer?</li>
+          <li data-lang="zh"><b>Versatile 到什麼程度</b>:同一台機器人同時對 trot + jump(或一個任務分佈)優化,結果會是兩個最佳設計的中間值,還是完全不同的設計?可否把接觸時序也納入 \(\rho\)?</li>
+          <li data-lang="en"><b>How versatile</b>: optimizing one robot for trot + jump jointly (or a task distribution), is the result in between the two optima or something entirely different? Can contact timings be folded into \(\rho\)?</li>
+          <li data-lang="zh"><b>硬體</b>:最佳設計的 \(m_m\approx0.18\) kg 馬達與 \(n\approx16\) 齒比在市面上是否存在?若真的做出來,PD 追蹤下實測能耗改善能保留多少?能耗以外(峰值功率、穩健性、成本)會付出什麼代價?</li>
+          <li data-lang="en"><b>Hardware</b>: do \(m_m\approx0.18\) kg motors and \(n\approx16\) gearboxes exist off the shelf? If built, how much of the energy gain survives on hardware under PD tracking? What is paid beyond energy (peak power, robustness, cost)?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把「找到省電 7 成的 Solo」讀成「<b>Solo 的原設計很糟</b>」或「<b>這是一台更好的機器人</b>」。正確理解:這是在<mark class="m-assume" data-t="ASSUMPTION/CLAIM">特定致動器回歸模型、兩個極小幅度任務、純能耗指標</mark>下的最佳解;Solo 原本的設計目標(輕量、開源、低成本、高扭矩透明度)根本不在成本函數裡。</span>
+        <span data-lang="en">Reading "a Solo that saves 70% energy" as "<b>Solo&#39;s original design is bad</b>" or "<b>this is a better robot</b>." The right reading: it is an optimum under <mark class="m-assume" data-t="ASSUMPTION/CLAIM">a specific actuator regression, two tiny tasks, and an energy-only metric</mark>; Solo&#39;s original goals (lightweight, open-source, low cost, torque transparency) are not in the cost function at all.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">比較方法時刻意改用「收斂時間」而非「每迭代成本」,並老實寫出 CMA-ES 解得同樣好或更好;結論也坦承 FD 誤差與其他 planner 可能不保證物理可行。這種自我限縮讓主張可信。</span>
+        <span data-lang="en">The comparison deliberately uses "time to converge" rather than "per-iteration cost," and honestly reports that CMA-ES solves as well or better; the conclusion also concedes FD error and that other planners may not guarantee physical feasibility. This self-restraint makes the claims credible.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">一個結構性觀察</span><span data-lang="en">A structural observation</span></span>
+        <span data-lang="zh">Fig.4 顯示主要收益來自 2 個致動器參數,而 11 個形態/配置參數貢獻很小——這暗示對 Solo 這類機器人,<b>「選馬達與齒比」的低維問題</b>可能就涵蓋了大部分價值;17 維框架的必要性需要更有挑戰的任務來證明。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">Fig.4 shows most of the gain comes from the 2 actuator parameters, while the 11 morphology/layout parameters contribute little—suggesting that for Solo-like robots, <b>the low-dimensional "pick motor and gear ratio" problem</b> may capture most of the value; the need for a 17-D framework would require harder tasks to demonstrate. <span class="add">[guide note]</span></span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「黑箱 + 有限差分 + 好的 NLP 求解器」是被低估的基線</b>:當外層維度小、內層求解器成熟時,先別急著推解析敏感度;平行 FD 往往就夠用,而且換 planner 零成本。</li>
+          <li data-lang="en"><b>"Black box + finite differences + a good NLP solver" is an underrated baseline</b>: when the outer dimension is small and the inner solver mature, don&#39;t rush into analytic sensitivities; parallel FD is often enough, and swapping planners costs nothing.</li>
+          <li data-lang="zh"><b>分層放約束</b>:物理可行性交給內層(DDP 的硬控制上限、摩擦錐),設計可製造性交給外層(KNITRO 硬約束)。這個切分方式可以直接借用到其他「設計 + 控制」問題(夾爪、外骨骼、無人機)。</li>
+          <li data-lang="en"><b>Layer the constraints</b>: physical feasibility to the inner level (DDP hard control limits, friction cones), manufacturability to the outer level (KNITRO hard constraints). This split transfers directly to other "design + control" problems (grippers, exoskeletons, drones).</li>
+          <li data-lang="zh"><b>致動器先於形態</b>:若你在做足式機器人的能耗分析,先檢查馬達質量與減速比——本文與 [9] 都指出焦耳熱主導小馬達的能耗,而這是低維、可解釋的設計旋鈕。</li>
+          <li data-lang="en"><b>Actuators before morphology</b>: for energy analysis of legged robots, check motor mass and gear ratio first—both this paper and [9] show Joule heating dominates small-motor energy, and it is a low-dimensional, interpretable design knob.</li>
+          <li data-lang="zh"><b>小心兩層目標不一致</b>:若你做雙層設計,讓內層的成本至少<b>部分反映</b>外層指標(或做敏感度消融),否則外層可能在優化「內層正則化的副作用」。</li>
+          <li data-lang="en"><b>Beware mismatched objectives</b>: in bilevel design, make the inner cost at least <b>partly reflect</b> the outer metric (or ablate it), otherwise the outer loop may optimize "side effects of the inner regularization."</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">在 co-design 版圖中的位置</span><span data-lang="en">Where it sits on the co-design map</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">路線</span><span data-lang="en">Line of work</span></th><th><span data-lang="zh">外層 / 內層</span><span data-lang="en">Outer / inner</span></th><th><span data-lang="zh">與本文的關係</span><span data-lang="en">Relation to this paper</span></th></tr>
+          <tr><td><b>Fadini et al. 2021</b><br><small>ICRA, LAAS [9]</small></td><td><span data-lang="zh">CMA-ES / OCP;單腿 monoped 的尺寸與致動器</span><span data-lang="en">CMA-ES / OCP; size + actuators of a monoped</span></td><td><span data-lang="zh">本文<b>沿用其致動器模型與能耗成本</b>,把 CMA-ES 換成梯度式 NLP、擴到 12 自由度四足。</span><span data-lang="en">This paper <b>reuses its actuator model and energy cost</b>, swapping CMA-ES for a gradient NLP and scaling to a 12-DoF quadruped.</span></td></tr>
+          <tr><td><b>Vitruvio</b><br><small>Chadwick et al., RA-L 2020 [8]</small></td><td><span data-lang="zh">取樣式(演化)/ 軌跡優化;開源腿部設計工具箱</span><span data-lang="en">Sampling (evolutionary) / trajectory optimization; open-source leg-design toolbox</span></td><td><span data-lang="zh">同屬模型派,但以取樣為外層;本文主打硬約束與較好的維度擴展性。</span><span data-lang="en">Also model-based, but sampling-based outside; this paper stresses hard constraints and better dimension scaling.</span></td></tr>
+          <tr><td><b><span data-lang="zh">隨機規劃 robust / 多任務 co-design</span><span data-lang="en">Stochastic-programming robust / multi-task co-design</span></b></td><td><span data-lang="zh">對任務或擾動分佈的期望成本優化設計</span><span data-lang="en">Optimize design for expected cost over a task/disturbance distribution</span></td><td><span data-lang="zh">處理的正是本文沒做的「<b>一台機器人、多個任務</b>」意義下的 versatile。<span class="add">[導讀補充]</span></span><span data-lang="en">Addresses exactly the "<b>one robot, many tasks</b>" sense of versatility this paper does not. <span class="add">[guide note]</span></span></td></tr>
+          <tr><td><b><span data-lang="zh">ADMM co-design</span><span data-lang="en">ADMM co-design</span></b></td><td><span data-lang="zh">把設計與動作的耦合問題拆成交替子問題 + 一致性約束</span><span data-lang="en">Split the coupled design–motion problem into alternating subproblems with consensus</span></td><td><span data-lang="zh">介於「單一大 NLP」與本文「黑箱雙層」之間:保留部分結構,又不必整包求解。<span class="add">[導讀補充]</span></span><span data-lang="en">Sits between "one big NLP" and this paper&#39;s "black-box bilevel": keeps some structure without solving everything jointly. <span class="add">[guide note]</span></span></td></tr>
+          <tr><td><b>Transform2Act</b><br><small>Yuan et al., ICLR 2022</small></td><td><span data-lang="zh">RL:策略先輸出形態變換、再輸出控制</span><span data-lang="en">RL: the policy first outputs morphology transforms, then control</span></td><td><span data-lang="zh">無模型、可處理離散拓撲,但要大量樣本、沒有硬設計約束、結果難解釋;本文相反:連續參數、硬約束、模型精確但依賴模型。<span class="add">[導讀補充]</span></span><span data-lang="en">Model-free and handles discrete topology, but sample-hungry, no hard design constraints, hard to interpret; this paper is the opposite: continuous parameters, hard constraints, precise but model-dependent. <span class="add">[guide note]</span></span></td></tr>
+          <tr><td><b><span data-lang="zh">PEA co-design(RL)</span><span data-lang="en">PEA co-design (RL)</span></b></td><td><span data-lang="zh">與 locomotion 策略一起學並聯彈性致動器參數</span><span data-lang="en">Learn parallel-elastic-actuator parameters together with a locomotion policy</span></td><td><span data-lang="zh">同樣聚焦「致動器」層級的設計;RL 版本得到的是閉迴路、對擾動穩健的評估,本文則是開迴路最佳軌跡的能耗。<span class="add">[導讀補充]</span></span><span data-lang="en">Also targets actuator-level design; the RL version evaluates closed-loop, disturbance-robust behavior, whereas this paper evaluates the energy of an open-loop optimal trajectory. <span class="add">[guide note]</span></span></td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What&#39;s worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「co-design 可以模組化地重用現成 OCP 求解器」</span><span data-lang="en">"Co-design can modularly reuse off-the-shelf OCP solvers"</span></td><td><span data-lang="zh">黑箱 FD 雙層 + Crocoddyl Box-FDDP + KNITRO 的範例。</span><span data-lang="en">The black-box FD bilevel + Crocoddyl Box-FDDP + KNITRO example.</span></td></tr>
+          <tr><td><span data-lang="zh">「梯度式 co-design 比 CMA-ES 擴展性好」</span><span data-lang="en">"Gradient-based co-design scales better than CMA-ES"</span></td><td><span data-lang="zh">Fig.4 的收斂時間(並同時引用:解的品質相當、CMA-ES 不輸)。</span><span data-lang="en">Fig.4 convergence times (citing also that quality is comparable and CMA-ES never loses).</span></td></tr>
+          <tr><td><span data-lang="zh">「小型四足的能耗由焦耳熱主導,加大馬達 + 提高減速比可大幅省電」</span><span data-lang="en">"Small-quadruped energy is dominated by Joule heating; bigger motors + higher gear ratio save a lot"</span></td><td><span data-lang="zh">Fig.3b 的能耗拆解(注意前提是回歸模型與模擬)。</span><span data-lang="en">The Fig.3b breakdown (caveat: regression model and simulation only).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">這篇把「機器人設計」寫成一個上層 NLP、把頂尖的 DDP motion planner 當成可替換的黑箱,用平行有限差分接起兩層,在硬性設計約束下為 Solo 找到省電約 7 成的 trot/jump 設計;它的價值在<b>工程上的模組化與擴展性</b>,而非更好的最佳解——後者仍需解析梯度、多任務設定與實體驗證來補足。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">This paper casts "robot design" as an upper-level NLP, treats a top DDP motion planner as a swappable black box, and joins the two with parallel finite differences, finding Solo trot/jump designs that save ~70% energy under hard design constraints. Its value lies in <b>engineering modularity and scalability</b>, not better optima—which still await analytic gradients, multi-task settings, and hardware validation.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Fadini et al. 2021 (ICRA)</span>
+          <span class="chip">Crocoddyl (ICRA 2020)</span>
+          <span class="chip">Box-FDDP</span>
+          <span class="chip">Vitruvio (RA-L 2020)</span>
+          <span class="chip">Ha et al. 2018 (IJRR)</span>
+          <span class="chip">Desai et al. adjoint co-design</span>
+          <span class="chip">Transform2Act</span>
+          <span class="chip">Wensing 2022 survey</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論或讀圖估計,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences or figure readings; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Dinev et al. 2022 (Versatile Co-Design, IROS) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Versatile co-design reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

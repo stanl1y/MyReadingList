@@ -60,6 +60,12 @@ list at the top of `scripts/build_index.py`:
 - add a new cluster dict for a new thread
 - a paper present on disk but not placed anywhere falls into an **"Other"** bunch automatically
 - a page with `"kind":"synthesis"` in its `paper-meta` is skipped from the grid and linked as a
-  gold **Synthesis** banner at the top of the cluster that names it (via the cluster's `synthesis` field)
+  gold **Synthesis** banner at the top of the cluster that names it (via the cluster's `synthesis` field);
+  several clusters may point at the same page, and `synthesis_label_zh/_en`, `synthesis_emoji` and
+  `synthesis_note_zh/_en` customise the banner (e.g. the 🗺️ "Paper Map" on both legged clusters)
+- a catalog-style page (like `Synthesis_LeggedRobotics.html`) keeps its rows as a `DATA` array in an
+  inline `<script>`: edit that array to add or update an entry; the tables, search and counts are
+  rendered from it
+- vine edge labels stay attached to the right pair even if a chain member is missing from disk
 
 Then rerun `build_index.py papers`.

@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>PIP-Loco — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"PIP-Loco: A Proprioceptive Infinite Horizon Planning Framework for Quadrupedal Robot Locomotion","authors":"Aditya Shirwatkar, Naman Saxena, Kishore Chandra, Shishir Kolathaya","year":"2024","venue":"ICRA 2025","tags":["Legged Robotics","Reinforcement Learning","Model-Based RL","Planning","MPC","Quadruped","Sim-to-Real","State Estimation"],"tldr":"把 MPC 的規劃與約束接回 model-free RL:訓練時以 PPO 非對稱 actor-critic 共同學速度估測器與 Dreamer 模組(觀測空間動力模型、獎勵模型、行為克隆策略、蒸餾自特權 critic 的價值);部署時改由 Dreamer 做 H=10 加學習價值終端成本的「無限視野」受約束 MPPI,同時最佳化動作與速度命令。訓練回報勝 HIMLoco(9.5–9.7 vs 8.6,高雜訊 8.16 vs 1.73),Go1 實機走過斜坡、碎石、樓梯與 45 cm 落差,但規劃本身的效益只在一段 10 秒模擬中定性展示。","tldr_en":"Plugs MPC-style planning and constraints back into model-free RL: during training a PPO asymmetric actor-critic co-learns a velocity estimator and a Dreamer module (observation-space dynamics, reward model, behavior-cloned policy, value distilled from the privileged critic); at deployment the Dreamer runs an H=10 constrained MPPI with a learned terminal value (infinite-horizon in effect), optimizing both actions and the velocity command. Training returns beat HIMLoco (9.5-9.7 vs 8.6; 8.16 vs 1.73 at high noise) and a Go1 handles slopes, gravel, stairs and a 45 cm drop, but the benefit of planning itself is shown only qualitatively in one 10 s simulation run."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  a.chip{text-decoration:none}
+  a.chip:hover{background:#e6dcc4}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:110px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  .algo{counter-reset:al; list-style:none; padding:0; margin:6px 0 0}
+  .algo li{position:relative; padding:7px 0 7px 34px; border-bottom:1px dashed var(--line); font-size:14px}
+  .algo li:last-child{border:none}
+  .algo li:before{counter-increment:al; content:counter(al); position:absolute; left:0; top:7px;
+    width:22px; height:22px; background:#efe9da; color:var(--navy); border-radius:6px;
+    display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">PIP-Loco 想把 <b>MPC 的「規劃 + 約束 + 可解釋」</b>接回 <b>model-free RL 的強韌步態</b>。<b>訓練時</b>:PPO 的非對稱 actor-critic 與一個 internal model(<b>速度估測器 + Dreamer 模組</b>)單階段共同學習;Dreamer 學會在<b>觀測空間</b>「做夢」預測未來 \(H\) 步觀測,並附帶獎勵模型、行為克隆的策略 \(\pi_\theta\)、以及蒸餾自特權 critic 的價值 \(V_\theta\)。<b>部署時</b>:丟掉 expert actor,改由 Dreamer 解一個 <mark class="m-method" data-t="METHOD/IDEA">\(H=10\) 步、以 \(V_\theta\) 當終端價值的受約束 MPPI</mark>(所謂「無限視野」),<b>同時最佳化動作與速度命令</b>。結果:<mark class="m-result" data-t="RESULT/EVIDENCE">訓練回報勝過 HIMLoco(9.52–9.69 vs 8.59;高雜訊 8.16 vs 1.73)</mark>,Unitree Go1 實機走過斜坡、碎石、樓梯與 45 cm 落差;但<mark class="m-limit" data-t="LIMITATION/FUTURE">規劃本身帶來多少好處,只在一段 10 秒模擬中定性展示</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">PIP-Loco tries to put <b>MPC's "planning + constraints + interpretability"</b> back on top of <b>model-free RL's robust gaits</b>. <b>In training</b>, a PPO asymmetric actor-critic and an internal model (a <b>velocity estimator + a Dreamer module</b>) are learned together in one stage; the Dreamer learns to "dream" the next \(H\) observations <b>in observation space</b>, along with a reward model, a behavior-cloned policy \(\pi_\theta\), and a value \(V_\theta\) distilled from the privileged critic. <b>At deployment</b>, the expert actor is dropped and the Dreamer solves a <mark class="m-method" data-t="METHOD/IDEA">constrained MPPI over \(H=10\) steps with \(V_\theta\) as terminal value</mark> (the "infinite horizon"), <b>optimizing both actions and the velocity command</b>. Results: <mark class="m-result" data-t="RESULT/EVIDENCE">higher training return than HIMLoco (9.52-9.69 vs 8.59; 8.16 vs 1.73 under high noise)</mark>, and a real Unitree Go1 walks slopes, gravel, stairs and a 45 cm drop; but <mark class="m-limit" data-t="LIMITATION/FUTURE">how much planning itself helps is shown only qualitatively in one 10 s simulation run</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Shirwatkar2024/fig1_concept.png" alt="Figure 1 concept" style="max-width:380px;margin:0 auto">
+        <figcaption data-lang="zh"><b>Fig.1</b> 概念圖:「Dream And Plan」。上方雲朵是從當前狀態出發、在腦中展開的多條候選未來軌跡(紅叉 = 違反約束或低回報被淘汰,綠勾 = 選中);下方是 Go1 在草地、樓梯、碎石上的實機畫面。注意它強調的是<b>部署時的在線規劃</b>,而非訓練方式。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> Concept: "Dream And Plan." The cloud shows candidate future trajectories imagined from the current state (red crosses = rejected for violating constraints or low return, green tick = chosen); below, the Go1 on grass, stairs and gravel. Note the emphasis is on <b>online planning at deployment</b>, not on how training works.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — MPC 能加約束、能規劃,但<mark class="m-problem" data-t="PROBLEM/GAP">依賴單剛體/倒單擺等簡化模型,在快速變化的地面上不夠強韌</mark>;model-free RL 很強韌,卻<mark class="m-problem" data-t="PROBLEM/GAP">天生不會處理約束、也不會規劃</mark>;DreamWaQ/HIMLoco 的 internal model 只預測<b>一步</b> latent,從沒被拿來規劃。</li>
+          <li data-lang="en"><b>Problem</b> — MPC can enforce constraints and plan, but <mark class="m-problem" data-t="PROBLEM/GAP">relies on simplified models (single rigid body, inverted pendulum) and is brittle on rapidly changing ground</mark>; model-free RL is robust but <mark class="m-problem" data-t="PROBLEM/GAP">inherently cannot handle constraints or plan</mark>; the internal models of DreamWaQ/HIMLoco predict only <b>one-step</b> latents and are never used for planning.</li>
+          <li data-lang="zh"><b>方法</b> — 訓練時把 internal model 擴成 <mark class="m-method" data-t="METHOD/IDEA">\(H\) 步觀測「做夢」的 Dreamer 模組</mark>,並讓它的預測當 expert actor 的輸入(兩者互相依賴);部署時把 Dreamer 當成<mark class="m-method" data-t="METHOD/IDEA">資料驅動的 MPC 模型</mark>,用 TD-MPC 式的受約束 MPPI 同時挑動作與速度命令。</li>
+          <li data-lang="en"><b>Method</b> — In training, extend the internal model into a <mark class="m-method" data-t="METHOD/IDEA">Dreamer module that "dreams" \(H\) future observations</mark>, and feed its predictions to the expert actor (the two are co-dependent); at deployment, use the Dreamer as a <mark class="m-method" data-t="METHOD/IDEA">data-driven MPC model</mark>, with a TD-MPC-style constrained MPPI choosing both actions and the velocity command.</li>
+          <li data-lang="zh"><b>結果</b> — 2k 次迭代、5 seeds 的訓練回報:<mark class="m-result" data-t="RESULT/EVIDENCE">NLM 9.52–9.69 vs HIMLoco 8.59</mark>;高雜訊下 HIMLoco 崩到 1.73 ± 5.88,NLM 仍有 8.16;極端速度命令的模擬中,規劃讓 roll/pitch 擺幅與關節觸限明顯變小;實機 Go1 板載 Jax 規劃 300–500 Hz。</li>
+          <li data-lang="en"><b>Results</b> — Training return after 2k iterations, 5 seeds: <mark class="m-result" data-t="RESULT/EVIDENCE">NLM 9.52-9.69 vs HIMLoco 8.59</mark>; under high noise HIMLoco collapses to 1.73 ± 5.88 while NLM keeps 8.16; in a sim run with extreme commands, planning visibly shrinks roll/pitch swings and joint-limit hits; on hardware the Go1 runs the planner onboard in Jax at 300-500 Hz.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">四足控制長年有兩條路線。<mark class="m-method" data-t="METHOD/IDEA">模型派 MPC</mark>(MIT Cheetah 3 的凸 MPC、kino-dynamic MPC、hybrid-systems DDP)能把<b>約束</b>直接寫進最佳化、輸出整段<b>可檢視的計畫</b>;但它<mark class="m-assume" data-t="ASSUMPTION/CLAIM">假設單剛體或倒單擺模型、足端軌跡也只在有限的類別裡挑</mark>,很難湧現新動作,在雜亂地形上不夠萬用。</p>
+        <p data-lang="en">Quadruped control has long had two camps. <mark class="m-method" data-t="METHOD/IDEA">Model-based MPC</mark> (MIT Cheetah 3 convex MPC, kino-dynamic MPC, hybrid-systems DDP) writes <b>constraints</b> straight into the optimization and outputs a <b>plan you can inspect</b>; but it <mark class="m-assume" data-t="ASSUMPTION/CLAIM">assumes a single-rigid-body or inverted-pendulum model, and picks foot trajectories from a limited class</mark>, so emergent behavior is hard and it is less versatile on cluttered terrain.</p>
+        <p data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">model-free RL</mark>(Isaac Gym 大規模平行訓練、Walk These Ways、RMA、DreamWaQ、HIMLoco)在多地形上已勝過 MPC,但輸出只是一個「反射式」的網路:<mark class="m-problem" data-t="PROBLEM/GAP">不能在部署時加約束、改目標,也看不到它「打算做什麼」</mark>。另一個實際難題是<b>可觀測性</b>——機身線速度無法直接量到,於是有了 DreamWaQ/HIMLoco 這類「internal model」估測器。</p>
+        <p data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Model-free RL</mark> (massively parallel Isaac Gym training, Walk These Ways, RMA, DreamWaQ, HIMLoco) now beats MPC across terrains, but its output is a "reflexive" network: <mark class="m-problem" data-t="PROBLEM/GAP">you cannot add constraints or change the objective at deployment, nor see what it intends to do</mark>. A practical hurdle is <b>observability</b> — base linear velocity is not measured directly — hence internal-model estimators such as DreamWaQ/HIMLoco.</p>
+        <p data-lang="zh">第三條線是<b>學習模型 + 規劃</b>的 model-based RL:Dreamer 系列在 latent 裡想像、TD-MPC/TD-MPC2 與 LOOP 用「短視野規劃 + 終端價值」。PIP-Loco 借用後者的規劃器,卻<mark class="m-assume" data-t="ASSUMPTION/CLAIM">刻意不在訓練時規劃</mark>(太貴),只在部署時才啟用。</p>
+        <p data-lang="en">A third line is <b>learned model + planning</b> model-based RL: the Dreamer family imagines in latent space; TD-MPC/TD-MPC2 and LOOP use "short-horizon planning + terminal value." PIP-Loco borrows the latter's planner but <mark class="m-assume" data-t="ASSUMPTION/CLAIM">deliberately does not plan during training</mark> (too expensive), only at deployment.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px"><span class="add">[導讀補充]</span> 這篇的定位是「<b>RL 訓練、MPC 部署</b>」的橋:不改變已經很成熟的 legged_gym + PPO 訓練配方,只是讓 RL 過程「順便」產出 MPC 需要的四個零件(模型、獎勵、提案策略、終端價值)。賭注是這些零件夠準,讓一個簡單的取樣式規劃器在部署時能修正策略的「泛化但次佳」動作。</p>
+          <p data-lang="en" style="margin-top:6px"><span class="add">[guide note]</span> The paper positions itself as a bridge: <b>train with RL, deploy with MPC</b>. It leaves the mature legged_gym + PPO recipe intact and simply has RL produce, as by-products, the four parts MPC needs (model, reward, proposal policy, terminal value). The bet is that these parts are accurate enough for a simple sampling planner to correct the policy's "generalized but suboptimal" actions at deployment.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是某個分數,而是這幾個設計觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What is worth taking away is not a score but these design ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">訓練 model-free、部署 model-based。</b> 規劃被<mark class="m-method" data-t="METHOD/IDEA">延後到部署階段</mark>,避開在 4096 個平行環境裡跑 MPC 的速度與記憶體瓶頸;代價是訓練時從沒見過規劃器自己產生的狀態分佈。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Train model-free, deploy model-based.</b> Planning is <mark class="m-method" data-t="METHOD/IDEA">deferred to deployment</mark>, dodging the speed and memory bottleneck of running MPC across 4096 parallel envs; the price is that training never sees the state distribution the planner itself induces.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">把 RL 的副產品變成 MPC 的零件。</b> 特權 critic \(V_e\) → 終端價值 \(V_\theta\)(把有限 \(H=10\) 延伸成「無限視野」);expert actor \(\pi_e\) → 行為克隆的 \(\pi_\theta\)(warm start 與 \(M_\pi=30\) 條引導軌跡);internal model 的 dynamics/reward 頭 → 預測模型與目標函數。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Turn RL by-products into MPC parts.</b> Privileged critic \(V_e\) → terminal value \(V_\theta\) (stretching the finite \(H=10\) into an "infinite horizon"); expert actor \(\pi_e\) → behavior-cloned \(\pi_\theta\) (warm start and \(M_\pi=30\) guide trajectories); the internal model's dynamics/reward heads → the prediction model and objective.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">在觀測空間規劃,不在 latent。</b> 部署用的 NLM 直接預測關節角、關節速度、重力投影等<b>有物理意義</b>的量,所以<mark class="m-assume" data-t="ASSUMPTION/CLAIM">關節極限、姿態穩定等約束能直接寫在 \(\hat o\) 上</mark>;作者明言 latent 規劃會犧牲可解釋性與加約束的能力。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Plan in observation space, not latent space.</b> The deployed NLM predicts <b>physically meaningful</b> quantities (joint angles, joint velocities, projected gravity), so <mark class="m-assume" data-t="ASSUMPTION/CLAIM">joint limits and body-stability constraints can be written directly on \(\hat o\)</mark>; the authors state that latent-space planning would compromise interpretability and constraint enforcement.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">速度命令也是決策變數。</b> 規劃器不只修正動作,還把使用者的 twist command 改寫成「做得到且安全」的 \(\nu^*_{\text{cmd}}\)。<span class="add">[導讀補充] 這本質上是一個學習式的 reference governor。</span></li>
+          <li data-lang="en"><b style="color:var(--c-method)">The velocity command is a decision variable too.</b> The planner corrects not only actions but rewrites the user twist command into a feasible, safe \(\nu^*_{\text{cmd}}\). <span class="add">[guide note] In effect a learned reference governor.</span></li>
+          <li data-lang="zh"><b style="color:var(--c-result)">「做夢」對訓練有幫助,但越複雜不一定越好。</b> 在 actor 輸入加上預測的未來觀測,<mark class="m-result" data-t="RESULT/EVIDENCE">訓練回報勝 HIMLoco、高雜訊下差距最大</mark>;然而更長的 \(H\) 與 latent 沒帶來一致改善——<b>最簡單、無 latent、單幀輸入的 NLM</b> 最好用。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">"Dreaming" helps training, but more complex is not better.</b> Adding predicted future observations to the actor input <mark class="m-result" data-t="RESULT/EVIDENCE">beats HIMLoco in training return, most of all under high noise</mark>; yet longer \(H\) and latents give no consistent gain — the <b>simplest, latent-free, single-frame NLM</b> works best.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">MPC 的老優點回到 RL 控制器:部署時可增刪約束、改獎勵而不必重訓。</b> 但<mark class="m-limit" data-t="LIMITATION/FUTURE">論文只主張了這個能力,沒有實驗展示「改約束後的行為」</mark>。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">MPC's old perk returns to RL controllers: add or remove constraints and reshape rewards at deployment without retraining.</b> But <mark class="m-limit" data-t="LIMITATION/FUTURE">the paper only asserts this ability; no experiment shows behavior after a constraint change</mark>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">PIP-Loco: A Proprioceptive Infinite Horizon Planning Framework for Quadrupedal Robot Locomotion</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Aditya Shirwatkar*, Naman Saxena*, Kishore Chandra, Shishir Kolathaya <small>(* equal)</small></span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span><span data-lang="zh">印度科學理工學院(IISc Bengaluru)Robert Bosch Center for Cyber-Physical Systems · Stoch Lab</span><span data-lang="en">Indian Institute of Science (IISc Bengaluru), Robert Bosch Center for Cyber-Physical Systems · Stoch Lab</span></span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span><span data-lang="zh">ICRA 2025(arXiv:2409.09441,2024/09 初版,v3 2025/04)</span><span data-lang="en">ICRA 2025 (arXiv:2409.09441, first posted 2024-09, v3 2025-04)</span></span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Legged Locomotion · RL + MPC</span>
+          <b><span data-lang="zh">平台</span><span data-lang="en">Robot</span></b><span>Unitree Go1 · Isaac Gym</span>
+          <b><span data-lang="zh">專案頁</span><span data-lang="en">Project</span></b><span>stochlab.com/PIP-Loco/</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它示範了一條低成本的融合路線:<b>不改 RL 訓練配方</b>,只多學幾個監督頭,就能在部署時得到一個可加約束、可檢視「腦中軌跡」、可調整命令的 MPC 外殼。對想要「RL 的強韌 + MPC 的安全保證介面」的人,這是一個可直接借鏡的工程樣板。</span>
+        <span data-lang="en">It shows a low-cost fusion route: <b>keep the RL training recipe</b>, learn a few extra supervised heads, and at deployment you get an MPC shell that can take constraints, expose its "imagined trajectories," and adjust commands. For anyone wanting "RL robustness + an MPC-style safety interface," it is a directly reusable engineering template.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">在本站的位置</span><span data-lang="en">Where it sits in this library</span></span>
+        <span data-lang="zh"><b>估測器譜系</b>:<a href="Nahrendra2023_DreamWaQ.html">DreamWaQ</a>(\(\beta\)-VAE 估速度 + context,\(H=1\))→ <a href="Long2024_HIMLoco.html">HIMLoco</a>(速度 + 對比式 latent,\(H=1\))→ <b>PIP-Loco</b>(\(H\) 步觀測做夢,且拿來規劃)。<b>規劃器譜系</b>:<a href="Hansen2022_TDMPC.html">TD-MPC</a> 的「MPPI + 策略引導 + 終端價值」被搬到四足部署。<b>對照組</b>:<a href="Kim2019_WBIC.html">凸 MPC + WBIC</a>、<a href="Ding2021_RFMPC.html">RF-MPC</a> 代表的物理模型 MPC。</span>
+        <span data-lang="en"><b>Estimator lineage</b>: <a href="Nahrendra2023_DreamWaQ.html">DreamWaQ</a> (\(\beta\)-VAE velocity + context, \(H=1\)) → <a href="Long2024_HIMLoco.html">HIMLoco</a> (velocity + contrastive latent, \(H=1\)) → <b>PIP-Loco</b> (dreams \(H\)-step observations and uses them to plan). <b>Planner lineage</b>: <a href="Hansen2022_TDMPC.html">TD-MPC</a>'s "MPPI + policy guidance + terminal value" moved onto quadruped deployment. <b>Contrast</b>: physics-model MPC as in <a href="Kim2019_WBIC.html">convex MPC + WBIC</a> and <a href="Ding2021_RFMPC.html">RF-MPC</a>.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Asymmetric Actor-Critic</span><span class="chip">Internal Model</span>
+          <span class="chip">Dreamer module (NLM / PLM / FLM)</span><span class="chip">Constrained MPPI</span>
+          <span class="chip">Terminal value</span><span class="chip">Velocity estimator</span>
+          <span class="chip">Behavior cloning</span><span class="chip">Jax onboard</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">物理模型 MPC</span><span data-lang="en">Physics-model MPC</span></b><br><small>Di Carlo 2018 · Li &amp; Wensing 2023</small></td><td><span data-lang="zh">可加約束、可解釋,但<mark class="m-problem" data-t="PROBLEM/GAP">嚴格依賴簡化模型</mark>(單剛體、倒單擺),足端軌跡類別受限;<b>難隨任務複雜度擴展</b>,在快速變化的地面上常失去強韌性。</span><span data-lang="en">Constraint-aware and interpretable, but <mark class="m-problem" data-t="PROBLEM/GAP">tied to simplified models</mark> (single rigid body, inverted pendulum) and a limited class of foot trajectories; <b>scales poorly with task complexity</b> and often loses robustness on rapidly changing surfaces.</span></td></tr>
+          <tr><td><b>Model-free RL</b><br><small>Walk These Ways · RMA</small></td><td><span data-lang="zh">多地形強韌、能湧現動作,但<mark class="m-problem" data-t="PROBLEM/GAP">沒有約束處理、沒有規劃</mark>;想改目標或加安全限制只能重訓。多地形同時訓練又常得到「<b>泛化但次佳</b>」的動作。</span><span data-lang="en">Robust across terrains with emergent motion, but <mark class="m-problem" data-t="PROBLEM/GAP">no constraint handling, no planning</mark>; changing the objective or adding a safety limit means retraining. Multi-terrain training also tends to yield <b>generalized but suboptimal</b> actions.</span></td></tr>
+          <tr><td><b><span data-lang="zh">Internal-model 估測器</span><span data-lang="en">Internal-model estimators</span></b><br><small>DreamWaQ · HIMLoco</small></td><td><span data-lang="zh">解決了速度不可觀測的問題,但只做<mark class="m-problem" data-t="PROBLEM/GAP">一步 latent 預測(\(H=1\))</mark>,沒有探索更長的「做夢」,更沒拿來規劃。</span><span data-lang="en">Fix velocity unobservability, but only do <mark class="m-problem" data-t="PROBLEM/GAP">one-step latent prediction (\(H=1\))</mark>; longer "dreaming" is unexplored, let alone planning with it.</span></td></tr>
+          <tr><td><b><span data-lang="zh">訓練中規劃的 MBRL</span><span data-lang="en">MBRL that plans during training</span></b><br><small>LOOP · MoPAC · TD-MPC(2) · DMD-MPC</small></td><td><span data-lang="zh">樣本效率最好,但在<mark class="m-problem" data-t="PROBLEM/GAP">大規模平行 RL 環境裡每步都解 MPC</mark>,推論速度與記憶體成為瓶頸,牆鐘時間暴增,不改架構就無法直接套用。</span><span data-lang="en">State of the art in sample efficiency, but <mark class="m-problem" data-t="PROBLEM/GAP">solving MPC at every step inside massively parallel RL</mark> bottlenecks inference speed and memory and inflates wall-clock time — impractical without substantial changes.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>能否在不犧牲 RL 強韌性、也不拖慢平行訓練的前提下,讓本體感測的四足控制器在部署時具備「規劃 + 約束 + 可解釋」?</b></p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>can a proprioceptive quadruped controller gain "planning + constraints + interpretability" at deployment, without giving up RL robustness or slowing down parallel training?</b></p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">論文的定位表(重建 Table I)</span><span data-lang="en">The paper's positioning table (Table I rebuilt)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">觀測歷史</span><span data-lang="en">Obs. history</span></th><th><span data-lang="zh">適應模組</span><span data-lang="en">Adaptation</span></th><th>Internal model</th><th><span data-lang="zh">多地形</span><span data-lang="en">Multi-terrain</span></th><th><span data-lang="zh">部署時規劃</span><span data-lang="en">Planning</span></th></tr>
+          <tr><td><a href="Margolis2022_WalkTheseWays.html">Walk These Ways</a></td><td>30</td><td>latent</td><td>−</td><td class="bad">✗</td><td class="bad">✗</td></tr>
+          <tr><td><a href="Kumar2021_RMA.html">RMA</a></td><td>50</td><td>latent</td><td>−</td><td class="ok">✓</td><td class="bad">✗</td></tr>
+          <tr><td><a href="Nahrendra2023_DreamWaQ.html">DreamWaQ</a>, <a href="Long2024_HIMLoco.html">HIMLoco</a></td><td>6</td><td>−</td><td>latent \((H=1)\)</td><td class="ok">✓</td><td class="bad">✗</td></tr>
+          <tr><td class="win">PIP-Loco w/ NLM</td><td class="win">1</td><td>−</td><td><span data-lang="zh">觀測 \((H\ge 1)\)</span><span data-lang="en">observations \((H\ge 1)\)</span></td><td class="ok">✓</td><td class="ok">✓</td></tr>
+          <tr><td>PIP-Loco w/ PLM</td><td>6</td><td>−</td><td><span data-lang="zh">觀測 + latent \((H\ge 1)\)</span><span data-lang="en">obs. + latent \((H\ge 1)\)</span></td><td class="ok">✓</td><td class="ok">✓</td></tr>
+          <tr><td>PIP-Loco w/ FLM</td><td>\(H\)</td><td>−</td><td>latent \((H\ge 1)\)</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">注意:三種 PIP-Loco 變體都標「可規劃」,但<mark class="m-assume" data-t="ASSUMPTION/CLAIM">實際部署與規劃實驗只用了 NLM</mark>;PLM/FLM 只出現在訓練回報的消融中。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Note: all three PIP-Loco variants are ticked for planning, but <mark class="m-assume" data-t="ASSUMPTION/CLAIM">only NLM is actually deployed and used in planning experiments</mark>; PLM/FLM appear only in the training-return ablation.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,PIP-Loco 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how PIP-Loco fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">PIP-Loco 如何補上</span><span data-lang="en">How PIP-Loco fills it</span></th></tr>
+          <tr><td><b><span data-lang="zh">物理模型 MPC</span><span data-lang="en">Physics-model MPC</span></b></td><td><span data-lang="zh">手寫簡化模型。</span><span data-lang="en">Hand-written simplified model.</span></td><td><span data-lang="zh">用<mark class="m-method" data-t="METHOD/IDEA">從模擬資料學到的觀測空間動力模型 \(d_\theta\)</mark>取代;RL 策略當提案分佈。</span><span data-lang="en">Replaced by a <mark class="m-method" data-t="METHOD/IDEA">learned observation-space dynamics model \(d_\theta\)</mark> trained on sim data; the RL policy serves as a proposal distribution.</span></td></tr>
+          <tr><td><b>Model-free RL</b></td><td><span data-lang="zh">無約束、無規劃、不可檢視。</span><span data-lang="en">No constraints, no planning, opaque.</span></td><td><span data-lang="zh">部署時<mark class="m-method" data-t="METHOD/IDEA">受約束的 MPPI</mark>過濾不安全動作;夢到的軌跡可供檢視。</span><span data-lang="en">A <mark class="m-method" data-t="METHOD/IDEA">constrained MPPI</mark> filters unsafe actions at deployment; dreamed trajectories can be inspected.</span></td></tr>
+          <tr><td><b>DreamWaQ / HIMLoco</b></td><td><span data-lang="zh">一步 latent,只當 actor 輸入。</span><span data-lang="en">One-step latent, used only as actor input.</span></td><td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">\(H\) 步觀測做夢</mark>,同時當 actor 輸入與部署時的規劃模型。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">\(H\)-step observation dreaming</mark>, serving both as actor input and as the deployment planning model.</span></td></tr>
+          <tr><td><b>TD-MPC / LOOP</b></td><td><span data-lang="zh">訓練中規劃,平行化成本高。</span><span data-lang="en">Plan during training; costly to parallelize.</span></td><td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">只在部署時規劃</mark>;訓練仍是純 PPO + 監督頭。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Plan only at deployment</mark>; training stays plain PPO + supervised heads.</span></td></tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px"><span class="add">[導讀補充]</span> 這裡的痛點主要是<b>功能性</b>的(能不能加約束、能不能看計畫、能不能改命令),而不是「回報不夠高」。因此評估這篇時,真正該問的是:規劃器<b>有沒有在可量化的指標上</b>(約束違反率、跌倒率、追蹤誤差)勝過「直接用策略」?這正是論文最薄的地方(見 05)。</p>
+          <p data-lang="en" style="margin-top:6px"><span class="add">[guide note]</span> The pain points here are mostly <b>functional</b> (can you add constraints, inspect the plan, adjust the command), not "return is too low." So the right test is whether the planner beats "just run the policy" <b>on quantifiable metrics</b> (constraint-violation rate, fall rate, tracking error) — exactly where the paper is thinnest (see 05).</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">「Infinite Horizon」不是真的無限長規劃。實際是 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">\(H=10\) 步的有限視野 + 學到的終端價值 \(\gamma^H V_\theta\)</mark>——與 TD-MPC、LOOP 同一招。「無限」的品質完全取決於 \(V_\theta\) 準不準。</span>
+        <span data-lang="en">"Infinite Horizon" is not literally infinite-length planning. It is a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">finite \(H=10\) horizon plus a learned terminal value \(\gamma^H V_\theta\)</mark> — the same trick as TD-MPC and LOOP. The quality of "infinite" rests entirely on how accurate \(V_\theta\) is.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">也別誤讀「Dreamer」</span><span data-lang="en">Do not misread "Dreamer" either</span></div>
+        <span data-lang="zh">這裡的 Dreamer module 不是 Hafner 的 Dreamer 世界模型(RSSM、隨機 latent、在想像中訓練策略)。部署用的 NLM 是<b>直接在觀測上一步一步預測</b>的模型,策略也不是在想像中學的,而是<b>行為克隆</b>自 expert actor。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">The Dreamer module here is not Hafner's Dreamer world model (RSSM, stochastic latents, policy learned in imagination). The deployed NLM is a model that <b>steps forward directly on observations</b>, and its policy is not learned in imagination but <b>behavior-cloned</b> from the expert actor. <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">若這條路可行,RL 控制器就能像 MPC 一樣在部署現場「換規則」:新的關節限制、新的姿態上限、新的速度上限,都不用重訓——這對安全認證與現場調參很有吸引力。</span>
+        <span data-lang="en">If this route works, RL controllers can "change the rules" on site like MPC: new joint limits, new attitude bounds, new speed caps, all without retraining — attractive for safety certification and field tuning.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">規劃到底加多少</span><span data-lang="en">how much planning adds</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">約束是什麼</span><span data-lang="en">which constraints</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">整體流程:一次訓練,兩種用法</span><span data-lang="en">Pipeline: one training run, two uses</span></h3>
+        <div class="flow">
+          <div class="step"><span class="ph mono">STAGE 1 · TRAIN</span><b data-lang="zh">PPO 非對稱 actor-critic</b><b data-lang="en">PPO asymmetric actor-critic</b><small data-lang="zh">expert actor \(\pi_e(o_t,\hat v_t,y_t)\);特權 critic \(V_e(o_t,o^e_t)\)。4096 台 Go1、多地形、domain randomization + curriculum。</small><small data-lang="en">Expert actor \(\pi_e(o_t,\hat v_t,y_t)\); privileged critic \(V_e(o_t,o^e_t)\). 4096 Go1s, multi-terrain, domain randomization + curriculum.</small></div>
+          <div class="arrow">⇄</div>
+          <div class="step"><span class="ph mono">STAGE 1 · SAME TIME</span><b data-lang="zh">Internal model(監督學習)</b><b data-lang="en">Internal model (supervised)</b><small data-lang="zh">速度估測器 \(v_\phi\);Dreamer:\(d_\theta, r_\theta, \pi_\theta, V_\theta\)(+ 選用 encoder \(\alpha_\theta\))。其輸出 \(y_t\) 回饋給 actor → 共同依賴。</small><small data-lang="en">Velocity estimator \(v_\phi\); Dreamer: \(d_\theta, r_\theta, \pi_\theta, V_\theta\) (+ optional encoder \(\alpha_\theta\)). Its output \(y_t\) feeds back into the actor → co-dependent.</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">STAGE 2 · DEPLOY</span><b data-lang="zh">受約束 MPPI(NLM)</b><b data-lang="en">Constrained MPPI (NLM)</b><small data-lang="zh">丟掉 \(\pi_e\);用 \(d_\theta\) 展開 \(H=10\) 步、\(r_\theta\) 累積回報、\(\gamma^H V_\theta\) 收尾、約束過濾;6 次迭代 × 530 條軌跡。</small><small data-lang="en">Drop \(\pi_e\); roll out \(H=10\) steps with \(d_\theta\), sum \(r_\theta\), close with \(\gamma^H V_\theta\), filter by constraints; 6 iterations × 530 trajectories.</small></div>
+          <div class="arrow">→</div>
+          <div class="step"><span class="ph mono">OUTPUT</span><b data-lang="zh">\(a_t\) 與 \(\nu^*_{\text{cmd}}\)</b><b data-lang="en">\(a_t\) and \(\nu^*_{\text{cmd}}\)</b><small data-lang="zh">從最終 \(\mathcal N(\mu_N,\sigma_N)\) 取樣的第一個動作 + 安全的速度命令;Jax 板載 300–500 Hz。</small><small data-lang="en">First action sampled from the final \(\mathcal N(\mu_N,\sigma_N)\) + a safe velocity command; onboard Jax at 300-500 Hz.</small></div>
+        </div>
+        <figure class="fig"><img src="figs/Shirwatkar2024/fig2_framework.png" alt="Figure 2 framework">
+          <figcaption data-lang="zh"><b>Fig.2</b> PIP-Loco 框架。<b>(a) 訓練</b>:本體觀測歷史 \(o_{t-M:t}\) 進速度估測器得 \(\hat v_t\),\(x_t\) 進 Dreamer 得 \(y_t\);兩者與 \(o_t\) 一起餵給 expert actor;特權 critic 額外看外部資訊 \(o^e_t\)。看中間那個循環箭頭:internal model(黃框,監督學習)與 actor-critic(綠框,PPO)<b>同時、互相依賴地</b>學。<b>(b) 部署</b>:只剩 Dreamer 的四個零件 \(\pi_\theta, d_\theta, r_\theta, V_\theta\),從 \(o_t\) 展開多條未來軌跡,解「資料驅動的無限視野 MPC」後輸出 \(a_t\)。注意 (b) 裡<b>沒有</b> expert actor 與速度估測器。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> The PIP-Loco framework. <b>(a) Training</b>: the proprioceptive history \(o_{t-M:t}\) goes into the velocity estimator for \(\hat v_t\), and \(x_t\) into the Dreamer for \(y_t\); both, with \(o_t\), feed the expert actor; the privileged critic additionally sees extrinsic information \(o^e_t\). Note the cycle arrow in the middle: the internal model (yellow, supervised) and the actor-critic (green, PPO) learn <b>simultaneously and co-dependently</b>. <b>(b) Deployment</b>: only the Dreamer parts \(\pi_\theta, d_\theta, r_\theta, V_\theta\) remain; they roll out many futures from \(o_t\), solve a "data-driven infinite-horizon MPC," and output \(a_t\). Note that (b) has <b>no</b> expert actor and no velocity estimator.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">問題設定:POMDP + 非對稱 actor-critic</span><span data-lang="en">Setup: POMDP + asymmetric actor-critic</span></h3>
+        <p data-lang="zh">四足運動被建模成無限視野折扣 POMDP \(\mathcal M=\{\mathcal S,\mathcal A,\mathcal O,r,P,\gamma,F\}\),其中 \(F:\mathcal S\to\mathcal O\) 產生觀測,\(\mathcal O^M\subset\mathbb R^{p\times M}\) 是長度 \(M\) 的觀測歷史。用 <mark class="m-method" data-t="METHOD/IDEA">非對稱 actor-critic</mark> 求解:actor 只看本體觀測,critic 看特權資訊。</p>
+        <p data-lang="en">Locomotion is modeled as an infinite-horizon discounted POMDP \(\mathcal M=\{\mathcal S,\mathcal A,\mathcal O,r,P,\gamma,F\}\), where \(F:\mathcal S\to\mathcal O\) produces observations and \(\mathcal O^M\subset\mathbb R^{p\times M}\) is an \(M\)-step observation history. It is solved with an <mark class="m-method" data-t="METHOD/IDEA">asymmetric actor-critic</mark>: the actor sees proprioception only, the critic sees privileged information.</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.85">
+          <li data-lang="zh"><b>觀測</b> \(o_t\):相對名目姿態的關節角 \(q_t-q_{\text{nominal}}\)、關節速度 \(\dot q_t\)、重力投影 \(g\)、速度命令 \((v^{\text{cmd}}_{xy},\omega^{\text{cmd}}_z)\)、上一步動作 \(a_{t-1}\)。<b>沒有</b>機身線速度。</li>
+          <li data-lang="en"><b>Observation</b> \(o_t\): joint angles relative to nominal \(q_t-q_{\text{nominal}}\), joint velocities \(\dot q_t\), projected gravity \(g\), velocity command \((v^{\text{cmd}}_{xy},\omega^{\text{cmd}}_z)\), previous action \(a_{t-1}\). <b>No</b> base linear velocity.</li>
+          <li data-lang="zh"><b>動作</b> \(a_t\):12 個關節相對名目角的擾動,\(q_t=a_t+q_{\text{nominal}}\),再經 actuator network 轉成力矩。</li>
+          <li data-lang="en"><b>Action</b> \(a_t\): perturbations of the 12 joint angles around nominal, \(q_t=a_t+q_{\text{nominal}}\), turned into torques by an actuator network.</li>
+          <li data-lang="zh"><b>獎勵</b>:沿用 HIMLoco 的獎勵項(追蹤線/角速度命令、維持身高與姿態等),外加一個<mark class="m-method" data-t="METHOD/IDEA">barrier function 式獎勵</mark>促進平滑、減少突兀動作。</li>
+          <li data-lang="en"><b>Reward</b>: HIMLoco's reward terms (track linear/angular velocity commands, keep body height and orientation, etc.) plus a <mark class="m-method" data-t="METHOD/IDEA">barrier-function-based reward term</mark> for smooth, less aggressive motion.</li>
+          <li data-lang="zh"><b>特權觀測</b> \(o^e_t\)(只給 critic):機器人周圍地形高度場、外力、機身線速度等。</li>
+          <li data-lang="en"><b>Privileged observation</b> \(o^e_t\) (critic only): the terrain height field around the robot, external forces, base linear velocity, and more.</li>
+        </ul>
+        <p data-lang="zh" style="margin-top:10px">expert actor 與特權 critic 用 PPO 訓練(clip 0.2、GAE 0.95、\(\gamma=0.99\)、Adam lr \(10^{-3}\)):</p>
+        <p data-lang="en" style="margin-top:10px">The expert actor and privileged critic are trained with PPO (clip 0.2, GAE 0.95, \(\gamma=0.99\), Adam lr \(10^{-3}\)):</p>
+        <div class="eq">$$\mathcal L^{\text{PPO}}(\pi_e)=-\,\mathbb E_t\Big[\min\big(\rho_t\hat A_t,\ \mathrm{clip}(\rho_t,1-\epsilon,1+\epsilon)\hat A_t\big)\Big],\quad \rho_t=\frac{\pi_e(a_t\mid o_t,\hat v_t,y_t)}{\pi_{e,\text{old}}(a_t\mid o_t,\hat v_t,y_t)},\ \epsilon=0.2$$</div>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted)"><span class="add">[導讀補充]</span> 上式是標準 PPO 形式,論文只給出超參數;優勢 \(\hat A_t\) 由特權 critic \(V_e(o_t,o^e_t)\) 經 GAE 計算。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted)"><span class="add">[guide note]</span> The formula is standard PPO; the paper only gives the hyperparameters. The advantage \(\hat A_t\) comes from GAE on the privileged critic \(V_e(o_t,o^e_t)\).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Internal model:速度估測器 + 三種 Dreamer</span><span data-lang="en">Internal model: velocity estimator + three Dreamers</span></h3>
+        <p data-lang="zh">速度估測器 \(v_\phi:\mathcal O^M\to\mathbb R^3\) 從觀測歷史估機身速度。Dreamer 模組都包含<mark class="m-method" data-t="METHOD/IDEA">動力模型 \(d_\theta\)、克隆策略 \(\pi_\theta\)、獎勵模型 \(r_\theta\)、價值函數 \(V_\theta\)</mark>與一個選用的 encoder \(\alpha_\theta\);三個變體只差在「用不用 latent、看多長歷史」。</p>
+        <p data-lang="en">The velocity estimator \(v_\phi:\mathcal O^M\to\mathbb R^3\) estimates base velocity from the observation history. Every Dreamer has a <mark class="m-method" data-t="METHOD/IDEA">dynamics model \(d_\theta\), cloned policy \(\pi_\theta\), reward model \(r_\theta\), value function \(V_\theta\)</mark>, plus an optional encoder \(\alpha_\theta\); the three variants differ only in whether they use latents and how much history they see.</p>
+        <p data-lang="zh"><b>(a) No-Latent Module (NLM)</b> — 直接拿當前觀測 \(x_t=o_t\),以 \(d^{\text{NLM}}_\theta:\mathcal O\times\mathcal A\to\mathcal O\) 和 \(\pi^{\text{NLM}}_\theta:\mathcal O\to\mathcal A\) 自迴歸地夢出未來 \(H\) 步觀測(\(\tilde o\) 表示夢到的觀測):</p>
+        <p data-lang="en"><b>(a) No-Latent Module (NLM)</b> — takes the current observation \(x_t=o_t\) and autoregressively dreams the next \(H\) observations with \(d^{\text{NLM}}_\theta:\mathcal O\times\mathcal A\to\mathcal O\) and \(\pi^{\text{NLM}}_\theta:\mathcal O\to\mathcal A\) (\(\tilde o\) denotes a dreamed observation):</p>
+        <div class="eq">$$y^{\text{NLM}}_t=\Big\{\tilde o_{t:t+H}\ \Big|\ \tilde o_{k+1}=d^{\text{NLM}}_\theta\big(\tilde o_k,\ \pi^{\text{NLM}}_\theta(\tilde o_k)\big),\ \ \tilde o_t=o_t,\ \ \forall k=t,\dots,t+H-1\Big\}$$</div>
+        <p data-lang="zh">另有 \(r^{\text{NLM}}_\theta:\mathcal O\times\mathcal A\to\mathbb R\)、\(V^{\text{NLM}}_\theta:\mathcal O\to\mathbb R\)。因推論最簡單、表現又有競爭力,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">部署只用 NLM</mark>。</p>
+        <p data-lang="en">It also has \(r^{\text{NLM}}_\theta:\mathcal O\times\mathcal A\to\mathbb R\) and \(V^{\text{NLM}}_\theta:\mathcal O\to\mathbb R\). Being the simplest to run and competitive in performance, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">NLM is the only variant deployed</mark>.</p>
+        <p data-lang="zh"><b>(b) Partially-Latent Module (PLM)</b> — 輸入觀測歷史 \(x_t=o_{t-M:t}\),encoder \(\alpha^{\text{PLM}}_\theta:\mathcal O^M\to\mathbb R^q\) 把歷史壓成 latent \(z_t\);動力、獎勵、價值、策略都額外吃 \(z_k\) 與速度估計 \(v_k\):</p>
+        <p data-lang="en"><b>(b) Partially-Latent Module (PLM)</b> — takes an observation history \(x_t=o_{t-M:t}\); an encoder \(\alpha^{\text{PLM}}_\theta:\mathcal O^M\to\mathbb R^q\) compresses it into a latent \(z_t\); dynamics, reward, value and policy all additionally take \(z_k\) and the velocity estimate \(v_k\):</p>
+        <div class="eq">$$y^{\text{PLM}}_t=\Big\{(\tilde o_{t:t+H},\,z_t)\ \Big|\ \tilde o_{k+1}=d^{\text{PLM}}_\theta\big(\tilde o_k,z_k,v_k,\pi^{\text{PLM}}_\theta(\tilde o_k,z_k,v_k)\big),\ z_k=\alpha^{\text{PLM}}_\theta(\tilde o_{k-M:k}),\ v_k=v_\phi(\tilde o_{k-M:k}),\ \tilde o_t=o_t\Big\}$$</div>
+        <p data-lang="zh"><b>(c) Fully-Latent Module (FLM)</b> — 再把 PLM 夢到的未來也丟進同一個 encoder 壓縮,並設 \(M=H\) 以共用 encoder:</p>
+        <p data-lang="en"><b>(c) Fully-Latent Module (FLM)</b> — additionally passes PLM's dreamed future through the same encoder, with \(M=H\) so a single encoder suffices:</p>
+        <div class="eq">$$y^{\text{FLM}}_t=\big\{\alpha^{\text{PLM}}_\theta(\tilde o_{t:t+H}),\ \alpha^{\text{PLM}}_\theta(o_{t-H:t})\big\}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">作者的預期是 PLM/FLM 資訊更豐富、在強時間相依的環境更好,但計算更貴;實驗結果反而是 <mark class="m-result" data-t="RESULT/EVIDENCE">latent 沒有提升抗雜訊能力,FLM 最差</mark>(見 04)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The authors expected PLM/FLM to carry richer information and help where temporal dependence is strong, at higher compute cost; the experiments instead show <mark class="m-result" data-t="RESULT/EVIDENCE">latents do not improve noise robustness, and FLM is worst</mark> (see 04).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Internal model 的學習目標</span><span data-lang="en">Learning objectives of the internal model</span></h3>
+        <p data-lang="zh">論文以文字描述:速度估測器、動力模型、獎勵模型都用 <b>MSE</b>;encoder 用 HIMLoco 的<b>對比學習</b>;\(\pi_\theta\) <b>行為克隆</b> expert actor,\(V_\theta\) <b>監督式擬合</b>特權 critic。寫成式子(NLM 版):</p>
+        <p data-lang="en">The paper states these in words: velocity estimator, dynamics and reward models use <b>MSE</b>; the encoder uses HIMLoco-style <b>contrastive learning</b>; \(\pi_\theta\) <b>behavior-clones</b> the expert actor and \(V_\theta\) is <b>supervised to match</b> the privileged critic. Written out (NLM version):</p>
+        <div class="eq">$$\mathcal L_v=\big\|v_\phi(o_{t-M:t})-v_t\big\|_2^2,\qquad \mathcal L_d=\big\|d_\theta(o_t,a_t)-o_{t+1}\big\|_2^2,\qquad \mathcal L_r=\big(r_\theta(o_t,a_t)-r_t\big)^2$$</div>
+        <div class="eq">$$\mathcal L_\pi=\big\|\pi_\theta(o_t)-\pi_e(o_t,\hat v_t,y_t)\big\|_2^2,\qquad \mathcal L_V=\big(V_\theta(o_t)-V_e(o_t,o^e_t)\big)^2$$</div>
+        <p data-lang="zh" style="font-size:13px;color:var(--muted)"><span class="add">[導讀補充]</span> 論文沒寫出明確公式:\(\mathcal L_d\) 是單步 teacher-forcing 還是多步展開監督、\(\mathcal L_\pi\) 是 MSE 還是對數似然、\(y_t\) 是否對 actor 梯度截斷,皆未說明;上式是最自然的讀法。\(v_t\) 是模擬器中的真實機身速度。</p>
+        <p data-lang="en" style="font-size:13px;color:var(--muted)"><span class="add">[guide note]</span> The paper gives no explicit formulas: whether \(\mathcal L_d\) is one-step teacher-forced or multi-step rollout supervision, whether \(\mathcal L_\pi\) is MSE or log-likelihood, and whether \(y_t\) is gradient-stopped into the actor are all unstated; the above is the most natural reading. \(v_t\) is the true base velocity from the simulator.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">「共同依賴」是什麼意思</span><span data-lang="en">What "co-dependent" means</span></span>
+          <p data-lang="zh" style="margin-top:6px">expert actor 的輸入 \(y_t\) 是 Dreamer 夢出來的未來,而 Dreamer 用來做夢的 \(\pi_\theta\) 又是在模仿 expert actor。於是 <mark class="m-method" data-t="METHOD/IDEA">\(y_t\) 的品質取決於 \(\pi_\theta\),\(\pi_\theta\) 又取決於 \(\pi_e\)</mark>,兩者在單一階段同時學。作者聲稱這種回饋「促進探索、找到更好的步態」,也讓非對稱 actor-critic 隱式地把特權資訊編進 internal model 的輸出,不需 RMA 式的兩階段 adaptation 回歸。</p>
+          <p data-lang="en" style="margin-top:6px">The expert actor's input \(y_t\) is the future dreamed by the Dreamer, while the \(\pi_\theta\) the Dreamer dreams with is imitating the expert actor. So <mark class="m-method" data-t="METHOD/IDEA">the quality of \(y_t\) depends on \(\pi_\theta\), which depends on \(\pi_e\)</mark>, and both are learned simultaneously in one stage. The authors claim this loop "facilitates exploration for better locomotion," and that the asymmetric actor-critic implicitly pushes privileged information into the internal model outputs, with no RMA-style two-phase adaptation regression.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">部署:資料驅動的無限視野 MPC</span><span data-lang="en">Deployment: data-driven infinite-horizon MPC</span></h3>
+        <p data-lang="zh">在當前觀測 \(o_t\) 下,求最佳動作序列 \(a^*_{t:t+H}\) 與安全的 twist 命令 \(\nu^*_{\text{cmd}}:=(v^{\text{cmd}}_{xy},\omega^{\text{cmd}}_z)\):</p>
+        <p data-lang="en">At the current observation \(o_t\), solve for the optimal action sequence \(a^*_{t:t+H}\) and a safe twist command \(\nu^*_{\text{cmd}}:=(v^{\text{cmd}}_{xy},\omega^{\text{cmd}}_z)\):</p>
+        <div class="eq">$$\max_{\nu_{\text{cmd}},\ (a_t,\cdots,a_{t+H})}\ \sum_{k=0}^{H-1}\gamma^k\, r_\theta(\hat o_{t+k},a_{t+k})\;+\;\gamma^H V_\theta(\hat o_{t+H})$$
+        $$\text{s.t.}\quad c_k(\hat o_{t+k},a_{t+k},\nu_{\text{cmd}})\le b_k,\qquad \hat o_{t+k+1}=d_\theta(\hat o_{t+k},a_{t+k}),\quad \forall k=0,\cdots,H-1$$</div>
+        <p data-lang="zh">\(\hat o_t\) 是把 \(o_t\) 中「速度命令」那幾維<mark class="m-method" data-t="METHOD/IDEA">替換成最佳化變數 \(\nu_{\text{cmd}}\)</mark> 的觀測;為簡化,\(\nu_{\text{cmd}}\) 在整個視野內固定。前 \(H\) 步回報由學到的獎勵模型累積,<mark class="m-method" data-t="METHOD/IDEA">之後的無窮尾巴用 \(\gamma^H V_\theta\) 一次概括</mark>——這就是「無限視野」的來源。作者指出此問題是 NP-hard,選用取樣式求解以求速度。</p>
+        <p data-lang="en">\(\hat o_t\) is \(o_t\) with its velocity-command entries <mark class="m-method" data-t="METHOD/IDEA">replaced by the decision variable \(\nu_{\text{cmd}}\)</mark>; for simplicity \(\nu_{\text{cmd}}\) is held fixed over the horizon. The first \(H\) steps of return come from the learned reward model; <mark class="m-method" data-t="METHOD/IDEA">the infinite tail beyond is summarized once by \(\gamma^H V_\theta\)</mark> — the source of "infinite horizon." The authors note the problem is NP-hard and choose a sampling-based solver for speed.</p>
+        <h3 class="serif" style="font-size:16px;margin-top:16px"><span data-lang="zh">Algorithm 1:受約束 MPPI(每個控制步)</span><span data-lang="en">Algorithm 1: constrained MPPI (per control step)</span></h3>
+        <ol class="algo">
+          <li data-lang="zh"><b>Warm start</b>:\(t=0\) 時用 \(\pi_\theta\) 搭配 \(d_\theta\) 展開來初始化高斯參數 \((\mu,\sigma)\);之後每步沿用上一步的 \((\mu_{t-1},\sigma_{t-1})\)。</li>
+          <li data-lang="en"><b>Warm start</b>: at \(t=0\), initialize the Gaussian \((\mu,\sigma)\) by rolling out \(\pi_\theta\) with \(d_\theta\); afterwards reuse the previous step's \((\mu_{t-1},\sigma_{t-1})\).</li>
+          <li data-lang="zh"><b>取樣</b>(共 \(N=6\) 次迭代):用 \(\pi_\theta\) + \(d_\theta\) 收集 \(M_\pi=30\) 條「命令 + 動作」軌跡,再從 \(\mathcal N(\mu_{i-1},\sigma_{i-1})\) 抽 \(M=500\) 條,長度皆為 \(H=10\)。</li>
+          <li data-lang="en"><b>Sample</b> (for \(N=6\) iterations): collect \(M_\pi=30\) command-and-action trajectories with \(\pi_\theta\) + \(d_\theta\), plus \(M=500\) from \(\mathcal N(\mu_{i-1},\sigma_{i-1})\), all of length \(H=10\).</li>
+          <li data-lang="zh"><b>評分</b>:每條軌跡在 \(d_\theta\) 中展開,累積折扣獎勵與折扣約束成本,加終端價值並扣成本罰則(見下式)。</li>
+          <li data-lang="en"><b>Score</b>: roll each trajectory through \(d_\theta\), accumulate discounted reward and discounted constraint cost, add the terminal value and subtract the cost penalty (formula below).</li>
+          <li data-lang="zh"><b>可行性過濾</b>:只保留 \(C_j\le b\) 的軌跡進可行集 \(A^S_\tau\)。</li>
+          <li data-lang="en"><b>Feasibility filter</b>: keep only trajectories with \(C_j\le b\) in the feasible set \(A^S_\tau\).</li>
+          <li data-lang="zh"><b>精英 + 動量更新</b>:按回報排序取前 \(M_{\text{elite}}=60\) 條,擬合高斯,再以動量 \(\beta=0.95\) 混合舊參數。</li>
+          <li data-lang="en"><b>Elite + momentum update</b>: sort by return, take the top \(M_{\text{elite}}=60\), fit a Gaussian, then blend with the old parameters via momentum \(\beta=0.95\).</li>
+          <li data-lang="zh"><b>輸出</b>:\(\nu_{\text{cmd}}\) 與從 \(\mathcal N(\mu_N,\sigma_N)\) <b>取樣</b>的第一個動作。</li>
+          <li data-lang="en"><b>Output</b>: \(\nu_{\text{cmd}}\) and the first action <b>sampled</b> from \(\mathcal N(\mu_N,\sigma_N)\).</li>
+        </ol>
+        <div class="eq">$$R_j=\sum_{k=0}^{H-1}\gamma^k r_\theta(\hat o^{\,j}_{t+k},a^j_{t+k})+\gamma^H V_\theta(\hat o^{\,j}_{t+H})-\lambda C_j,\qquad C_j=\sum_{k=0}^{H-1}\gamma^k c(\hat o^{\,j}_{t+k},a^j_{t+k},\nu^j_{\text{cmd}})$$</div>
+        <div class="eq">$$(\mu_i,\sigma_i)=\beta\,(\mu_{\text{elite}},\sigma_{\text{elite}})+(1-\beta)\,(\mu_{i-1},\sigma_{i-1})$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">約束在這裡被處理了<b>兩次</b>:一次是回報中的軟罰則 \(-\lambda C_j\)(\(\lambda=1\)),一次是 \(C_j\le b\) 的硬過濾。<span class="add">[導讀補充]</span> Table II 列了溫度 \(T=0.5\),但 Algorithm 1 沒寫它用在哪;在超參數幾乎相同的 TD-MPC 中,溫度用來給精英加權:\(\Omega_j=\exp\!\big(T\,(R_j-\max_{j'}R_{j'})\big)\),\(\mu_{\text{elite}}=\sum_j\Omega_j\,\Gamma_j/\sum_j\Omega_j\)(\(\Gamma_j\) 為第 \(j\) 條軌跡的決策變數)。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Constraints are handled <b>twice</b>: once as a soft penalty \(-\lambda C_j\) in the return (\(\lambda=1\)), once as a hard filter \(C_j\le b\). <span class="add">[guide note]</span> Table II lists a temperature \(T=0.5\), but Algorithm 1 never says where it enters; in TD-MPC, whose hyperparameters are nearly identical, the temperature weights the elites: \(\Omega_j=\exp\!\big(T\,(R_j-\max_{j'}R_{j'})\big)\), \(\mu_{\text{elite}}=\sum_j\Omega_j\,\Gamma_j/\sum_j\Omega_j\) (\(\Gamma_j\) being trajectory \(j\)'s decision variables).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">規劃器超參數(Table II)與 TD-MPC 對照</span><span data-lang="en">Planner hyperparameters (Table II) vs TD-MPC</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">超參數</span><span data-lang="en">Hyperparameter</span></th><th>PIP-Loco</th><th><span data-lang="zh">TD-MPC 預設 <span class="add">[導讀補充]</span></span><span data-lang="en">TD-MPC default <span class="add">[guide note]</span></span></th></tr>
+          <tr><td><span data-lang="zh">視野</span><span data-lang="en">Horizon</span> \(H\)</td><td>10</td><td>5</td></tr>
+          <tr><td><span data-lang="zh">MPC 迭代數</span><span data-lang="en">MPC iterations</span> \(N\)</td><td>6</td><td>6</td></tr>
+          <tr><td><span data-lang="zh">高斯樣本數</span><span data-lang="en">Gaussian samples</span> \(M\)</td><td>500</td><td>512</td></tr>
+          <tr><td><span data-lang="zh">策略樣本數</span><span data-lang="en">Policy samples</span> \(M_\pi\)</td><td>30</td><td><span data-lang="zh">約 5%(~25)</span><span data-lang="en">about 5% (~25)</span></td></tr>
+          <tr><td><span data-lang="zh">精英數</span><span data-lang="en">Elites</span> \(M_{\text{elite}}\)</td><td>60</td><td>64</td></tr>
+          <tr><td><span data-lang="zh">折扣</span><span data-lang="en">Discount</span> \(\gamma\)</td><td>0.99</td><td>0.99</td></tr>
+          <tr><td><span data-lang="zh">約束權重</span><span data-lang="en">Constraint weight</span> \(\lambda\)</td><td>1.0</td><td>−</td></tr>
+          <tr><td><span data-lang="zh">動量</span><span data-lang="en">Momentum</span> \(\beta\)</td><td>0.95</td><td><span data-lang="zh">0.1(作用在舊均值上)</span><span data-lang="en">0.1 (on the old mean)</span></td></tr>
+          <tr><td><span data-lang="zh">溫度</span><span data-lang="en">Temperature</span> \(T\)</td><td>0.5</td><td>0.5</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:8px"><span class="add">[導讀補充]</span> 規劃器幾乎就是 TD-MPC 的 MPPI 照搬(PIP-Loco 新精英權重 0.95、舊值 0.05;TD-MPC 舊均值 0.1、新值 0.9,量級相近),差別在:<b>(1)</b> 在觀測空間而非 latent;<b>(2)</b> 多了約束罰則與可行性過濾;<b>(3)</b> 多了速度命令這個決策變數;<b>(4)</b> \(V_\theta\) 是從 PPO critic 蒸餾,不是用 TD 學的;<b>(5)</b> 只在部署時規劃。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:8px"><span class="add">[guide note]</span> The planner is essentially TD-MPC's MPPI transplanted (PIP-Loco puts 0.95 on the new elite fit and 0.05 on the old value; TD-MPC puts 0.1 on the old mean and 0.9 on the new one, a similar magnitude). Differences: <b>(1)</b> observation space, not latent; <b>(2)</b> an added constraint penalty and feasibility filter; <b>(3)</b> the velocity command as an extra decision variable; <b>(4)</b> \(V_\theta\) is distilled from the PPO critic, not TD-learned; <b>(5)</b> planning happens only at deployment.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(o_t,\ o^e_t\)</td><td><span data-lang="zh">本體觀測(關節、重力投影、命令、上步動作);特權觀測(地形高度、外力、真實線速度),只給 critic。</span><span data-lang="en">Proprioceptive observation (joints, gravity, command, last action); privileged observation (height field, external force, true linear velocity), critic only.</span></td></tr>
+          <tr><td>\(\hat v_t=v_\phi(o_{t-M:t})\)</td><td><span data-lang="zh">從長度 \(M\) 的觀測歷史估出的機身速度。</span><span data-lang="en">Base velocity estimated from an \(M\)-step observation history.</span></td></tr>
+          <tr><td>\(y_t\)</td><td><span data-lang="zh">Dreamer 的輸出(夢到的未來觀測及/或 latent),當 expert actor 的額外輸入。</span><span data-lang="en">Dreamer output (dreamed future observations and/or latents), an extra input to the expert actor.</span></td></tr>
+          <tr><td>\(\tilde o,\ \hat o\)</td><td><span data-lang="zh">\(\tilde o\):訓練時夢到的觀測;\(\hat o\):部署時把命令換成 \(\nu_{\text{cmd}}\) 的觀測。</span><span data-lang="en">\(\tilde o\): observations dreamed in training; \(\hat o\): deployment observations with the command replaced by \(\nu_{\text{cmd}}\).</span></td></tr>
+          <tr><td>\(\pi_e,\ V_e\)</td><td><span data-lang="zh">PPO 訓練的 expert actor 與特權 critic;部署時不用。</span><span data-lang="en">PPO-trained expert actor and privileged critic; unused at deployment.</span></td></tr>
+          <tr><td>\(\pi_\theta,\ V_\theta\)</td><td><span data-lang="zh">克隆策略(只看 \(o\))與蒸餾價值(只看 \(o\));部署時提供提案軌跡與終端價值。</span><span data-lang="en">Cloned policy (sees only \(o\)) and distilled value (sees only \(o\)); supply proposal trajectories and the terminal value at deployment.</span></td></tr>
+          <tr><td>\(d_\theta,\ r_\theta\)</td><td><span data-lang="zh">觀測空間動力模型與獎勵模型,MPC 的「模型」與「目標」。</span><span data-lang="en">Observation-space dynamics and reward models: the MPC "model" and "objective."</span></td></tr>
+          <tr><td>\(\nu_{\text{cmd}}\)</td><td><span data-lang="zh">twist 命令 \((v_x,v_y,\omega_z)\);部署時是最佳化變數,目標命令為 \(\nu^{\text{tgt}}_{\text{cmd}}\)。</span><span data-lang="en">Twist command \((v_x,v_y,\omega_z)\); a decision variable at deployment, with target \(\nu^{\text{tgt}}_{\text{cmd}}\).</span></td></tr>
+          <tr><td>\(c_k\le b_k,\ \lambda\)</td><td><span data-lang="zh">每步約束與門檻(論文未列具體內容,只舉例關節極限、機身穩定);\(\lambda\) 為罰則權重。</span><span data-lang="en">Per-step constraints and bounds (not enumerated; joint limits and body stability are given as examples); \(\lambda\) weights the penalty.</span></td></tr>
+          <tr><td>\(H,\ M,\ N\)</td><td><span data-lang="zh">做夢/規劃視野;觀測歷史長度(Algorithm 1 中 \(M\) 另指高斯樣本數);MPC 迭代數。</span><span data-lang="en">Dream/planning horizon; history length (in Algorithm 1, \(M\) also denotes the Gaussian sample count); MPC iterations.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">先讓 RL 學會走,順便讓它「記下」一個能預測下一刻身體狀態的小模型、一個打分器和一個「這狀態值多少」的估計;上場時每一步都在腦中試走 530 條十步長的未來,把會撞關節極限或翻身的剔掉,挑最好的那條走第一步。</span>
+        <span data-lang="en">First let RL learn to walk, and have it "jot down" a small model that predicts the next body state, a scorer, and an estimate of "what this state is worth"; at run time, each step mentally tries 530 ten-step futures, discards those that hit joint limits or tip over, and takes the first step of the best one.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為什麼訓練時不規劃?</span><span data-lang="en">Why no MPC during training?</span></span>
+        <span data-lang="zh">作者在 III-A.1 自問自答:LOOP、MoPAC、TD-MPC 那種「訓練時 MPC 與 RL 互助」的方法雖然樣本效率最好,但<mark class="m-problem" data-t="PROBLEM/GAP">在大規模平行環境中每步解 MPC 會拖垮推論速度、吃光記憶體、拉長牆鐘時間</mark>,所以把規劃全部延後到部署。</span>
+        <span data-lang="en">The authors pose and answer this in III-A.1: methods where MPC and RL help each other during training (LOOP, MoPAC, TD-MPC) are the most sample-efficient, but <mark class="m-problem" data-t="PROBLEM/GAP">solving MPC every step in massively parallel envs kills inference speed, exhausts memory and stretches wall-clock time</mark>, so planning is deferred entirely to deployment.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為什麼部署選 NLM?</span><span data-lang="en">Why deploy NLM?</span></span>
+        <span data-lang="zh">三個理由:不需歷史與 latent,<b>實作最簡單</b>;推論最便宜;而且<mark class="m-assume" data-t="ASSUMPTION/CLAIM">latent 規劃會損害可解釋性、限制加入領域約束的能力</mark>。約束要寫在「看得懂的量」上,模型就得在觀測空間。</span>
+        <span data-lang="en">Three reasons: no history or latents, so <b>simplest to implement</b>; cheapest inference; and <mark class="m-assume" data-t="ASSUMPTION/CLAIM">latent-space planning compromises interpretability and limits domain-specific constraints</mark>. To write constraints on "readable" quantities, the model must live in observation space.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意:部署的不是 expert actor</span><span data-lang="en">Note: the expert actor is not what runs</span></div>
+        <span data-lang="zh">expert actor \(\pi_e\) 看 \(o_t,\hat v_t,y_t\);部署的規劃器用的是<b>只看單幀 \(o_t\) 的克隆策略</b> \(\pi_\theta\) 加高斯擾動。終端價值 \(V_\theta\) 也是 <mark class="m-limit" data-t="LIMITATION/FUTURE">\(\pi_e\) 的 on-policy 價值</mark>——規劃器偏離 \(\pi_e\) 越多,\(V_\theta\) 與 \(d_\theta\) 就越不可靠。作者在結論中承認這是關鍵限制。</span>
+        <span data-lang="en">The expert actor \(\pi_e\) sees \(o_t,\hat v_t,y_t\); the deployed planner uses a <b>cloned policy \(\pi_\theta\) that sees only the single frame \(o_t\)</b>, plus Gaussian perturbations. The terminal value \(V_\theta\) is also <mark class="m-limit" data-t="LIMITATION/FUTURE">the on-policy value of \(\pi_e\)</mark> — the more the planner deviates from \(\pi_e\), the less reliable \(V_\theta\) and \(d_\theta\) become. The authors admit this as the key limitation.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">算力估計</span><span data-lang="en">Compute estimate</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> 每個控制步:\(N\times(M+M_\pi)\times H=6\times530\times10=31{,}800\) 次動力模型前向,外加同量的獎勵評估;其中有 \(6\times10=60\) 次<b>必須串行</b>的批次呼叫。要達到 300–500 Hz,每次批次呼叫只能花約 33–55 µs——這需要相當好的板載加速器,但論文沒說是哪台電腦。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> Per control step: \(N\times(M+M_\pi)\times H=6\times530\times10=31{,}800\) dynamics-model forward passes plus as many reward evaluations, with \(6\times10=60\) batched calls that <b>must run sequentially</b>. Hitting 300-500 Hz leaves roughly 33-55 µs per batched call — that needs a capable onboard accelerator, yet the paper never names the computer.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實驗設定</span><span data-lang="en">Setup</span></h3>
+        <p data-lang="zh">Isaac Gym 上的開源 Unitree Go1 環境,4096 台平行、多地形、domain randomization + curriculum;PyTorch 訓練,AMD Threadripper Pro 5995WX(128 核)+ RTX 3080。部署時規劃器以 <b>Jax</b> 跑在板載電腦上,<mark class="m-result" data-t="RESULT/EVIDENCE">推論頻率 300–500 Hz</mark>。Table III 的數字是 <b>2k 次迭代後、5 個 seeds</b> 的最終回報。</p>
+        <p data-lang="en">Open-source Unitree Go1 environment on Isaac Gym, 4096 parallel robots, multi-terrain, domain randomization + curriculum; PyTorch training on an AMD Threadripper Pro 5995WX (128 cores) + RTX 3080. At deployment the planner runs in <b>Jax</b> on an onboard computer at <mark class="m-result" data-t="RESULT/EVIDENCE">300-500 Hz inference</mark>. Table III numbers are final returns <b>after 2k iterations over 5 seeds</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Table IIIa:做夢視野 \(H\) 的影響(最終回報 ↑)</span><span data-lang="en">Table IIIa: effect of dream horizon \(H\) (final return ↑)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法 \ 視野</span><span data-lang="en">Method \ horizon</span></th><th>\(H=1\)</th><th>\(H=5\)</th><th>\(H=10\)</th></tr>
+          <tr><td>HIMLoco</td><td>8.59 ± 0.30</td><td>−</td><td>−</td></tr>
+          <tr><td>PIP-Loco w/ NLM</td><td class="win">9.52 ± 0.38</td><td>9.69 ± 0.28</td><td class="win">9.58 ± 0.60</td></tr>
+          <tr><td>PIP-Loco w/ PLM</td><td>9.37 ± 0.62</td><td class="win">9.75 ± 0.54</td><td>8.80 ± 0.29</td></tr>
+          <tr><td>PIP-Loco w/ FLM</td><td class="bad">8.22 ± 0.38</td><td class="bad">8.13 ± 0.83</td><td>8.84 ± 0.48</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">NLM 與 PLM 在各視野都<mark class="m-result" data-t="RESULT/EVIDENCE">勝過 HIMLoco 約 1 分</mark>(PLM \(H=10\) 只多 0.2)。但 <mark class="m-limit" data-t="LIMITATION/FUTURE">FLM 在 \(H=1,5\) 反而低於 HIMLoco</mark>,與圖說「PIP-Loco consistently outperforms HIMLoco」不符;且 NLM 的 \(H=1/5/10\) 差異都在一個標準差內——<b>「夢得更遠」本身的貢獻並不顯著</b>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">NLM and PLM <mark class="m-result" data-t="RESULT/EVIDENCE">beat HIMLoco by about 1 point</mark> at every horizon (PLM at \(H=10\) by only 0.2). But <mark class="m-limit" data-t="LIMITATION/FUTURE">FLM at \(H=1,5\) falls below HIMLoco</mark>, contradicting the caption's "PIP-Loco consistently outperforms HIMLoco"; and NLM's \(H=1/5/10\) differences are all within one standard deviation — <b>"dreaming farther" contributes little by itself</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Table IIIb:訓練雜訊下的強韌性(最終回報 ↑,\(H=5\))</span><span data-lang="en">Table IIIb: robustness to training noise (final return ↑, \(H=5\))</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">方法 \ 雜訊</span><span data-lang="en">Method \ noise</span></th><th><span data-lang="zh">低</span><span data-lang="en">Low</span></th><th><span data-lang="zh">中</span><span data-lang="en">Medium</span></th><th><span data-lang="zh">高</span><span data-lang="en">High</span></th></tr>
+          <tr><td>HIMLoco</td><td>8.96 ± 0.24</td><td>8.79 ± 0.72</td><td class="bad">1.73 ± 5.88</td></tr>
+          <tr><td>PIP-Loco w/ NLM</td><td>9.62 ± 0.30</td><td class="win">8.94 ± 0.48</td><td class="win">8.16 ± 1.13</td></tr>
+          <tr><td>PIP-Loco w/ PLM</td><td class="win">9.84 ± 0.55</td><td>8.23 ± 0.33</td><td>7.99 ± 0.37</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">最有說服力的一格是<mark class="m-result" data-t="RESULT/EVIDENCE">高雜訊下 HIMLoco 1.73 ± 5.88 vs NLM 8.16</mark>。<span class="add">[導讀補充]</span> 標準差 5.88 遠大於平均,暗示 HIMLoco 有部分 seed 完全訓練失敗,而非整體均勻變差。中、高雜訊下 NLM 都勝 PLM,支持作者「<b>latent 不提升抗雜訊能力</b>」的結論。但三種雜訊等級的具體幅度論文沒有交代。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">The most convincing cell is <mark class="m-result" data-t="RESULT/EVIDENCE">HIMLoco 1.73 ± 5.88 vs NLM 8.16 under high noise</mark>. <span class="add">[guide note]</span> A standard deviation of 5.88, far above the mean, suggests some HIMLoco seeds failed outright rather than all degrading evenly. NLM beats PLM at medium and high noise, supporting the claim that <b>latents do not improve noise robustness</b>. The actual magnitudes of the three noise levels are never specified.</p>
+        <figure class="fig"><img src="figs/Shirwatkar2024/fig3_training_curve.png" alt="Figure 3 training curve">
+          <figcaption data-lang="zh"><b>Fig.3</b> 每回合平均回報 vs 訓練迭代(HIMLoco 虛線,NLM \(H=1\) 橘、\(H=5\) 綠)。注意:<b>前 ~1000 次迭代三條線幾乎重疊</b>,PIP-Loco 是在後半段才拉開到約 9.5–10 vs 8.5;且到 2000 次時曲線仍在上升,<b>沒有收斂</b>——比的是同預算下的學習速度,不是最終上限。<span class="add">[導讀讀圖]</span></figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Mean episode return vs training iteration (HIMLoco dashed, NLM \(H=1\) orange, \(H=5\) green). Note: <b>the three curves nearly overlap for the first ~1000 iterations</b>; PIP-Loco pulls ahead only in the second half, to about 9.5-10 vs 8.5; and the curves are still rising at 2000, <b>not converged</b> — this compares learning speed under a fixed budget, not the final ceiling. <span class="add">[guide plot reading]</span></figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融怎麼讀</span><span data-lang="en">Reading the ablations</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">變動</span><span data-lang="en">Change</span></th><th><span data-lang="zh">代價 / 收益</span><span data-lang="en">Cost / gain</span></th><th><span data-lang="zh">證明了什麼</span><span data-lang="en">What it shows</span></th></tr>
+          <tr><td><span data-lang="zh">HIMLoco → NLM \((H=1)\)</span><span data-lang="en">HIMLoco → NLM \((H=1)\)</span></td><td class="ok">+0.93</td><td><span data-lang="zh">把一步 latent 換成「顯式的未來觀測預測」(且只用單幀歷史)就有增益。<span class="add">[導讀補充] 但同時也換了獎勵(多了 barrier 項?)與輸入,增益來源未拆開。</span></span><span data-lang="en">Swapping a one-step latent for "explicit future-observation prediction" (with single-frame history) already helps. <span class="add">[guide note] But reward (an added barrier term?) and inputs change too; the source of the gain is not isolated.</span></span></td></tr>
+          <tr><td><span data-lang="zh">NLM \(H=1\to5\to10\)</span><span data-lang="en">NLM \(H=1\to5\to10\)</span></td><td>+0.17 / −0.11</td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">在雜訊範圍內</mark>;更長視野不是訓練增益的主因。</span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">Within noise</mark>; a longer horizon is not the main driver of the training gain.</span></td></tr>
+          <tr><td><span data-lang="zh">NLM → PLM(加 latent + 6 步歷史)</span><span data-lang="en">NLM → PLM (add latent + 6-step history)</span></td><td><span data-lang="zh">\(H=5\) 微升,\(H=10\) 降 0.78;中/高雜訊降</span><span data-lang="en">slight gain at \(H=5\), −0.78 at \(H=10\); worse at med/high noise</span></td><td><span data-lang="zh">latent 不穩定、不抗雜訊。</span><span data-lang="en">Latents are unstable and do not help against noise.</span></td></tr>
+          <tr><td><span data-lang="zh">PLM → FLM(未來也壓進 latent)</span><span data-lang="en">PLM → FLM (compress future into latent too)</span></td><td class="bad"><span data-lang="zh">−1.1 ~ −1.6(\(H=1,5\))</span><span data-lang="en">−1.1 to −1.6 (\(H=1,5\))</span></td><td><span data-lang="zh">把未來全部壓成 latent 反而傷害;支持「在觀測空間做夢」。</span><span data-lang="en">Compressing the whole future into a latent hurts; supports "dream in observation space."</span></td></tr>
+          <tr><td><span data-lang="zh">去掉速度估測</span><span data-lang="en">Remove velocity estimation</span></td><td>—</td><td><span data-lang="zh">作者稱「<mark class="m-assume" data-t="ASSUMPTION/CLAIM">機身速度估測對整體表現至關重要</mark>」,但<b>沒有給數字</b>。</span><span data-lang="en">The authors say <mark class="m-assume" data-t="ASSUMPTION/CLAIM">base-velocity estimation is critical to overall performance</mark>, but <b>give no numbers</b>.</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">規劃的好處:極端命令下的 10 秒模擬(Fig.5)</span><span data-lang="en">Advantage of planning: a 10 s sim run under extreme commands (Fig.5)</span></h3>
+        <p data-lang="zh">目標命令 \(v^{\text{cmd}}_x=2.0\) m/s、\(v^{\text{cmd}}_y=2.0\) m/s、\(\omega^{\text{cmd}}_z=0.5\) rad/s。比較對象是<b>不規劃的克隆策略 \(\pi_\theta\)</b> vs Algorithm 1。作者描述:規劃<mark class="m-result" data-t="RESULT/EVIDENCE">同時最佳化動作與速度命令,減少姿態偏差、保持機身穩定,關節角觸及約束邊界的峰值更低</mark>。</p>
+        <p data-lang="en">Target command \(v^{\text{cmd}}_x=2.0\) m/s, \(v^{\text{cmd}}_y=2.0\) m/s, \(\omega^{\text{cmd}}_z=0.5\) rad/s. The comparison is the <b>cloned policy \(\pi_\theta\) without planning</b> vs Algorithm 1. The authors report that planning <mark class="m-result" data-t="RESULT/EVIDENCE">optimizes actions and velocity commands together, reducing orientation deviation, keeping the base stable, and lowering joint-angle peaks at the constraint bounds</mark>.</p>
+        <figure class="fig"><img src="figs/Shirwatkar2024/fig5_planning_vs_none.png" alt="Figure 5 planning vs no planning" style="max-width:520px;margin:0 auto">
+          <figcaption data-lang="zh"><b>Fig.5</b> 上:roll/pitch,綠 = 規劃、紅 = 不規劃;中:規劃器輸出的速度命令(橘)vs 目標(黑虛線);下:四個關節角與邊界。<span class="add">[導讀讀圖]</span> 看三件事:(1) 不規劃時 roll 峰值約 25–29°,規劃後大多壓在約 12° 以內,pitch 也從約 ±15° 收到約 ±5°;(2) <b>規劃器把命令調低了</b>——\(v_x\) 多在 1.5–1.8 m/s、\(\omega_z\) 前幾秒從 0 慢慢爬到約 0.4,都低於目標;(3) FL/RL calf 的紅線較常碰到下界,綠線較少。換言之,穩定性的改善有一部分可能<b>單純來自「跑慢一點」</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> Top: roll/pitch, green = planning, red = no planning; middle: velocity commands output by the planner (orange) vs target (black dashed); bottom: four joint angles with bounds. <span class="add">[guide plot reading]</span> Look for three things: (1) without planning roll peaks at about 25-29°, with planning it mostly stays within about 12°, and pitch shrinks from about ±15° to about ±5°; (2) <b>the planner lowers the commands</b> — \(v_x\) mostly 1.5-1.8 m/s, \(\omega_z\) ramps slowly from 0 to about 0.4 in the first seconds, all below target; (3) the red FL/RL calf traces hit the lower bound more often than the green ones. In other words, part of the stability gain may <b>simply come from "going slower."</b></figcaption></figure>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">作者強調:有了規劃,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">可在部署時即時增刪約束、重寫獎勵/成本而不必重訓</mark>,這是 MPC 的關鍵特性、RL 足式控制一直缺的;並把避障與導航約束列為未來工作。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The authors stress that with planning one <mark class="m-assume" data-t="ASSUMPTION/CLAIM">can add/remove constraints and reformulate rewards/costs in real time without retraining</mark> — a key MPC trait long missing from RL legged control — and list obstacle-avoidance and navigation constraints as future work.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實機:Go1 走下 45 cm 落差(Fig.4)</span><span data-lang="en">Hardware: Go1 stepping down a 45 cm drop (Fig.4)</span></h3>
+        <p data-lang="zh">實機測試涵蓋<b>斜坡、碎石、樓梯</b>(結果主要在影片中)。論文唯一的實機定量圖是一次 45 cm 落差:<mark class="m-result" data-t="RESULT/EVIDENCE">正常行走時姿態平穩,落下時 pitch/roll 大幅偏離,隨後調整並恢復穩定步行</mark>。</p>
+        <p data-lang="en">Hardware tests cover <b>slopes, gravel and stairs</b> (results mostly in the video). The paper's only quantitative hardware plot is a single 45 cm drop: <mark class="m-result" data-t="RESULT/EVIDENCE">orientation is steady while walking, deviates sharply in pitch/roll at the drop, then adjusts and recovers stable walking</mark>.</p>
+        <figure class="fig"><img src="figs/Shirwatkar2024/fig4_stepdown_hw.png" alt="Figure 4 step-down hardware">
+          <figcaption data-lang="zh"><b>Fig.4</b> 實機 Go1 走下 45 cm 台階:四個階段 Normal Walk(綠)→ Step(紅)→ Adaptation(橘)→ Recovery(綠),下方是機身 pitch/roll。<span class="add">[導讀讀圖]</span> 落下瞬間 pitch 衝到約 60°,約 1 秒內收回、約 2.5 秒內回到平穩。注意這張圖<b>沒有對照組</b>(沒有不規劃、沒有 HIMLoco、沒有成功率),只能說明「這套系統做得到」,不能說明「規劃讓它做得更好」。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> A real Go1 stepping down a 45 cm ledge: four phases Normal Walk (green) → Step (red) → Adaptation (orange) → Recovery (green), with base pitch/roll below. <span class="add">[guide plot reading]</span> Pitch spikes to about 60° at the drop, comes back within about 1 s and settles within about 2.5 s. Note the plot has <b>no comparison</b> (no no-planning run, no HIMLoco, no success rate); it shows the system "can do it," not that planning "does it better."</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實驗證明了什麼、沒證明什麼</span><span data-lang="en">What the experiments do and do not prove</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">有證據</span><span data-lang="en">Supported</span></th><th><span data-lang="zh">證據不足或未測</span><span data-lang="en">Weak or untested</span></th></tr>
+          <tr><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">加上觀測空間做夢的 internal model,訓練回報(同 2k 迭代預算)高於 HIMLoco,且高雜訊下不崩</mark>。</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">With an observation-space dreaming internal model, training return (same 2k-iteration budget) exceeds HIMLoco and does not collapse under high noise</mark>.</span></td><td><span data-lang="zh"><mark class="m-limit" data-t="LIMITATION/FUTURE">規劃相對於策略的增益</mark>:只有 1 段 10 秒模擬、無統計、對照是 \(\pi_\theta\) 而非 \(\pi_e\)。</span><span data-lang="en"><mark class="m-limit" data-t="LIMITATION/FUTURE">Planning gain over the policy</mark>: one 10 s sim run, no statistics, compared against \(\pi_\theta\) rather than \(\pi_e\).</span></td></tr>
+          <tr><td><span data-lang="zh">簡單的 NLM 不輸、甚至勝過 latent 變體。</span><span data-lang="en">The simple NLM matches or beats latent variants.</span></td><td><span data-lang="zh">實機上的約束滿足率、跌倒率、追蹤誤差,以及與任何 baseline 的實機比較。</span><span data-lang="en">Hardware constraint satisfaction, fall rate, tracking error, and any hardware baseline comparison.</span></td></tr>
+          <tr><td><span data-lang="zh">取樣式 MPC 可在板載以 300–500 Hz 執行。</span><span data-lang="en">The sampling MPC runs onboard at 300-500 Hz.</span></td><td><span data-lang="zh">「部署時改約束不需重訓」這個主張的實際示範。</span><span data-lang="en">An actual demonstration of "change constraints at deployment without retraining."</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">定量證據集中在「<b>internal model 讓訓練更好</b>」(Table III);「<b>規劃讓部署更安全</b>」這個論文標題級主張,只有 Fig.5 的單次模擬與 Fig.4 的無對照實機圖支撐。</span>
+        <span data-lang="en">The quantitative evidence is about "<b>the internal model makes training better</b>" (Table III); the title-level claim "<b>planning makes deployment safer</b>" rests only on Fig.5's single sim run and Fig.4's uncontrolled hardware plot.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">Table III 不是規劃的成績</span><span data-lang="en">Table III is not a planning score</span></div>
+        <span data-lang="zh">Table III 是<b>訓練中 expert actor 的回報</b>,此時<mark class="m-assume" data-t="ASSUMPTION/CLAIM">根本沒有規劃器</mark>(訓練不跑 MPC)。它測的是「Dreamer 輸出當 actor 輸入」的效果,與部署時的 MPPI 無關。</span>
+        <span data-lang="en">Table III reports <b>the expert actor's return during training</b>, when <mark class="m-assume" data-t="ASSUMPTION/CLAIM">there is no planner at all</mark> (training runs no MPC). It measures the effect of "Dreamer output as actor input," unrelated to deployment-time MPPI.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">圖說與表格不一致</span><span data-lang="en">Caption vs table mismatch</span></span>
+        <span data-lang="zh">Table IIIa 圖說稱「NLM \(H=5\) 回報最高且變異最小」,但表中 \(H=5\) 最高的是 <b>PLM 9.75</b>(NLM 9.69 只是變異最小 0.28);「consistently outperforms HIMLoco」也被 FLM 的 8.22/8.13 反駁。讀這篇要以表格數字為準。</span>
+        <span data-lang="en">Table IIIa's caption says "NLM \(H=5\) achieves the highest return with the least variance," but the highest at \(H=5\) is <b>PLM 9.75</b> (NLM 9.69 merely has the lowest variance, 0.28); "consistently outperforms HIMLoco" is also contradicted by FLM's 8.22/8.13. Trust the table numbers.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">命令降速的混淆</span><span data-lang="en">slower-command confound</span></span><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">對 \(\pi_e\) 呢?</span><span data-lang="en">vs \(\pi_e\)?</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">板載算力</span><span data-lang="en">onboard compute</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>規劃到底加了多少?證據太薄。</b> 規劃的價值是全文核心,但只有 <mark class="m-limit" data-t="LIMITATION/FUTURE">一段 10 秒、單一 seed、單一命令的模擬</mark>,沒有統計、沒有約束違反次數、沒有追蹤誤差。更麻煩的是 Fig.5 顯示<b>規劃器把線速度命令降了約 15–25%、角速度降得更多</b> <span class="add">[導讀讀圖]</span>,而不規劃的 \(\pi_\theta\) 被要求跑滿 2.0/2.0/0.5——穩定性改善有多少來自「規劃」、多少來自「跑得比較慢」,無法分辨。</li>
+          <li data-lang="en"><b>How much does planning add? The evidence is thin.</b> Planning is the paper's centerpiece, yet it is backed by <mark class="m-limit" data-t="LIMITATION/FUTURE">one 10 s, single-seed, single-command simulation</mark> with no statistics, no constraint-violation counts, no tracking error. Worse, Fig.5 shows <b>the planner cut the linear-velocity commands by about 15-25%, and the yaw rate by more</b> <span class="add">[guide plot reading]</span>, while the no-planning \(\pi_\theta\) was asked to run the full 2.0/2.0/0.5 — how much of the stability comes from "planning" versus "running slower" cannot be told apart.</li>
+          <li data-lang="zh"><b>比錯了對照組。</b> 規劃器的對照是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">只看單幀 \(o_t\) 的克隆策略 \(\pi_\theta\)</mark>,而不是訓練出來、看得到 \(\hat v_t\) 與 \(y_t\) 的 expert actor \(\pi_e\)。\(\pi_\theta\) 是被刻意弱化的學生,它被規劃器救回來不代表規劃器勝過真正最強的策略。</li>
+          <li data-lang="en"><b>The wrong control group.</b> The planner is compared with <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the cloned policy \(\pi_\theta\), which sees only the single frame \(o_t\)</mark>, not the trained expert actor \(\pi_e\) that sees \(\hat v_t\) and \(y_t\). \(\pi_\theta\) is a deliberately weakened student; being rescued by the planner does not show the planner beats the strongest policy.</li>
+          <li data-lang="zh"><b>Table III 是訓練曲線,不是部署成績;且未收斂。</b> 2k 次迭代時曲線仍在上升,前 1000 次三者重疊。比較的是同預算學習速度。另外 HIMLoco 的「低雜訊」8.96 與 IIIa 的 8.59 不同,兩表設定的差異沒有說明;<mark class="m-limit" data-t="LIMITATION/FUTURE">雜訊等級的數值也沒給</mark>。</li>
+          <li data-lang="en"><b>Table III is a training curve, not deployment performance, and is unconverged.</b> Curves still rise at 2k iterations and overlap for the first 1000; this compares learning speed under one budget. HIMLoco's "low noise" 8.96 also differs from IIIa's 8.59 with no explanation of the setup difference, and <mark class="m-limit" data-t="LIMITATION/FUTURE">the noise levels are never quantified</mark>.</li>
+          <li data-lang="zh"><b>Baseline 太少,增益來源未拆開。</b> 唯一的學習 baseline 是 HIMLoco;沒比 DreamWaQ、RMA,沒比任何物理模型 MPC,也沒比「策略 + 簡單安全濾波/命令限幅」這種便宜替代方案。PIP-Loco 又額外加了 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">barrier function 獎勵項</mark>——HIMLoco baseline 是否用同一獎勵?若否,回報數字根本不可比。</li>
+          <li data-lang="en"><b>Too few baselines; the gain is not decomposed.</b> The only learned baseline is HIMLoco; there is no DreamWaQ or RMA, no physics-model MPC, and no cheap alternative like "policy + simple safety filter / command clipping." PIP-Loco also adds a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">barrier-function reward term</mark> — did the HIMLoco baseline use the same reward? If not, the returns are not comparable.</li>
+          <li data-lang="zh"><b>約束沒有被寫出來。</b> \(c_k\) 與 \(b_k\) 的具體內容(哪些關節、哪個姿態上限、門檻多少)<mark class="m-limit" data-t="LIMITATION/FUTURE">全文未列</mark>;目標命令 \(\nu^{\text{tgt}}_{\text{cmd}}\) 怎麼進入目標函數也沒交代。<span class="add">[導讀補充]</span> 若獎勵是「追蹤命令」而命令本身是決策變數,規劃器理論上可以選一個很容易追的命令;必須有某個項把 \(\nu_{\text{cmd}}\) 拉回目標,論文沒說是什麼。</li>
+          <li data-lang="en"><b>The constraints are never written down.</b> The concrete \(c_k\) and \(b_k\) (which joints, which attitude bound, what threshold) are <mark class="m-limit" data-t="LIMITATION/FUTURE">not listed anywhere</mark>, nor is how the target command \(\nu^{\text{tgt}}_{\text{cmd}}\) enters the objective. <span class="add">[guide note]</span> If the reward is "track the command" and the command is a decision variable, the planner could in principle pick an easy-to-track command; some term must pull \(\nu_{\text{cmd}}\) back toward the target, and the paper does not say what.</li>
+          <li data-lang="zh"><b>實機範圍很窄。</b> 只有一台 Go1;唯一的實機定量圖(45 cm 落差)<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有對照組、沒有成功率、沒有重複次數</mark>;斜坡、碎石、樓梯只在影片。無法得知實機上規劃 vs 不規劃的差別。</li>
+          <li data-lang="en"><b>Narrow hardware scope.</b> One Go1 only; the single quantitative hardware plot (45 cm drop) has <mark class="m-limit" data-t="LIMITATION/FUTURE">no control group, no success rate, no repeat count</mark>; slopes, gravel and stairs are video-only. The hardware difference between planning and no planning is unknown.</li>
+          <li data-lang="zh"><b>板載算力不透明。</b> 每步約 31,800 次模型前向、60 次串行批次呼叫 <span class="add">[導讀補充]</span>,宣稱 300–500 Hz,卻<mark class="m-limit" data-t="LIMITATION/FUTURE">沒說是哪台板載電腦</mark>(Go1 內建的 Jetson?外掛筆電?),沒有延遲分解,也沒做 \(N, M, H\) 縮減時的效能取捨。這直接影響方法能否在一般平台上複製。</li>
+          <li data-lang="en"><b>Opaque onboard compute.</b> About 31,800 model forward passes and 60 sequential batched calls per step <span class="add">[guide note]</span>, claimed at 300-500 Hz, yet <mark class="m-limit" data-t="LIMITATION/FUTURE">the onboard computer is never named</mark> (Go1's built-in Jetson? an external laptop?), with no latency breakdown and no trade-off study as \(N, M, H\) shrink. That decides whether the method transfers to ordinary platforms.</li>
+          <li data-lang="zh"><b>模型與價值的分佈偏移。</b> \(V_\theta\) 擬合的是 \(\pi_e\) 的 on-policy 價值,\(d_\theta\) 也只在 \(\pi_e\) 產生的資料上訓練;規劃器正是要「偏離策略」才有意義,一偏離就進入模型沒見過的區域。<span class="add">[導讀補充]</span> 此外 NLM 只用單幀 \(o_t\) 預測下一幀,而 \(o_t\) 不含機身線速度,這在 POMDP 中並不 Markov——\(d_\theta\) 的多步預測誤差勢必累積,論文沒報任何模型預測誤差。</li>
+          <li data-lang="en"><b>Distribution shift in model and value.</b> \(V_\theta\) fits the on-policy value of \(\pi_e\), and \(d_\theta\) is trained only on \(\pi_e\)-generated data; the planner is only meaningful when it deviates from the policy, and deviating lands where the model has not been. <span class="add">[guide note]</span> Moreover, NLM predicts the next frame from the single frame \(o_t\), which lacks base linear velocity — not Markov in a POMDP — so multi-step errors of \(d_\theta\) must compound, and the paper reports no model prediction error at all.</li>
+          <li data-lang="zh"><b>可複現性。</b> 沒有網路尺寸、沒有 \(d_\theta\) 的訓練方式(單步或多步)、沒有約束定義、文中無程式碼連結(只有專案頁)。</li>
+          <li data-lang="en"><b>Reproducibility.</b> No network sizes, no account of how \(d_\theta\) is trained (one-step or multi-step), no constraint definitions, and no code link in the paper (only a project page).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>命令降速的混淆</b>:如果讓 \(\pi_\theta\)(或 \(\pi_e\))直接追蹤規劃器輸出的同一條 \(\nu^*_{\text{cmd}}\) 序列,姿態與關節觸限的差距還剩多少?</li>
+          <li data-lang="en"><b>The slower-command confound</b>: if \(\pi_\theta\) (or \(\pi_e\)) simply tracked the same \(\nu^*_{\text{cmd}}\) sequence the planner output, how much of the attitude and joint-limit gap would remain?</li>
+          <li data-lang="zh"><b>對最強策略呢</b>:規劃器 vs expert actor \(\pi_e\)(帶速度估測與做夢輸入)在模擬與實機上的跌倒率、約束違反率、追蹤誤差各是多少?</li>
+          <li data-lang="en"><b>Against the strongest policy</b>: planner vs the expert actor \(\pi_e\) (with velocity estimate and dream input) — fall rate, constraint-violation rate and tracking error, in sim and on hardware?</li>
+          <li data-lang="zh"><b>約束與目標命令</b>:\(c_k\) 具體是什麼?\(\nu^{\text{tgt}}_{\text{cmd}}\) 以什麼形式進入目標?若可行集為空,演算法怎麼辦?</li>
+          <li data-lang="en"><b>Constraints and target command</b>: what exactly is \(c_k\)? In what form does \(\nu^{\text{tgt}}_{\text{cmd}}\) enter the objective? What does the algorithm do when the feasible set is empty?</li>
+          <li data-lang="zh"><b>算力與規模</b>:300–500 Hz 是在什麼硬體上?把 \(M\) 從 500 降到 50、\(N\) 從 6 降到 1,行為差多少——規劃器真的需要這麼多樣本嗎?</li>
+          <li data-lang="en"><b>Compute and scale</b>: on what hardware is 300-500 Hz achieved? If \(M\) drops from 500 to 50 and \(N\) from 6 to 1, how much does behavior change — does the planner really need this many samples?</li>
+          <li data-lang="zh"><b>模型可信度</b>:\(d_\theta\) 在 \(H=10\) 步的預測誤差多大?在規劃器偏離 \(\pi_e\) 的狀態上會不會失真?有沒有用不確定度(例如 ensemble)去懲罰「模型沒把握」的軌跡?</li>
+          <li data-lang="en"><b>Model trust</b>: how large is \(d_\theta\)'s error over \(H=10\) steps? Does it break down on states where the planner deviates from \(\pi_e\)? Is any uncertainty (e.g. an ensemble) used to penalize trajectories the model is unsure about?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把「訓練回報勝過 HIMLoco」讀成「<b>規劃讓機器人更強</b>」。Table III 的數字<mark class="m-assume" data-t="ASSUMPTION/CLAIM">與規劃器毫無關係</mark>——那是訓練期 expert actor 的成績。規劃本身的定量證據幾乎是零;論文真正被數據支持的貢獻是「在觀測空間做夢的 internal model」,規劃部分目前是一個<b>可行性展示</b>。</span>
+        <span data-lang="en">Reading "training return beats HIMLoco" as "<b>planning makes the robot better</b>." Table III's numbers <mark class="m-assume" data-t="ASSUMPTION/CLAIM">have nothing to do with the planner</mark> — they are the expert actor's training scores. Quantitative evidence for planning itself is nearly nil; the contribution the data actually supports is "an internal model that dreams in observation space," while the planning part is, for now, a <b>feasibility demonstration</b>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">結論坦白承認最關鍵的弱點(expert 策略與取樣規劃器的行為必須相近,否則 internal model 預測不可靠),也誠實解釋為什麼不在訓練時規劃。框架是通用的:MPPI 可換成其他 MPC 求解器;「在觀測空間建模以便寫約束」是一個清楚、可檢驗的設計選擇。<b>板載跑通取樣式 MPC</b> 本身也是有價值的工程結果。</span>
+        <span data-lang="en">The conclusion candidly admits the key weakness (the expert policy and the sampling planner must behave similarly, or the internal model predicts unreliably), and honestly explains why there is no planning during training. The framework is generic: MPPI can be swapped for other MPC solvers; "model in observation space so constraints can be written" is a clear, testable design choice. <b>Getting a sampling MPC to run onboard</b> is a worthwhile engineering result in itself.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">與 TD-MPC 的差距</span><span data-lang="en">Gap to TD-MPC</span></span>
+        <span data-lang="zh"><span class="add">[導讀補充]</span> TD-MPC 在訓練時就用規劃器收資料,價值與模型因此在「規劃器自己的分佈」上被持續修正;PIP-Loco 為了平行化效率放棄這點,正好換來它自己承認的分佈偏移問題。一個自然的折衷是:訓練後期只在一小部分環境中開規劃器收資料、微調 \(d_\theta\) 與 \(V_\theta\)。</span>
+        <span data-lang="en"><span class="add">[guide note]</span> TD-MPC collects data with the planner during training, so value and model keep being corrected on the planner's own distribution; PIP-Loco gives that up for parallel efficiency and inherits exactly the distribution-shift problem it admits. A natural compromise: late in training, turn on the planner in a small fraction of envs to collect data and fine-tune \(d_\theta\) and \(V_\theta\).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「RL 訓練、MPC 部署」是很便宜的升級路徑。</b> 只要在既有的 PPO 管線上多學 \(d_\theta, r_\theta\) 並蒸餾 \(\pi_\theta, V_\theta\),就有一個可加約束的部署外殼;不必重寫訓練框架。</li>
+          <li data-lang="en"><b>"Train with RL, deploy with MPC" is a cheap upgrade path.</b> Add \(d_\theta, r_\theta\) and distill \(\pi_\theta, V_\theta\) on top of an existing PPO pipeline, and you get a constraint-capable deployment shell without rewriting the training stack.</li>
+          <li data-lang="zh"><b>想寫約束,就在觀測空間建模。</b> latent 模型(TD-MPC、Dreamer)在回報上可能更好,但約束必須寫在物理量上;這是「可驗證安全」與「最佳性能」之間的取捨,值得在設計時明確選擇。</li>
+          <li data-lang="en"><b>To write constraints, model in observation space.</b> Latent models (TD-MPC, Dreamer) may score better on return, but constraints must live on physical quantities; this is a trade-off between "verifiable safety" and "best performance," worth choosing explicitly.</li>
+          <li data-lang="zh"><b>把命令當決策變數。</b> 讓規劃器同時調整使用者命令,是把「上層導航」與「下層運動」接起來的乾淨介面;但要明確寫出拉回目標命令的項,否則規劃器會偷懶。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b>Treat the command as a decision variable.</b> Letting the planner adjust the user command is a clean interface between high-level navigation and low-level locomotion, but write an explicit term pulling it back to the target, or the planner will slack off. <span class="add">[guide note]</span></li>
+          <li data-lang="zh"><b>評估規劃增益的正確對照。</b> 若你做類似工作:對照組要包含 (a) 最強的策略本身、(b) 同一條修正後命令下的策略、(c) 策略 + 簡單安全濾波;並報約束違反率與跌倒率,不只報回報與單次曲線。</li>
+          <li data-lang="en"><b>The right controls for planning gains.</b> If you do similar work, compare against (a) the strongest policy itself, (b) the policy under the same corrected command, (c) the policy + a simple safety filter; and report constraint-violation and fall rates, not just returns and single traces.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">它在模型派與學習派之間的位置</span><span data-lang="en">Where it sits between the model-based and learning camps</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">面向</span><span data-lang="en">Aspect</span></th><th><span data-lang="zh">物理模型 MPC</span><span data-lang="en">Physics MPC</span><br><small>WBIC · RF-MPC</small></th><th>PIP-Loco</th><th><span data-lang="zh">純 RL + 估測器</span><span data-lang="en">Pure RL + estimator</span><br><small>DreamWaQ · HIMLoco</small></th><th>TD-MPC</th></tr>
+          <tr><td><span data-lang="zh">模型</span><span data-lang="en">Model</span></td><td><span data-lang="zh">手寫單剛體</span><span data-lang="en">hand-written SRB</span></td><td><span data-lang="zh">學到的觀測空間模型</span><span data-lang="en">learned, observation space</span></td><td><span data-lang="zh">無(只有估測器)</span><span data-lang="en">none (estimator only)</span></td><td><span data-lang="zh">學到的 latent 模型</span><span data-lang="en">learned, latent</span></td></tr>
+          <tr><td><span data-lang="zh">約束</span><span data-lang="en">Constraints</span></td><td class="ok"><span data-lang="zh">硬約束(QP)</span><span data-lang="en">hard (QP)</span></td><td><span data-lang="zh">取樣過濾 + 罰則</span><span data-lang="en">sample filter + penalty</span></td><td class="bad"><span data-lang="zh">只能靠獎勵</span><span data-lang="en">reward only</span></td><td class="bad"><span data-lang="zh">無</span><span data-lang="en">none</span></td></tr>
+          <tr><td><span data-lang="zh">何時規劃</span><span data-lang="en">When it plans</span></td><td><span data-lang="zh">部署</span><span data-lang="en">deployment</span></td><td><span data-lang="zh">只在部署</span><span data-lang="en">deployment only</span></td><td><span data-lang="zh">從不</span><span data-lang="en">never</span></td><td><span data-lang="zh">訓練 + 部署</span><span data-lang="en">training + deployment</span></td></tr>
+          <tr><td><span data-lang="zh">終端價值</span><span data-lang="en">Terminal value</span></td><td><span data-lang="zh">手寫終端成本</span><span data-lang="en">hand-written</span></td><td><span data-lang="zh">蒸餾自 PPO critic</span><span data-lang="en">distilled from PPO critic</span></td><td>−</td><td><span data-lang="zh">TD 學的 Q</span><span data-lang="en">TD-learned Q</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:8px"><span class="add">[導讀補充]</span> 上表為導讀者的歸納,用來定位,不是論文內容。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:8px"><span class="add">[guide note]</span> This table is the guide author's synthesis for positioning, not the paper's content.</p>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「RL 控制器可以在部署時加上 MPC 式的規劃與約束」</span><span data-lang="en">"RL controllers can gain MPC-style planning and constraints at deployment"</span></td><td><span data-lang="zh">作為「訓練不規劃、部署才規劃」的四足代表範例(注意證據多為定性)。</span><span data-lang="en">A quadruped example of "no planning in training, planning at deployment" (note the evidence is mostly qualitative).</span></td></tr>
+          <tr><td><span data-lang="zh">「internal model 可以預測多步未來觀測而不只一步 latent」</span><span data-lang="en">"Internal models can predict multi-step future observations, not just a one-step latent"</span></td><td><span data-lang="zh">NLM/PLM/FLM 的消融:觀測空間優於 latent,高雜訊下 8.16 vs 1.73。</span><span data-lang="en">The NLM/PLM/FLM ablation: observation space beats latent; 8.16 vs 1.73 under high noise.</span></td></tr>
+          <tr><td><span data-lang="zh">「在大規模平行 RL 中跑 MPC 太貴」</span><span data-lang="en">"Running MPC inside massively parallel RL is too expensive"</span></td><td><span data-lang="zh">III-A.1 的論述(屬作者主張,非量測)。</span><span data-lang="en">The argument in III-A.1 (an author claim, not a measurement).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">PIP-Loco 把 DreamWaQ/HIMLoco 的一步 internal model 擴成在觀測空間做夢的 Dreamer,讓同一次 PPO 訓練「順便」產出 TD-MPC 式規劃器所需的模型、獎勵、提案策略與終端價值,於是部署時能以受約束 MPPI 同時修動作與命令;它在訓練回報與抗雜訊上有清楚證據,但「規劃讓部署更安全」目前只是有說服力的示範,而非被量化證明的結論。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">PIP-Loco extends the one-step internal model of DreamWaQ/HIMLoco into a Dreamer that dreams in observation space, so a single PPO run also yields the model, reward, proposal policy and terminal value a TD-MPC-style planner needs, letting deployment correct both actions and commands with a constrained MPPI; the evidence is clear for training return and noise robustness, but "planning makes deployment safer" is, for now, a persuasive demonstration rather than a quantified result.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <a class="chip" href="Nahrendra2023_DreamWaQ.html">DreamWaQ (Nahrendra 2023)</a>
+          <a class="chip" href="Long2024_HIMLoco.html">HIMLoco (Long 2024)</a>
+          <a class="chip" href="Hansen2022_TDMPC.html">TD-MPC (Hansen 2022)</a>
+          <a class="chip" href="Kumar2021_RMA.html">RMA (Kumar 2021)</a>
+          <a class="chip" href="Margolis2022_WalkTheseWays.html">Walk These Ways</a>
+          <a class="chip" href="Kim2019_WBIC.html">Convex MPC + WBIC</a>
+          <a class="chip" href="Ding2021_RFMPC.html">RF-MPC (Ding 2021)</a>
+          <a class="chip" href="Wensing2022_OptControlSurvey.html">Optimization-Based Control survey</a>
+          <span class="chip">LOOP (Sikchi 2022)</span>
+          <span class="chip">TD-MPC2 (Hansen 2023)</span>
+          <span class="chip">Dreamer (Hafner 2020)</span>
+          <span class="chip">MPPI (Williams 2015)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 或 <span class="add">[導讀讀圖]</span> 者為導讀者的延伸推論或讀圖估值,其餘事實與數據均出自原論文(arXiv v3,ICRA 2025)。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> or <span class="add">[guide plot reading]</span> are the guide author's inferences or values read off plots; all other facts and figures come from the original paper (arXiv v3, ICRA 2025).</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Shirwatkar et al. 2024 (PIP-Loco) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'PIP-Loco reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

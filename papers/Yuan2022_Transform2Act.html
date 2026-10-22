@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Transform2Act — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Transform2Act: Learning a Transform-and-Control Policy for Efficient Agent Design","authors":"Ye Yuan, Yuda Song, Zhengyi Luo, Wen Sun, Kris M. Kitani","year":"2022","venue":"ICLR","tags":["Legged Robotics","Co-Design","Reinforcement Learning","Morphology Optimization","Graph Neural Networks","MuJoCo"],"tldr":"把「設計身體」併進策略的決策過程:每個 episode 先由 GNN 策略做 5 步骨架變換(加/刪關節)與 1 步屬性變換(骨長、粗細、馬達強度),再控制這個新身體;以 PPO 單一迴圈同時優化形態與控制,在 4 個 MuJoCo 任務、相同 5,000 萬模擬步預算下明顯勝過 NGE 等演化搜尋,並長出長頸鹿、蜘蛛、魷魚般的形態。","tldr_en":"Folds body design into the policy itself: each episode a GNN policy first applies 5 skeleton transforms (add/remove joints) and 1 attribute transform (bone length, size, motor strength), then controls the new body; trained end-to-end with PPO, it clearly beats evolutionary baselines such as NGE on four MuJoCo tasks under the same 50M-step budget and discovers giraffe-, spider- and squid-like designs."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:120px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  .tblwrap{overflow-x:auto}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">Transform2Act 把「<b>設計一個 agent 的身體</b>」直接塞進「<b>它的決策過程</b>」:每個 episode 先跑一段<mark class="m-method" data-t="METHOD/IDEA">transform 階段</mark>(GNN 策略逐步加/刪關節、調整骨長/粗細/馬達強度,不與環境互動),再進入 <mark class="m-method" data-t="METHOD/IDEA">execution 階段</mark>用同一個策略去控制這個新身體並收 reward。形態與控制於是被 <b>PPO 在單一迴圈裡聯合優化</b>,且所有設計共享同一份經驗;在 4 個 MuJoCo 任務上<mark class="m-result" data-t="RESULT/EVIDENCE">以相同 5,000 萬模擬步預算,收斂速度與最終表現都明顯勝過 NGE、ESS、RGS 等演化式搜尋</mark>,還長出長頸鹿、蜘蛛、魷魚般的形態。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Transform2Act folds "<b>designing an agent&#39;s body</b>" directly into "<b>its decision-making process</b>": each episode starts with a <mark class="m-method" data-t="METHOD/IDEA">transform stage</mark> (a GNN policy adds/removes joints step by step and tunes bone length/size/motor strength, without touching the environment), followed by an <mark class="m-method" data-t="METHOD/IDEA">execution stage</mark> where the same policy controls the new body and collects reward. Morphology and control are thus <b>jointly optimized by PPO in a single loop</b>, with all designs sharing one pool of experience. On four MuJoCo tasks it <mark class="m-result" data-t="RESULT/EVIDENCE">clearly beats evolutionary search (NGE, ESS, RGS) in both convergence speed and final performance under the same 50M-simulation-step budget</mark>, and grows giraffe-, spider- and squid-like bodies.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Yuan2022/fig1_teaser.png" alt="Figure 1 teaser">
+        <figcaption data-lang="zh"><b>Fig.1</b> 一個 episode 的縮影:左邊五格是 <b>Transform</b>(一根棍子逐步長出脖子與腿),右邊三格是 <b>Control</b>(同一策略讓這隻「長頸鹿」在地面上奔跑)。注意:身體是<b>在 episode 開頭被策略「長」出來的</b>,不是外部演化迴圈挑出來的。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> One episode in miniature: the five left frames are <b>Transform</b> (a single stick grows a neck and legs), the three right frames are <b>Control</b> (the same policy makes this "giraffe" run on the ground). Note that the body is <b>grown by the policy at the start of the episode</b>, not picked by an outer evolutionary loop.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 同時優化骨架結構與關節屬性是<mark class="m-problem" data-t="PROBLEM/GAP">組合爆炸 + 雙層(bi-level)</mark>的問題:外層搜尋巨大設計空間,內層每個候選設計都要先用 RL 訓練控制器才能評分。主流演化搜尋(ES)各設計<mark class="m-problem" data-t="PROBLEM/GAP">各自訓練、不共享經驗,被淘汰者的樣本全部浪費</mark>。</li>
+          <li data-lang="en"><b>Problem</b> — Jointly optimizing skeletal structure and joint attributes is <mark class="m-problem" data-t="PROBLEM/GAP">combinatorial and bi-level</mark>: an outer search over a huge design space, and an inner RL run to train a controller before each candidate can even be scored. The dominant evolutionary search (ES) trains each design <mark class="m-problem" data-t="PROBLEM/GAP">independently with no experience sharing, wasting every sample spent on eliminated agents</mark>.</li>
+          <li data-lang="zh"><b>方法</b> — 把設計動作變成 MDP 的一部分:<mark class="m-method" data-t="METHOD/IDEA">三階段條件策略 \(\pi_\theta=(\pi^{s}_\theta,\pi^{z}_\theta,\pi^{e}_\theta)\)</mark>(骨架變換 → 屬性變換 → 執行),全部用 GNN 處理可變關節數,再加 <mark class="m-method" data-t="METHOD/IDEA">Joint-Specialized MLP(JSMLP)</mark>打破權重共享造成的過度對稱;transform 階段 reward 為 0,只靠未來執行回報經由 PPO 學習。</li>
+          <li data-lang="en"><b>Method</b> — Make design actions part of the MDP: a <mark class="m-method" data-t="METHOD/IDEA">three-stage conditional policy \(\pi_\theta=(\pi^{s}_\theta,\pi^{z}_\theta,\pi^{e}_\theta)\)</mark> (skeleton transform → attribute transform → execution), all GNN-based to handle variable joint counts, plus a <mark class="m-method" data-t="METHOD/IDEA">Joint-Specialized MLP (JSMLP)</mark> to break the over-symmetry caused by weight sharing. Transform steps get zero reward and learn only from future execution returns via PPO.</li>
+          <li data-lang="zh"><b>結果</b> — 4 個環境(2D/3D Locomotion、Swimmer、Gap Crosser)、各 6 seeds、同為 50M 步:<mark class="m-result" data-t="RESULT/EVIDENCE">最終 reward 約為最強基線 NGE 的 1.7–4.7 倍</mark>(由圖讀值);消融顯示拿掉 GNN 幾乎學不起來,拿掉 JSMLP 明顯掉分且變不穩。</li>
+          <li data-lang="en"><b>Results</b> — Four environments (2D/3D Locomotion, Swimmer, Gap Crosser), 6 seeds each, 50M steps each: <mark class="m-result" data-t="RESULT/EVIDENCE">final reward is roughly 1.7–4.7× the strongest baseline NGE</mark> (read off the plots). Ablations show that without GNNs it barely learns, and without JSMLPs it scores clearly lower and becomes unstable.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">「形態-控制共同設計」(<mark class="m-method" data-t="METHOD/IDEA">morphology-control co-design</mark>)可追溯到 Sims(1994)的 <i>Evolving Virtual Creatures</i>:用演化搜尋同時演化 3D 方塊生物的身體與控制。後續 Cheney 等人用體素降低搜尋空間,Wang 等人(2019)的 <b>NGE</b> 再用 GNN 讓子代繼承親代權重。這一脈的共同點是<mark class="m-problem" data-t="PROBLEM/GAP">零階(zeroth-order)搜尋 + 族群各自學習</mark>,樣本效率低。</p>
+        <p data-lang="en">"<mark class="m-method" data-t="METHOD/IDEA">Morphology-control co-design</mark>" traces back to Sims (1994), <i>Evolving Virtual Creatures</i>, which evolved both the bodies and controllers of 3D block creatures. Cheney et al. later used voxels to shrink the search space, and Wang et al. (2019) with <b>NGE</b> used GNNs so offspring inherit parent weights. The common thread is <mark class="m-problem" data-t="PROBLEM/GAP">zeroth-order search plus a population that learns independently</mark>, which is sample-inefficient.</p>
+        <p data-lang="zh">另一脈是<b>只調連續參數、不改拓撲</b>:Ha 等人(2017/2018)與 Desai 等人(2018)用<b>軌跡優化 + 隱函數定理/adjoint</b> 調整腿式機器人尺寸;深度 RL 時代則有 Ha(2019)、Schaff 等(2019)、Luck 等(2020)、Chen 等(2020, Hardware as Policy)。這些方法<mark class="m-problem" data-t="PROBLEM/GAP">無法改變骨架結構</mark>。同時,GNN 控制器(NerveNet、SMP)證明了<b>一個策略可以跨不同骨架共用</b>——這正是 Transform2Act 能成立的技術前提。</p>
+        <p data-lang="en">A second thread <b>tunes only continuous parameters, keeping the topology fixed</b>: Ha et al. (2017/2018) and Desai et al. (2018) adapt legged-robot dimensions with <b>trajectory optimization + the implicit function theorem / adjoint method</b>; in the deep-RL era there are Ha (2019), Schaff et al. (2019), Luck et al. (2020), Chen et al. (2020, Hardware as Policy). These <mark class="m-problem" data-t="PROBLEM/GAP">cannot change the skeletal structure</mark>. Meanwhile, GNN controllers (NerveNet, SMP) showed that <b>one policy can be shared across different skeletons</b>—the technical precondition that makes Transform2Act possible.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的關鍵一步是<b>把「外層設計搜尋」降維成「episode 前幾步的動作」</b>。一旦設計變成動作,整套 RL 工具(policy gradient、value function、advantage、經驗共享)就能直接拿來用,而不再需要一個外部的演化迴圈。<span class="add">[導讀補充]</span> 這跟 NAS 從「演化搜尋架構」走向「用 controller RNN 產生架構」是同一種轉向。</p>
+          <p data-lang="en" style="margin-top:6px">The key move is <b>collapsing the "outer design search" into "the first few actions of an episode."</b> Once design becomes action, the whole RL toolkit (policy gradients, value functions, advantages, experience sharing) applies directly, with no external evolutionary loop. <span class="add">[guide note]</span> This mirrors NAS moving from evolutionary architecture search to "a controller RNN that emits architectures."</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的不是「又一個 co-design 方法」,而是這幾個觀念:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What to take away is not "yet another co-design method" but these ideas:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">設計即動作(design-as-action)。</b> 雙層問題 \(\max_D J(\pi_D,D)\) 被改寫成單層的策略學習:設計由策略在 episode 開頭「選」出來,形態與控制在<mark class="m-method" data-t="METHOD/IDEA">同一個 PPO 目標</mark>下一起進步。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Design-as-action.</b> The bi-level problem \(\max_D J(\pi_D,D)\) becomes single-level policy learning: the design is "chosen" by the policy at the start of the episode, and morphology and control improve together under <mark class="m-method" data-t="METHOD/IDEA">one PPO objective</mark>.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">零 reward 的 transform 階段也學得起來。</b> transform 步驟本身沒有 reward,設計的好壞只能透過 <b>value function 的 bootstrapping</b> 從執行階段的回報傳回來——critic 實際上學會了「<b>評估一個身體的潛力</b>」。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">A zero-reward transform stage still learns.</b> Transform steps get no reward; design quality flows back from execution returns only through <b>value-function bootstrapping</b>—the critic effectively learns to "<b>assess a body&#39;s potential</b>."</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">經驗共享是樣本效率的來源。</b> 所有設計共用一個控制策略,所以 50M 步全部用來訓練同一個策略;NGE 中每個物種只分到 \(EM/N\) 的樣本。每個 epoch 還能試 <mark class="m-result" data-t="RESULT/EVIDENCE">超過 2000 個設計</mark>(NGE 僅 16–100 個)。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Experience sharing is where the sample efficiency comes from.</b> All designs share one control policy, so all 50M steps train the same policy; in NGE each species gets only \(EM/N\) samples. Each epoch can also try <mark class="m-result" data-t="RESULT/EVIDENCE">over 2000 designs</mark> (NGE: 16–100).</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">權重共享是雙面刃。</b> GNN 的權重共享讓策略能泛化到新骨架,但也讓相似位置的關節做出相同的 transform 動作,導致<mark class="m-assume" data-t="ASSUMPTION/CLAIM">過度對稱</mark>。JSMLP 依「從 root 走到該關節的路徑」給每個關節專屬權重,在泛化與專門化之間取平衡。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Weight sharing cuts both ways.</b> GNN weight sharing lets the policy generalize to new skeletons, but also makes joints in similar positions take identical transform actions, causing <mark class="m-assume" data-t="ASSUMPTION/CLAIM">over-symmetry</mark>. JSMLP gives each joint its own weights, indexed by the root-to-joint path, balancing generalization and specialization.</li>
+          <li data-lang="zh"><b style="color:var(--c-limit)">「設計得出來」不等於「造得出來」。</b> 長頸鹿、魷魚都是 MuJoCo 裡的膠囊棍子+理想 hinge 馬達;<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有製造、質量、致動器或 sim-to-real 的約束</mark>。對真實腿式機器人,這篇提供的是「方法論模板」,不是可直接用的設計工具。<span class="add">[導讀補充]</span></li>
+          <li data-lang="en"><b style="color:var(--c-limit)">"Designable" is not "buildable."</b> The giraffe and squid are capsule sticks with ideal hinge motors in MuJoCo; there are <mark class="m-limit" data-t="LIMITATION/FUTURE">no manufacturing, mass, actuator or sim-to-real constraints</mark>. For real legged robots this paper offers a methodological template, not a ready design tool. <span class="add">[guide note]</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Transform2Act: Learning a Transform-and-Control Policy for Efficient Agent Design</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Ye Yuan, Yuda Song, Zhengyi Luo, Wen Sun, Kris M. Kitani</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span>Carnegie Mellon University · Cornell University</span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2022 · ICLR(arXiv:2110.03659)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.LG · Agent / Robot Co-Design</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>sites.google.com/view/transform2act</span>
+          <b><span data-lang="zh">算力</span><span data-lang="en">Compute</span></b><span><span data-lang="zh">每環境約 1 天(20 CPU 核 + 1 張 RTX 2080 Ti)</span><span data-lang="en">~1 day per env (20 CPU cores + 1× RTX 2080 Ti)</span></span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">它是「<b>以 RL 策略直接產生設計</b>」路線的代表作:不需外部演化迴圈,也不需可微分模擬器,只要一個能處理可變拓撲的策略網路。後續許多 co-design 工作都以它為主要比較基線。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">It is a flagship of the "<b>RL policy directly generates the design</b>" line: no outer evolutionary loop and no differentiable simulator, just a policy network that handles variable topology. Much later co-design work uses it as a primary baseline. <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">與腿式機器人的連結</span><span data-lang="en">Link to legged robots</span></span>
+        <span data-lang="zh">本文引用的 Desai 等(2017 互動式機器裝置設計;2018 以 adjoint method 做腿式機器人 form-function co-design)作者名單中也有 Ye Yuan——本文可視為把同一個問題從「軌跡優化調參數」帶到「RL 改拓撲」。<span class="add">[導讀補充]</span></span>
+        <span data-lang="en">Ye Yuan also appears on the author lists of the cited Desai et al. papers (2017, interactive robotic-device design; 2018, adjoint-method form-function co-design for legged robots)—this paper can be read as moving the same problem from "trajectory optimization over parameters" to "RL over topology." <span class="add">[guide note]</span></span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Co-Design</span><span class="chip">Bi-level optimization</span>
+          <span class="chip">Augmented MDP</span><span class="chip">GNN policy</span>
+          <span class="chip">JSMLP</span><span class="chip">PPO + GAE</span>
+          <span class="chip">NGE</span><span class="chip">MuJoCo</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <div class="tblwrap"><table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">演化搜尋(ES)</span><span data-lang="en">Evolutionary search (ES)</span></b><br><small>Sims 1994 · Cheney 2014/2018 · NGE 2019</small></td><td><span data-lang="zh">族群中每個設計<mark class="m-problem" data-t="PROBLEM/GAP">各自從頭學控制、不共享經驗</mark>;被淘汰個體的樣本全部浪費;隨機突變是零階搜尋,在高維設計空間<mark class="m-problem" data-t="PROBLEM/GAP">樣本效率很差</mark>(引 Vemula 等 2019)。</span><span data-lang="en">Each design in the population <mark class="m-problem" data-t="PROBLEM/GAP">learns control from scratch with no shared experience</mark>; samples spent on eliminated agents are wasted; random mutation is zeroth-order search and is <mark class="m-problem" data-t="PROBLEM/GAP">very sample-inefficient</mark> in high-dimensional design spaces (citing Vemula et al. 2019).</span></td></tr>
+          <tr><td><b><span data-lang="zh">連續參數優化</span><span data-lang="en">Continuous design optimization</span></b><br><small>Ha 2019 · Schaff 2019 · Luck 2020 · Chen 2020</small></td><td><span data-lang="zh">只能調長度、粗細等連續參數,<mark class="m-problem" data-t="PROBLEM/GAP">骨架拓撲固定</mark>,無法新增或刪除肢體。</span><span data-lang="en">Tune only continuous parameters (length, size); the <mark class="m-problem" data-t="PROBLEM/GAP">skeletal topology is fixed</mark>—limbs cannot be added or removed.</span></td></tr>
+          <tr><td><b><span data-lang="zh">模型式 co-design</span><span data-lang="en">Model-based co-design</span></b><br><small>Ha 2017/2018 · Desai 2018</small></td><td><span data-lang="zh">軌跡優化 + 隱函數定理/adjoint 對設計參數求梯度;需要可微分的動力學模型與預設的運動軌跡,<mark class="m-problem" data-t="PROBLEM/GAP">同樣不改拓撲</mark>。</span><span data-lang="en">Trajectory optimization + implicit-function-theorem / adjoint gradients on design parameters; needs a differentiable dynamics model and a prescribed motion, and <mark class="m-problem" data-t="PROBLEM/GAP">also keeps the topology fixed</mark>.</span></td></tr>
+          <tr><td><b><span data-lang="zh">GNN 控制器</span><span data-lang="en">GNN controllers</span></b><br><small>NerveNet · SMP · Pathak 2019</small></td><td><span data-lang="zh">能跨骨架泛化控制,但<mark class="m-problem" data-t="PROBLEM/GAP">只負責控制、不負責設計</mark>;且權重共享會壓抑每個關節的專門化(Kurin 等 2021 也指出 GNN 在多形態 RL 中的問題)。</span><span data-lang="en">Generalize control across skeletons, but <mark class="m-problem" data-t="PROBLEM/GAP">handle control only, not design</mark>; weight sharing also suppresses per-joint specialization (Kurin et al. 2021 likewise flag GNN issues in multi-morphology RL).</span></td></tr>
+        </table></div>
+        <p data-lang="zh" style="margin-top:14px">形式化來看,這是一個<b>雙層優化</b>:</p>
+        <p data-lang="en" style="margin-top:14px">Formally, it is a <b>bi-level optimization</b>:</p>
+        <div class="eq">$$D^{*}=\arg\max_{D}\;J(\pi_D,D)\qquad\text{s.t.}\qquad \pi_D=\arg\max_{\pi}\;J(\pi,D),\qquad J(\pi,D)=\mathbb{E}_{\pi,D}\Big[\sum_{t=0}^{H}\gamma^{t}r_t\Big]$$</div>
+        <p data-lang="zh">內層(Eq.2)本身就是一次 <mark class="m-problem" data-t="PROBLEM/GAP">可能耗時數天的 RL 訓練</mark>;外層的設計空間 \(\mathcal{D}\) 又是組合式的,連梯度都沒有。</p>
+        <p data-lang="en">The inner problem (Eq.2) is itself an <mark class="m-problem" data-t="PROBLEM/GAP">RL run that can take days</mark>; the outer design space \(\mathcal{D}\) is combinatorial and has no gradient.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,Transform2Act 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how Transform2Act fills it</span></h3>
+        <div class="tblwrap"><table>
+          <tr><th><span data-lang="zh">方法</span><span data-lang="en">Method</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">Transform2Act 如何補上</span><span data-lang="en">How Transform2Act fills it</span></th></tr>
+          <tr>
+            <td><b>NGE</b><br><small>Wang et al. 2019</small></td>
+            <td><span data-lang="zh">同世代物種之間不共享經驗,只靠親代→子代的權重繼承;每物種只得 \(EM/N\) 樣本。</span><span data-lang="en">No experience sharing among species within a generation, only parent→child weight inheritance; each species gets only \(EM/N\) samples.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">所有設計共用一個策略</mark>,全部 \(EM\) 樣本都拿來訓練它。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">All designs share one policy</mark>, trained on all \(EM\) samples.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">ES 的隨機突變</span><span data-lang="en">ES random mutation</span></b></td>
+            <td><span data-lang="zh">突變與「哪種設計好」無關,一次只改一處(長四隻腳要 4 次突變)。</span><span data-lang="en">Mutation ignores which designs are good, and changes one thing at a time (four feet need four mutations).</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">參數化的 transform 策略</mark>記住「哪種設計好」;每個關節同時行動,一步就能長出四隻腳。</span><span data-lang="en">A <mark class="m-method" data-t="METHOD/IDEA">parameterized transform policy</mark> remembers which designs are good; all joints act at once, so four feet grow in one step.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">ES 的探索量</span><span data-lang="en">ES exploration budget</span></b></td>
+            <td><span data-lang="zh">每 epoch 只試 \(N\)(16–100)個設計;\(N\) 一大,每個物種樣本就更少。</span><span data-lang="en">Tries only \(N\) (16–100) designs per epoch; raising \(N\) starves each species.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">每個 episode 都是一個新設計</mark>:每 epoch 可試 \(M/H_{\text{avg}}\) 個,可超過 2000。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Every episode is a new design</mark>: \(M/H_{\text{avg}}\) designs per epoch, which can exceed 2000.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">連續 / 模型式 co-design</span><span data-lang="en">Continuous / model-based co-design</span></b></td>
+            <td><span data-lang="zh">拓撲固定。</span><span data-lang="en">Fixed topology.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">AddJoint / DelJoint 離散動作</mark>改拓撲;關掉骨架階段時亦可只做連續微調(App. A)。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Discrete AddJoint / DelJoint actions</mark> change topology; disabling the skeleton stage leaves pure continuous fine-tuning (App. A).</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">GNN 策略</span><span data-lang="en">GNN policies</span></b></td>
+            <td><span data-lang="zh">權重共享 → 相似關節做相同動作 → 設計過度對稱。</span><span data-lang="en">Weight sharing → similar joints act alike → over-symmetric designs.</span></td>
+            <td><span data-lang="zh">在 GNN 後接 <mark class="m-method" data-t="METHOD/IDEA">JSMLP</mark>,每個關節有自己的 MLP 權重。</span><span data-lang="en">Append a <mark class="m-method" data-t="METHOD/IDEA">JSMLP</mark> after the GNN so each joint has its own MLP weights.</span></td>
+          </tr>
+        </table></div>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">論文的論證主軸是<b>樣本效率</b>而非「找到更好的最優解」。它的核心主張是:只要把設計當成策略的輸出,就能用一階的 policy gradient 取代零階的突變,並讓所有樣本服務同一個學習者。讀實驗時要以「同樣 50M 步誰學得快」為主要尺度。</p>
+          <p data-lang="en" style="margin-top:6px">The argument centers on <b>sample efficiency</b>, not on "finding a better optimum." The central claim: once design is a policy output, first-order policy gradients replace zeroth-order mutation, and every sample serves a single learner. Read the experiments mainly on the scale of "who learns faster within the same 50M steps."</p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把它讀成「整個設計流程都可微分」。transform 動作是<b>離散的、被取樣的</b>,梯度是 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">policy gradient(score-function)估計</mark>,不是穿過物理模擬器的解析梯度。它比 ES 的「一階」優勢在於<b>有參數化策略與 critic</b>,不在於模擬器可微分。</span>
+        <span data-lang="en">Don&#39;t read it as "the whole design pipeline is differentiable." Transform actions are <b>discrete and sampled</b>; the gradient is a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">policy-gradient (score-function) estimate</mark>, not an analytic gradient through the physics simulator. Its "first-order" edge over ES comes from <b>having a parameterized policy and a critic</b>, not from a differentiable simulator.</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把形態搜尋放進單一 RL 迴圈,使 co-design 的成本接近「訓練一個多形態控制器」,每個環境約 1 天、單機即可完成。</span>
+        <span data-lang="en">Putting morphology search inside one RL loop brings co-design cost close to "training one multi-morphology controller"—about one day per environment on a single machine.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">設計多樣性</span><span data-lang="en">design diversity</span></span><span class="chip qchip" data-go="4">→ Q4 <span data-lang="zh">物理可行性</span><span data-lang="en">physical realism</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">管線:一個 episode 分三段</span><span data-lang="en">Pipeline: one episode, three stages</span></h3>
+        <div class="flow">
+          <div class="step"><div class="ph mono">STAGE 1 · \(N_s=5\) STEPS</div><b>Skeleton Transform</b><small><span data-lang="zh">\(\pi^{s}_\theta\):每個關節選 AddJoint / DelJoint / NoChange。無 reward、不碰環境。</span><span data-lang="en">\(\pi^{s}_\theta\): each joint picks AddJoint / DelJoint / NoChange. No reward, no environment.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STAGE 2 · \(N_z=1\) STEP</div><b>Attribute Transform</b><small><span data-lang="zh">\(\pi^{z}_\theta\):每個關節輸出屬性增量 \(\Delta z_u\)(骨向量、粗細、馬達 gear)。無 reward。</span><span data-lang="en">\(\pi^{z}_\theta\): each joint outputs an attribute delta \(\Delta z_u\) (bone vector, size, motor gear). No reward.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">STAGE 3 · UNTIL \(H\)</div><b>Execution</b><small><span data-lang="zh">以設計後的 XML 重置 MuJoCo;\(\pi^{e}_\theta\) 輸出每關節力矩,收環境 reward。</span><span data-lang="en">Reset MuJoCo with the edited XML; \(\pi^{e}_\theta\) outputs per-joint torques and collects environment reward.</span></small></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="ph mono">UPDATE</div><b>PPO + GAE</b><small><span data-lang="zh">三段的所有樣本(不同設計)放進同一個 batch,一起更新 \(\theta\) 與 critic \(\phi\)。</span><span data-lang="en">All samples from all three stages (many designs) go into one batch to update \(\theta\) and critic \(\phi\).</span></small></div>
+        </div>
+        <figure class="fig"><img src="figs/Yuan2022/fig2_episode.png" alt="Figure 2 three-stage episode">
+          <figcaption data-lang="zh"><b>Fig.2</b> 三階段 episode。上排是 agent 外觀,下排是骨架圖與各階段的 GNN 子策略:紫色 \(\pi^{s}_\theta\) 讓節點標記為粉紅(AddJoint)/黃(DelJoint)/灰(NoChange);橘色 \(\pi^{z}_\theta\) 改屬性;藍色 \(\pi^{e}_\theta\) 輸出馬達控制。<b>要注意的是:三個子策略吃的都是「當下的圖」,所以關節數可以邊走邊變。</b></figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> The three-stage episode. Top row: the agent&#39;s appearance; bottom row: the skeletal graph and each stage&#39;s GNN sub-policy. Purple \(\pi^{s}_\theta\) labels nodes pink (AddJoint) / yellow (DelJoint) / grey (NoChange); orange \(\pi^{z}_\theta\) edits attributes; blue \(\pi^{e}_\theta\) outputs motor control. <b>Key point: all three sub-policies consume the current graph, so the joint count can change as the episode proceeds.</b></figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">擴增 MDP:把設計與階段旗標放進狀態</span><span data-lang="en">Augmented MDP: put the design and a stage flag into the state</span></h3>
+        <p data-lang="zh">設計表示成圖 \(D_t=(V_t,E_t,A_t)\):節點 \(u\in V_t\) 是關節,邊 \(e\in E_t\) 是連接兩關節的骨頭,\(z_{u,t}\in A_t\) 是關節屬性向量。新的狀態、動作與轉移為:</p>
+        <p data-lang="en">A design is a graph \(D_t=(V_t,E_t,A_t)\): nodes \(u\in V_t\) are joints, edges \(e\in E_t\) are bones connecting two joints, and \(z_{u,t}\in A_t\) is each joint&#39;s attribute vector. The new state, action and transition are:</p>
+        <div class="eq">$$s_t=(s^{e}_t,\;D_t,\;\Phi_t),\qquad a_t\in\{a^{d}_t,\;a^{e}_t\},\qquad \mathcal{T}\big(s^{e}_{t+1},D_{t+1},\Phi_{t+1}\,\big|\,s^{e}_t,D_t,\Phi_t,a_t\big)$$</div>
+        <p data-lang="zh">其中 \(s^{e}_t\) 是環境狀態,<mark class="m-method" data-t="METHOD/IDEA">\(\Phi_t\) 是階段旗標</mark>(Skeleton Transform / Attribute Transform / Execution)。策略依階段切換子策略(合併 Eq.7 與 Eq.8):</p>
+        <p data-lang="en">Here \(s^{e}_t\) is the environment state and <mark class="m-method" data-t="METHOD/IDEA">\(\Phi_t\) is the stage flag</mark> (Skeleton Transform / Attribute Transform / Execution). The policy switches sub-policies by stage (Eq.7 and Eq.8 combined):</p>
+        <div class="eq">$$\pi_\theta(a_t\mid s^{e}_t,D_t,\Phi_t)=\begin{cases}\pi^{s}_\theta(a^{s}_t\mid D_t,\Phi_t), & \Phi_t=\text{Skeleton Transform}\\[2pt]\pi^{z}_\theta(a^{z}_t\mid D_t,\Phi_t), & \Phi_t=\text{Attribute Transform}\\[2pt]\pi^{e}_\theta(a^{e}_t\mid s^{e}_t,D_t,\Phi_t), & \Phi_t=\text{Execution}\end{cases}$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">兩個 transform 子策略<b>不看環境狀態</b> \(s^{e}_t\)(此時還沒進環境);執行子策略要看 \(D_t\),因為設計會改變動力學。不同上標的子策略<b>不共享參數</b>。骨架與屬性階段分開,是因為加關節會改變圖的節點數,而屬性動作只能作用在既有關節上。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">The two transform sub-policies <b>do not see the environment state</b> \(s^{e}_t\) (the agent has not entered the environment yet); the execution sub-policy conditions on \(D_t\) because the design changes the dynamics. Sub-policies with different superscripts <b>do not share parameters</b>. Skeleton and attribute stages are separated because adding joints changes the node count, while attribute actions can only act on existing joints.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">換個角度看目標函數</span><span data-lang="en">Another view of the objective</span></span>
+          <p data-lang="zh" style="margin-top:6px"><span class="add">[導讀補充]</span> 由於 transform 階段 reward 為 0,整個問題等價於把雙層問題「攤平」成單層:</p>
+          <p data-lang="en" style="margin-top:6px"><span class="add">[guide note]</span> Because the transform stage has zero reward, the whole problem is equivalent to "flattening" the bi-level problem into a single level:</p>
+          <div class="eq">$$\max_{\theta}\;\; \mathbb{E}_{D\sim \pi^{d}_\theta(\cdot\mid D_0)}\Big[\,\gamma^{N_s+N_z}\,J\big(\pi^{e}_\theta,\,D\big)\Big]$$</div>
+          <p data-lang="zh">也就是:<b>學一個「設計分布」與一個「跨設計通用的控制器」</b>,內層的 \(\arg\max_\pi\) 不再被逐一求解,而是由共享的 \(\pi^{e}_\theta\) 近似。這就是它省樣本的地方,也是它的隱含假設(見 CRITIQUE)。</p>
+          <p data-lang="en">That is: <b>learn a "design distribution" plus a "controller that works across designs."</b> The inner \(\arg\max_\pi\) is never solved per design; it is approximated by the shared \(\pi^{e}_\theta\). That is where the sample savings come from, and also its hidden assumption (see CRITIQUE).</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">三個子策略:全部按關節分解</span><span data-lang="en">Three sub-policies, all factored per joint</span></h3>
+        <p data-lang="zh"><b>① 骨架變換</b>(離散)。GNN 以關節屬性 \(A_t\) 為節點特徵,輸出每個關節的 categorical logits:</p>
+        <p data-lang="en"><b>① Skeleton transform</b> (discrete). A GNN takes joint attributes \(A_t\) as node features and outputs each joint&#39;s categorical logits:</p>
+        <div class="eq">$$\pi^{s}_\theta(a^{s}_t\mid D_t,\Phi_t)=\prod_{u\in V_t}\mathcal{C}\big(a^{s}_{u,t};\,l_{u,t}\big),\qquad l_{u,t}=\mathrm{GNN}_{s}(u,A_t;V_t,E_t)$$</div>
+        <ul style="margin:0 0 10px;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>AddJoint</b>:\(u\) 新增一個子關節 \(v\),繼承 \(u\) 的屬性 \(z_{u,t}\)。</li>
+          <li data-lang="en"><b>AddJoint</b>: \(u\) adds a child joint \(v\) that inherits \(u\)&#39;s attribute \(z_{u,t}\).</li>
+          <li data-lang="zh"><b>DelJoint</b>:\(u\) 刪除自己——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">只在 \(u\) 沒有子關節時才執行</mark>,避免一次砍掉整條肢體。</li>
+          <li data-lang="en"><b>DelJoint</b>: \(u\) removes itself—<mark class="m-assume" data-t="ASSUMPTION/CLAIM">only executed if \(u\) has no children</mark>, preventing an entire limb from vanishing at once.</li>
+          <li data-lang="zh"><b>NoChange</b>:不變。</li>
+          <li data-lang="en"><b>NoChange</b>: nothing happens.</li>
+        </ul>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">由於每個關節每一步都能加子關節,骨架可以<b>指數式快速生長</b>;權重共享讓鏡像關節傾向做同樣選擇,自然鼓勵對稱結構。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Since every joint can add a child at every step, the skeleton can <b>grow very quickly</b>; weight sharing makes mirrored joints tend to choose the same action, naturally encouraging symmetric structures.</p>
+
+        <p data-lang="zh" style="margin-top:14px"><b>② 屬性變換</b>(連續)。同樣的 GNN 架構,輸出高斯分布的均值,以<b>增量</b>更新屬性:</p>
+        <p data-lang="en" style="margin-top:14px"><b>② Attribute transform</b> (continuous). Same GNN architecture, outputting Gaussian means that update attributes <b>incrementally</b>:</p>
+        <div class="eq">$$\pi^{z}_\theta(a^{z}_t\mid D_t,\Phi_t)=\prod_{u\in V_t}\mathcal{N}\big(a^{z}_{u,t};\,\mu^{z}_{u,t},\,\Sigma^{z}\big),\quad \mu^{z}_{u,t}=\mathrm{GNN}_{z}(u,A_t;V_t,E_t),\quad z_{u,t+1}=z_{u,t}+a^{z}_{u,t}$$</div>
+
+        <p data-lang="zh" style="margin-top:14px"><b>③ 執行</b>(連續控制)。GNN 同時吃環境狀態(每關節的角度、角速度;root 另加高度、世界速度等)與屬性:</p>
+        <p data-lang="en" style="margin-top:14px"><b>③ Execution</b> (continuous control). The GNN takes both the environment state (each joint&#39;s angle and velocity; the root also gets height, world velocity, etc.) and the attributes:</p>
+        <div class="eq">$$\pi^{e}_\theta(a^{e}_t\mid s^{e}_t,D_t,\Phi_t)=\prod_{u\in V_t}\mathcal{N}\big(a^{e}_{u,t};\,\mu^{e}_{u,t},\,\Sigma^{e}\big),\qquad \mu^{e}_{u,t}=\mathrm{GNN}_{e}(u,s^{e}_t,A_t;V_t,E_t)$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">\(\Sigma^{z},\Sigma^{e}\) 都是與狀態無關、所有關節共享的可學對角共變異數。推論時兩個 transform 子策略都取<b>最可能的動作</b>,transform 結束時的 \(D_t\) 即最終設計。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">\(\Sigma^{z},\Sigma^{e}\) are state-independent learnable diagonal covariances shared by all joints. At test time both transform sub-policies take the <b>most likely action</b>; the \(D_t\) at the end of the transform stage is the final design.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">GNN 骨幹與 value network</span><span data-lang="en">GNN backbone and value network</span></h3>
+        <p data-lang="zh">第 \(i\) 層 message passing(Eq.3–5):</p>
+        <p data-lang="en">Message passing at layer \(i\) (Eq.3–5):</p>
+        <div class="eq">$$m^{i}_{u}=M\big(h^{i-1}_{u}\big),\qquad c^{i}_{u}=C\big(\{m^{i}_{v}\mid \forall v\in\mathcal{N}(u)\}\big),\qquad h^{i}_{u}=U\big(h^{i-1}_{u},\,c^{i}_{u}\big),\qquad h^{0}_{u}=x_u$$</div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">實作用 PyTorch Geometric 的 <b>GraphConv</b>(Morris 等 2019),3 層、寬 64。<span class="add">[導讀補充]</span> 原文 Eq.5 左側寫成 \(h^{t}_u\),應為 \(h^{i}_u\) 的筆誤。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Implemented with PyTorch Geometric&#39;s <b>GraphConv</b> (Morris et al. 2019), 3 layers of width 64. <span class="add">[guide note]</span> The left side of the paper&#39;s Eq.5 reads \(h^{t}_u\); it should be \(h^{i}_u\) (typo).</p>
+        <p data-lang="zh">Critic 也是 GNN,三個階段共用,輸入含階段旗標 one-hot;<mark class="m-method" data-t="METHOD/IDEA">取 root 節點的輸出當作整個 agent 的 value</mark>;transform 階段沒有環境狀態,就把 \(s^{e}_t\) 設為 0:</p>
+        <p data-lang="en">The critic is also a GNN shared across all three stages, with the stage flag as a one-hot input; <mark class="m-method" data-t="METHOD/IDEA">the root node&#39;s output is used as the whole agent&#39;s value</mark>; in the transform stage, where there is no environment state, \(s^{e}_t\) is set to 0:</p>
+        <div class="eq">$$\hat{V}_{\phi}(s^{e}_t,D_t,\Phi_t)=\mathrm{GNN}_{v}\big(\text{root},\,s^{e}_t,\,A_t;\,V_t,E_t\big)$$</div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">JSMLP:讓每個關節有自己的頭</span><span data-lang="en">JSMLP: give each joint its own head</span></h3>
+        <p data-lang="zh">GNN 的泛化力來自權重共享,但也讓「位置相似的關節」輸出相同 transform 動作,限制了<mark class="m-problem" data-t="PROBLEM/GAP">非對稱設計</mark>(例如前後腿長度、粗細、力量不同)。解法是在 GNN 之後接一個 <mark class="m-method" data-t="METHOD/IDEA">Joint-Specialized MLP</mark>:每個關節從「以關節索引為鍵的權重記憶體」取出自己的 MLP 權重。<span class="add">[導讀補充]</span> 可形式化為:</p>
+        <p data-lang="en">GNN generalization comes from weight sharing, but it also makes "joints in similar positions" output identical transform actions, limiting <mark class="m-problem" data-t="PROBLEM/GAP">asymmetric designs</mark> (e.g., front vs. back legs with different length, size or strength). The fix is a <mark class="m-method" data-t="METHOD/IDEA">Joint-Specialized MLP</mark> after the GNN: each joint fetches its own MLP weights from a "joint-index-keyed weight memory." <span class="add">[guide note]</span> Formally:</p>
+        <div class="eq">$$y_u=\mathrm{MLP}\big(h^{N}_{u};\;W_{\operatorname{idx}(u)}\big),\qquad \operatorname{idx}(u)=\text{root-to-}u\text{ path string}$$</div>
+        <figure class="fig"><img src="figs/Yuan2022/fig7_joint_index.png" alt="Figure 7 joint indexing">
+          <figcaption data-lang="zh"><b>Fig.7</b> 關節索引(App. C)。root 為 '0';每往下走到第 \(i\) 個子關節,就把 \(i\) 加到索引字串<b>左側</b>(如 '211' = root 的第 1 子 → 其第 1 子 → 其第 2 子)。重點:<b>用路徑而非 BFS 順序編號</b>,所以某些肢體出現/消失時,其他關節的索引(以及它們的 MLP 權重)<b>跨設計保持一致</b>。字串可轉成以 \(N_C+1\) 為底的整數(\(N_C\) 為最大子關節數)。</figcaption>
+          <figcaption data-lang="en"><b>Fig.7</b> Joint indexing (App. C). The root is '0'; each step down to the \(i\)-th child prepends \(i\) to the <b>left</b> of the index string (e.g., '211' = root&#39;s 1st child → its 1st child → its 2nd child). Key point: <b>indexing by path rather than BFS order</b> keeps other joints&#39; indices (and thus their MLP weights) <b>consistent across designs</b> when limbs appear or disappear. The string converts to an integer in base \(N_C+1\) (\(N_C\) = max children per joint).</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">訓練:PPO,而 transform 的信用來自 bootstrapping</span><span data-lang="en">Training: PPO, with transform credit coming from bootstrapping</span></h3>
+        <p data-lang="zh">論文用標準 PPO(clip \(\epsilon=0.2\))+ GAE(\(\lambda=0.95\)),沒有另寫目標函數。<span class="add">[導讀補充]</span> 標準形式如下,注意 \(a_t\) 可以是三種動作中的任一種,且同一 batch 混有不同設計:</p>
+        <p data-lang="en">The paper uses standard PPO (clip \(\epsilon=0.2\)) + GAE (\(\lambda=0.95\)) and does not write a new objective. <span class="add">[guide note]</span> The standard form is below; note that \(a_t\) can be any of the three action types and a batch mixes many designs:</p>
+        <div class="eq">$$L^{\text{CLIP}}(\theta)=\mathbb{E}_t\Big[\min\big(\rho_t(\theta)\hat{A}_t,\;\operatorname{clip}(\rho_t(\theta),1-\epsilon,1+\epsilon)\,\hat{A}_t\big)\Big],\qquad \rho_t(\theta)=\frac{\pi_\theta(a_t\mid s_t)}{\pi_{\theta_{\text{old}}}(a_t\mid s_t)}$$</div>
+        <div class="eq">$$\hat{A}_t=\sum_{l\ge 0}(\gamma\lambda)^{l}\,\delta_{t+l},\qquad \delta_t=r_t+\gamma\hat{V}_\phi(s_{t+1})-\hat{V}_\phi(s_t),\qquad r_t=0\ \text{ for } t \lt N_s+N_z$$</div>
+        <p data-lang="zh">在 transform 步驟,\(\delta_t=\gamma\hat V_\phi(s_{t+1})-\hat V_\phi(s_t)\):<mark class="m-assume" data-t="ASSUMPTION/CLAIM">設計動作的好壞完全由 critic 對「新設計的潛力」的估計決定</mark>,再加上 GAE 從執行階段傳回的真實回報。作者選 PPO 的理由是它限制新舊策略差異,可<b>避免一次更新讓設計劇變而崩潰</b>。<span class="add">[導讀補充]</span> 原文把這說成 PPO 有「KL regularization」;嚴格說 clipped PPO 是用 ratio clipping 而非顯式 KL 項。</p>
+        <p data-lang="en">At transform steps, \(\delta_t=\gamma\hat V_\phi(s_{t+1})-\hat V_\phi(s_t)\): <mark class="m-assume" data-t="ASSUMPTION/CLAIM">the quality of a design action is judged entirely by the critic&#39;s estimate of the new design&#39;s potential</mark>, plus the real returns GAE propagates back from execution. The authors pick PPO because it limits the old/new policy gap, <b>preventing one update from changing the design drastically and collapsing</b>. <span class="add">[guide note]</span> The paper calls this a "KL regularization"; strictly, clipped PPO uses ratio clipping, not an explicit KL term.</p>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted)">實際設定(Tab.1 粗體):\(N_s=5\)、\(N_z=1\);GNN 皆為 (64,64,64)、JSMLP (128,128)、Tanh;\(\Sigma^{z}\) 對角值 0.01、\(\Sigma^{e}\) 為 1.0;policy lr 5e-5、value lr 3e-4;batch 50,000 × 1,000 epochs = <b>50M 模擬步</b>;minibatch 2048、每 batch 10 次 PPO 迭代;\(\gamma=0.995\)(Gap Crosser 用 0.999)。設計以 MuJoCo XML 字串表示,transform 動作直接編輯 XML,執行階段開始時以新 XML 重置模擬器。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted)">Actual settings (bold in Tab.1): \(N_s=5\), \(N_z=1\); all GNNs (64,64,64), JSMLP (128,128), Tanh; \(\Sigma^{z}\) diagonal 0.01, \(\Sigma^{e}\) 1.0; policy lr 5e-5, value lr 3e-4; batch 50,000 × 1,000 epochs = <b>50M simulation steps</b>; minibatch 2048, 10 PPO iterations per batch; \(\gamma=0.995\) (0.999 for Gap Crosser). Designs are MuJoCo XML strings; transform actions edit the XML, and the simulator is reset with the new XML at the start of execution.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(D_t=(V_t,E_t,A_t)\)</td><td><span data-lang="zh">第 \(t\) 步的設計:關節集合、骨頭集合、每關節屬性。</span><span data-lang="en">Design at step \(t\): joints, bones, and per-joint attributes.</span></td></tr>
+          <tr><td>\(z_{u,t}\)</td><td><span data-lang="zh">關節 \(u\) 的屬性:骨向量、骨粗細、馬達 gear,正規化到 \([-1,1]\)。</span><span data-lang="en">Attributes of joint \(u\): bone vector, bone size, motor gear, normalized to \([-1,1]\).</span></td></tr>
+          <tr><td>\(\Phi_t\)</td><td><span data-lang="zh">階段旗標:現在是在「改骨架」「改屬性」還是「跑起來」。</span><span data-lang="en">Stage flag: are we "editing skeleton," "editing attributes," or "running"?</span></td></tr>
+          <tr><td>\(s^{e}_t\)</td><td><span data-lang="zh">環境狀態(每關節角度與角速度,root 加高度/世界速度等;不足以 0 補齊)。</span><span data-lang="en">Environment state (per-joint angle and velocity; root adds height/world velocity, etc.; zero-padded).</span></td></tr>
+          <tr><td>\(\pi^{s},\pi^{z},\pi^{e}\)</td><td><span data-lang="zh">骨架、屬性、執行三個子策略,各自一組 GNN(+JSMLP)參數。</span><span data-lang="en">Skeleton, attribute and execution sub-policies, each with its own GNN (+JSMLP) parameters.</span></td></tr>
+          <tr><td>\(N_s,\,N_z\)</td><td><span data-lang="zh">骨架/屬性變換的步數(選定 5 與 1)。</span><span data-lang="en">Number of skeleton / attribute transform steps (5 and 1 selected).</span></td></tr>
+          <tr><td>\(\hat V_\phi\)</td><td><span data-lang="zh">GNN critic,取 root 輸出;在 transform 階段等於「這個身體值多少分」。</span><span data-lang="en">GNN critic, root output; in the transform stage it is "how much this body is worth."</span></td></tr>
+          <tr><td>\(\operatorname{idx}(u)\)</td><td><span data-lang="zh">JSMLP 的關節索引:從 root 到 \(u\) 的路徑字串。</span><span data-lang="en">JSMLP joint index: the root-to-\(u\) path string.</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">把「造身體」當成遊戲開局的前 6 步:策略先捏好角色,再用這個角色打完這局;打得好,開局那幾步的選擇就被強化。</span>
+        <span data-lang="en">Treat "building the body" as the first 6 moves of a game: the policy sculpts its character, then plays the round with it; if the round goes well, those opening moves get reinforced.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何沒 reward 也能學設計?</span><span data-lang="en">Why design learns with no reward</span></span>
+        <span data-lang="zh">transform 動作的 advantage 由「下一個設計的 value − 目前設計的 value」加上之後執行回報的 GAE 累積組成。只要 critic 能分辨好身體與壞身體,transform 策略就有方向。作者刻意<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不加任何設計相關 reward</mark>,以便與基線公平比較。</span>
+        <span data-lang="en">A transform action&#39;s advantage is "value of the next design − value of the current design" plus GAE-accumulated returns from execution. As long as the critic can tell good bodies from bad, the transform policy has a direction. The authors deliberately <mark class="m-assume" data-t="ASSUMPTION/CLAIM">add no design-related reward</mark>, for a fair comparison with baselines.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何 transform 時不進環境?</span><span data-lang="en">Why no environment during transform?</span></span>
+        <span data-lang="zh">作者指出,在與環境互動時加/刪關節<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不符合物理定律、會被 agent 鑽漏洞</mark>(例如突然長腿把自己彈出去)。所以設計完全在「虛擬工作台」上完成,再丟進模擬器。</span>
+        <span data-lang="en">The authors note that adding/removing joints while interacting with the environment <mark class="m-assume" data-t="ASSUMPTION/CLAIM">violates physics and can be exploited</mark> (e.g., suddenly growing a leg to launch itself). So design happens entirely on a "virtual workbench" before the body enters the simulator.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">\(N_s=5\) 代表從初始設計最多只能「長 5 代」;每個環境還限制<b>每關節最多子關節數</b>(2D/Swimmer/Gap 為 3,3D 為 2,root 除外)。設計空間其實是<mark class="m-limit" data-t="LIMITATION/FUTURE">被人為框住的樹狀 hinge 結構</mark>。</span>
+        <span data-lang="en">\(N_s=5\) means at most "5 generations of growth" from the initial design, and each environment caps <b>children per joint</b> (3 for 2D/Swimmer/Gap, 2 for 3D except the root). The design space is actually a <mark class="m-limit" data-t="LIMITATION/FUTURE">hand-bounded space of tree-shaped hinge structures</mark>.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實驗設定</span><span data-lang="en">Setup</span></h3>
+        <div class="tblwrap"><table>
+          <tr><th><span data-lang="zh">環境</span><span data-lang="en">Environment</span></th><th><span data-lang="zh">任務與 reward</span><span data-lang="en">Task &amp; reward</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Constraints</span></th></tr>
+          <tr><td><b>2D Locomotion</b></td><td><span data-lang="zh">xz 平面向前跑;\(r_t=(p^{x}_{t+1}-p^{x}_t)/\delta t+1\)(含 alive bonus 1)</span><span data-lang="en">Run forward in the xz-plane; \(r_t=(p^{x}_{t+1}-p^{x}_t)/\delta t+1\) (alive bonus 1)</span></td><td><span data-lang="zh">每關節 ≤3 子關節;root 高度 &lt; 0.7 終止</span><span data-lang="en">≤3 children/joint; terminate if root height &lt; 0.7</span></td></tr>
+          <tr><td><b>3D Locomotion</b></td><td><span data-lang="zh">3D 世界沿 x 軸前進;\(r_t=(p^{x}_{t+1}-p^{x}_t)/\delta t-w\cdot\frac{1}{J}\sum_{u}\|a^{e}_{u,t}\|^2\),\(w=10^{-4}\)</span><span data-lang="en">Move along x in 3D; \(r_t=(p^{x}_{t+1}-p^{x}_t)/\delta t-w\cdot\frac{1}{J}\sum_{u}\|a^{e}_{u,t}\|^2\), \(w=10^{-4}\)</span></td><td><span data-lang="zh">root 外每關節 ≤2 子關節</span><span data-lang="en">≤2 children/joint except root</span></td></tr>
+          <tr><td><b>Swimmer</b></td><td><span data-lang="zh">黏度 0.1 的水中、xy 平面沿 x 前進;reward 同 3D</span><span data-lang="en">In water (viscosity 0.1), xy-plane, move along x; reward as in 3D</span></td><td><span data-lang="zh">每關節 ≤3 子關節</span><span data-lang="en">≤3 children/joint</span></td></tr>
+          <tr><td><b>Gap Crosser</b></td><td><span data-lang="zh">跨越週期性缺口(寬 0.96、週期 3.2);速度 + alive bonus 0.1</span><span data-lang="en">Cross periodic gaps (width 0.96, period 3.2); speed + alive bonus 0.1</span></td><td><span data-lang="zh">≤3 子關節;root 高度 &lt; 1.0 終止</span><span data-lang="en">≤3 children; terminate if root height &lt; 1.0</span></td></tr>
+        </table></div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">基線(皆同時優化骨架與屬性):<b>NGE</b>(GNN 權重繼承的演化搜尋)、<b>ESS</b>(Sims 1994 經典演化結構搜尋)、<b>RGS</b>(隨機產生骨架與屬性的族群)。基線由作者依 NGE 官方程式碼重新實作,NGE 用與本文相同的 GNN;基線族群 20、每個體 batch 20,000、125 世代 = 同樣 <b>50M 步</b>。ES 類基線<mark class="m-assume" data-t="ASSUMPTION/CLAIM">畫的是每次迭代中「最佳個體」</mark>的表現。每個方法每個環境 6 seeds。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px">Baselines (all optimize skeleton and attributes): <b>NGE</b> (evolutionary search with GNN weight inheritance), <b>ESS</b> (Sims 1994 classic evolutionary structure search), <b>RGS</b> (a population of randomly generated skeletons/attributes). The authors reimplemented the baselines from NGE&#39;s public code, with NGE using the same GNN as this paper; baselines use population 20, batch 20,000 per agent, 125 generations = the same <b>50M steps</b>. For ES-style baselines the plot <mark class="m-assume" data-t="ASSUMPTION/CLAIM">shows the best agent at each iteration</mark>. 6 seeds per method per environment.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果(Fig.3,50M 步時的平均 reward,由圖讀值 ≈)</span><span data-lang="en">Main results (Fig.3, mean reward at 50M steps, read off the plot ≈)</span></h3>
+        <div class="tblwrap"><table>
+          <tr><th><span data-lang="zh">環境</span><span data-lang="en">Env</span></th><th>Transform2Act</th><th>NGE</th><th>ESS</th><th>RGS</th><th><span data-lang="zh">vs NGE(最終)</span><span data-lang="en">vs NGE (final)</span></th><th><span data-lang="zh">追平 NGE 50M 所需步數</span><span data-lang="en">Steps to match NGE@50M</span></th></tr>
+          <tr><td>2D Locomotion</td><td class="win">≈9,000</td><td>≈3,000</td><td>≈1,100</td><td>≈1,600</td><td class="ok">~3×</td><td>~7M</td></tr>
+          <tr><td>3D Locomotion</td><td class="win">≈4,000</td><td>≈2,000</td><td>≈1,400</td><td>≈1,400</td><td class="ok">~2×</td><td>~13M</td></tr>
+          <tr><td>Swimmer</td><td class="win">≈740</td><td>≈430</td><td>≈340</td><td>≈280</td><td class="ok">~1.7×</td><td>~3M</td></tr>
+          <tr><td>Gap Crosser</td><td class="win">≈3,500</td><td>≈750</td><td>≈150</td><td>≈550</td><td class="ok">~4.7×</td><td>~9M</td></tr>
+        </table></div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><span class="add">[導讀補充]</span> 論文<b>沒有任何數字表格</b>,上表全部由導讀者從 Fig.3 曲線目測(誤差約 ±5–10%)。結論方向很清楚:<mark class="m-result" data-t="RESULT/EVIDENCE">四個環境、收斂速度與最終表現都一致勝出</mark>;以「追平 NGE 最終值所需步數」看,快約 4–16 倍。Swimmer 尤其誇張:約 3M 步就超過所有基線的 50M 成績。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><span class="add">[guide note]</span> The paper has <b>no numeric tables at all</b>; every number above was eyeballed by the guide author from the Fig.3 curves (roughly ±5–10%). The direction is unambiguous: <mark class="m-result" data-t="RESULT/EVIDENCE">it wins on all four environments in both convergence speed and final performance</mark>; by "steps needed to match NGE&#39;s final value," it is about 4–16× faster. Swimmer is the most striking: it beats every baseline&#39;s 50M score after about 3M steps.</p>
+        <figure class="fig"><img src="figs/Yuan2022/fig3_baselines.png" alt="Figure 3 baseline comparison">
+          <figcaption data-lang="zh"><b>Fig.3</b> 上排:學習曲線(藍 = Transform2Act,橘 = NGE,綠 = ESS,紅 = RGS;陰影為標準差)。下排:各方法的最終設計。要看的是:藍線<b>從一開始就陡升</b>,而基線多半在 50M 步內仍緩慢爬升;Transform2Act 的設計是 2D 的「長頸鹿」、3D 的長腿「蜘蛛」、Swimmer 的多觸手「魷魚」、Gap Crosser 的 Hopper 狀跳躍者。也注意藍色陰影寬,<b>種子間變異不小</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.3</b> Top: learning curves (blue = Transform2Act, orange = NGE, green = ESS, red = RGS; shading = std). Bottom: final designs per method. What to notice: the blue curve <b>rises steeply from the start</b>, while baselines mostly creep upward within 50M steps; Transform2Act&#39;s designs are a 2D "giraffe," a long-legged 3D "spider," a many-tentacled "squid" for Swimmer, and a Hopper-like jumper for Gap Crosser. Also note the wide blue shading: <b>seed-to-seed variance is substantial</b>.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">消融(Fig.4,50M 步時,由圖讀值 ≈)</span><span data-lang="en">Ablations (Fig.4, at 50M steps, read off the plot ≈)</span></h3>
+        <div class="tblwrap"><table>
+          <tr><th><span data-lang="zh">變體</span><span data-lang="en">Variant</span></th><th>2D Loco</th><th>3D Loco</th><th>Swimmer</th><th>Gap Crosser</th><th><span data-lang="zh">說明了什麼</span><span data-lang="en">What it shows</span></th></tr>
+          <tr><td class="win">Ours (full)</td><td class="win">≈9,200</td><td class="win">≈4,100</td><td class="win">≈740</td><td class="win">≈3,500</td><td>—</td></tr>
+          <tr><td>w/o Control JSMLP</td><td>≈7,000</td><td>≈3,000</td><td>≈700</td><td>≈2,000</td><td><span data-lang="zh">控制端的 JSMLP 本身就有用</span><span data-lang="en">JSMLP helps even on the control side</span></td></tr>
+          <tr><td>w/o All JSMLPs</td><td>≈6,800 <small><span data-lang="zh">(變異大)</span><span data-lang="en">(high var.)</span></small></td><td>≈3,100</td><td>≈650 <small><span data-lang="zh">(變異極大)</span><span data-lang="en">(very high var.)</span></small></td><td>≈1,900</td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">JSMLP 同時提升表現與穩定性</mark></span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">JSMLP lifts both performance and stability</mark></span></td></tr>
+          <tr><td>w/o GNNs <small><span data-lang="zh">(只剩 JSMLP)</span><span data-lang="en">(JSMLP only)</span></small></td><td class="bad">≈900</td><td class="bad">≈350</td><td class="bad">≈230</td><td class="bad">≈450</td><td><span data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">GNN 的 message passing 是關鍵</mark>,沒有它幾乎學不起來</span><span data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">GNN message passing is essential</mark>; without it learning nearly fails</span></td></tr>
+        </table></div>
+        <figure class="fig"><img src="figs/Yuan2022/fig4_ablation_jsmlp.png" alt="Figure 4 ablations and Figure 5 JSMLP effect">
+          <figcaption data-lang="zh"><b>Fig.4(上)</b> 消融曲線:橘線(w/o GNNs)在四個環境都貼地。<b>Fig.5(下)</b> 有/無 JSMLP 的設計:沒有 JSMLP 時 3D agent 是完美四向對稱的十字、Swimmer 是均勻的細條;有 JSMLP 則出現前後不對稱的長腿與多觸手。標示的單一設計 reward:3D <b>4965 vs 2621</b>、Swimmer <b>912 vs 605</b>。但注意 Fig.4 的 Swimmer 平均曲線三條幾乎重疊——Fig.5 的單一設計差距<b>比平均差距大得多</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4 (top)</b> Ablation curves: the orange line (w/o GNNs) hugs the floor in all four environments. <b>Fig.5 (bottom)</b> Designs with/without JSMLP: without JSMLP the 3D agent is a perfectly four-way-symmetric cross and the swimmer a uniform thin strip; with JSMLP, front/back-asymmetric long legs and many tentacles appear. Reported single-design rewards: 3D <b>4965 vs 2621</b>, Swimmer <b>912 vs 605</b>. But note that in Fig.4 the Swimmer mean curves nearly overlap—the single-design gap in Fig.5 is <b>much larger than the mean gap</b>.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">只調連續屬性(App. A,Fig.6,50M 步 ≈)</span><span data-lang="en">Continuous-only fine-tuning (App. A, Fig.6, at 50M ≈)</span></h3>
+        <p data-lang="zh">關掉骨架階段,以 OpenAI Gym 的專家設計(Hopper / Ant / Swimmer)為初始,只做屬性變換;對手是 Ha(2019)的 RL-for-design 與「固定專家設計 + PPO」。三者用相同網路架構。</p>
+        <p data-lang="en">With the skeleton stage disabled and an OpenAI Gym expert design (Hopper / Ant / Swimmer) as the initial design, only attribute transforms are applied; competitors are Ha (2019) RL-for-design and "fixed expert design + PPO." All three use the same network architecture.</p>
+        <div class="tblwrap"><table>
+          <tr><th><span data-lang="zh">環境(初始設計)</span><span data-lang="en">Env (initial design)</span></th><th>Transform2Act</th><th>Ha 2019</th><th><span data-lang="zh">專家設計</span><span data-lang="en">Expert design</span></th></tr>
+          <tr><td>2D Loco (Hopper)</td><td class="win">≈5,000</td><td>≈3,800</td><td>≈3,600</td></tr>
+          <tr><td>3D Loco (Ant)</td><td class="win">≈6,800</td><td>≈4,200</td><td>≈3,800</td></tr>
+          <tr><td>Swimmer (Gym Swimmer)</td><td class="win">≈850</td><td>≈730</td><td>≈350</td></tr>
+          <tr><td>Gap Crosser (Hopper)</td><td class="win">≈3,700</td><td>≈2,000</td><td>≈300</td></tr>
+        </table></div>
+        <figure class="fig"><img src="figs/Yuan2022/fig6_continuous.png" alt="Figure 6 continuous design optimization">
+          <figcaption data-lang="zh"><b>Fig.6</b> 連續設計優化(藍 = Transform2Act,橘 = 專家設計,綠 = Ha 2019)。要看的是:四個環境都由藍線勝出;3D 中藍線約 15M 步就超過其他方法的 50M 成績。<span class="add">[導讀補充]</span> 再拿這張圖跟 Fig.3 對照——3D 從 Ant 出發只調屬性就到 ≈6,800,<b>高於</b>從零搜尋拓撲的 ≈4,000;Swimmer 也是 ≈850 &gt; ≈740。</figcaption>
+          <figcaption data-lang="en"><b>Fig.6</b> Continuous design optimization (blue = Transform2Act, orange = expert design, green = Ha 2019). What to notice: blue wins in all four environments; in 3D it passes the others&#39; 50M scores by about 15M steps. <span class="add">[guide note]</span> Now cross-check with Fig.3: in 3D, starting from Ant and tuning only attributes reaches ≈6,800, <b>higher than</b> the ≈4,000 from searching topology from scratch; Swimmer likewise ≈850 &gt; ≈740.</figcaption></figure>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">實驗證明了什麼、沒證明什麼</span><span data-lang="en">What the experiments do and don&#39;t prove</span></h3>
+        <p data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">證明了</mark>:在同樣 50M 步的預算、同樣的 GNN 骨幹下,「設計即策略 + 共享經驗」比作者重新實作的演化搜尋學得更快、更好;GNN 不可或缺、JSMLP 有明確幫助。<mark class="m-limit" data-t="LIMITATION/FUTURE">沒證明</mark>:它找到的是否是全域較優設計(從零搜尋在 3D/Swimmer 輸給「專家拓撲 + 調屬性」);設計在真實物理中是否可行;換更大預算、更強的演化基線(或與 Luck 2020、Schaff 2019 等 RL co-design)比較時優勢是否仍在。</p>
+        <p data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Proven</mark>: under the same 50M-step budget and the same GNN backbone, "design-as-policy + shared experience" learns faster and better than the authors&#39; reimplemented evolutionary search; GNNs are indispensable and JSMLP clearly helps. <mark class="m-limit" data-t="LIMITATION/FUTURE">Not proven</mark>: whether it finds globally better designs (from-scratch search loses to "expert topology + attribute tuning" in 3D/Swimmer); whether the designs are physically viable; whether the edge survives larger budgets, stronger evolutionary baselines, or comparison with other RL co-design methods such as Luck 2020 or Schaff 2019.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh">同預算下四戰全勝,最終 reward 約為 NGE 的 1.7–4.7 倍,且所需步數少 4–16 倍;拿掉 GNN 全面崩潰,拿掉 JSMLP 變差且不穩。</span>
+        <span data-lang="en">Four wins out of four under equal budget, with final reward ~1.7–4.7× NGE&#39;s and 4–16× fewer steps needed; removing GNNs collapses everything, removing JSMLPs hurts and destabilizes.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">數字要怎麼讀</span><span data-lang="en">How to read the numbers</span></div>
+        <span data-lang="zh">結論段寫「<mark class="m-assume" data-t="ASSUMPTION/CLAIM">收斂速度與最終表現都勝出一個數量級</mark>」。從圖讀值,最終表現是 1.7–4.7 倍、不是 10 倍;收斂速度只有 Swimmer 接近 10 倍以上。這個說法偏寬鬆。</span>
+        <span data-lang="en">The conclusion says it wins "<mark class="m-assume" data-t="ASSUMPTION/CLAIM">in both convergence speed and final performance by an order of magnitude</mark>." Read off the plots, final performance is 1.7–4.7×, not 10×; only Swimmer approaches 10×+ in convergence speed. The claim is loose.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">設計生長過程</span><span data-lang="en">How designs grow</span></span>
+        <span data-lang="zh">App. D(Fig.8–10)逐步展示骨架變換:2D 在 3 步內由單棍長出脖子+兩條腿;3D 由對稱十字長出不對稱長腿;Swimmer 在第 3–5 步於尾端爆發出大量「觸手」。生長確實是「每關節同時行動」的平行模式。</span>
+        <span data-lang="en">App. D (Fig.8–10) shows skeleton transforms step by step: in 2D a single stick grows a neck and two legs within 3 steps; in 3D a symmetric cross grows asymmetric long legs; the Swimmer bursts out many "tentacles" at its tail during steps 3–5. Growth is indeed parallel, with "all joints acting at once."</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">基線公平?</span><span data-lang="en">fair baselines?</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">拓撲搜尋的價值</span><span data-lang="en">value of topology search</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>純模擬的虛擬生物</b>:所有設計都是 MuJoCo 裡的膠囊棍子、hinge 關節、理想力矩馬達,屬性範圍只是「<mark class="m-limit" data-t="LIMITATION/FUTURE">鬆散定義</mark>」後正規化到 \([-1,1]\)。沒有質量/慣量預算、沒有致動器扭矩-速度曲線、沒有減速機/傳動、沒有結構強度或製造約束,也<b>沒有任何實體驗證或 sim-to-real</b>。</li>
+          <li data-lang="en"><b>Simulation-only virtual creatures</b>: every design is MuJoCo capsule sticks with hinge joints and ideal torque motors; attribute ranges are merely "<mark class="m-limit" data-t="LIMITATION/FUTURE">loosely defined</mark>" and normalized to \([-1,1]\). No mass/inertia budget, no actuator torque-speed curves, no gearboxes/transmissions, no structural or manufacturing constraints, and <b>no physical validation or sim-to-real at all</b>.</li>
+          <li data-lang="zh"><b>設計的物理合理性</b>:馬達 gear(強度)是可自由調大的屬性,而 2D Locomotion 與 Gap Crosser <mark class="m-problem" data-t="PROBLEM/GAP">完全沒有控制成本</mark>,3D/Swimmer 的懲罰係數也只有 \(10^{-4}\)。<span class="add">[導讀補充]</span> 在這種 reward 下「更強的馬達、更長的槓桿」幾乎沒有代價,「長頸鹿以長脖子增加前衝動量」可能部分是在利用模擬器而非發現生物力學原理。</li>
+          <li data-lang="en"><b>Physical plausibility of designs</b>: motor gear (strength) is a freely increasable attribute, while 2D Locomotion and Gap Crosser have <mark class="m-problem" data-t="PROBLEM/GAP">no control cost at all</mark> and 3D/Swimmer penalize at only \(10^{-4}\). <span class="add">[guide note]</span> Under such rewards "stronger motors and longer levers" are nearly free, so "the giraffe uses its long neck for forward momentum" may partly be simulator exploitation rather than a discovered biomechanical principle.</li>
+          <li data-lang="zh"><b>樣本效率的宣稱</b>:比較的 x 軸是「模擬步數」,這對 ES 公平;但 ES 類基線畫的是<mark class="m-assume" data-t="ASSUMPTION/CLAIM">每代最佳個體</mark>,而基線是作者自行重實作、族群只用 20(搜尋範圍 10–100)。「一個數量級」的措辭與圖上 1.7–4.7 倍的最終差距不符。另外沒有與同為 RL 的 co-design 方法(Luck 2020、Schaff 2019)在拓撲搜尋上比較。</li>
+          <li data-lang="en"><b>Sample-efficiency claims</b>: the x-axis is "simulation steps," which is fair to ES; but ES baselines plot the <mark class="m-assume" data-t="ASSUMPTION/CLAIM">best individual per generation</mark>, the baselines were reimplemented by the authors, and the population is only 20 (searched over 10–100). The "order of magnitude" wording does not match the 1.7–4.7× final gap visible in the plots. There is also no topology-search comparison against other RL co-design methods (Luck 2020, Schaff 2019).</li>
+          <li data-lang="zh"><b>拓撲搜尋到底找到多好的設計?</b> <span class="add">[導讀補充]</span> 對照 Fig.3 與 Fig.6:3D 從零搜尋 ≈4,000,但「Ant 拓撲 + 只調屬性」≈6,800;Swimmer 也是 ≈740 vs ≈850。在 50M 步內,組合式搜尋<mark class="m-limit" data-t="LIMITATION/FUTURE">沒能重新發現像專家拓撲那樣好的結構</mark>(兩者初始設計不同,不能完全直比,但論文沒有討論這個落差)。</li>
+          <li data-lang="en"><b>How good are the topologies it finds?</b> <span class="add">[guide note]</span> Cross-check Fig.3 and Fig.6: in 3D, from-scratch search reaches ≈4,000, but "Ant topology + attribute tuning" reaches ≈6,800; Swimmer likewise ≈740 vs ≈850. Within 50M steps, combinatorial search <mark class="m-limit" data-t="LIMITATION/FUTURE">did not rediscover structures as good as the expert topologies</mark> (initial designs differ, so it is not a pure apples-to-apples comparison, but the paper never discusses this gap).</li>
+          <li data-lang="zh"><b>設計與控制的共適應偏誤</b>:<span class="add">[導讀補充]</span> 共享的 \(\pi^{e}_\theta\) 只會在 transform 策略常產生的設計上被練好,而 critic 又會因此給這些設計更高 value——形成<mark class="m-assume" data-t="ASSUMPTION/CLAIM">自我強化的早熟收斂</mark>。新奇設計因控制器還不會操作而被低估。論文的探索論證(每 epoch 試 &gt;2000 設計)只說明「試得多」,沒說明「評得準」。最後輸出的也只是一個 argmax 設計,沒有設計多樣性或 Pareto 前緣。</li>
+          <li data-lang="en"><b>Co-adaptation bias between design and control</b>: <span class="add">[guide note]</span> the shared \(\pi^{e}_\theta\) gets good only on designs the transform policy already favors, and the critic then assigns those designs higher value—a <mark class="m-assume" data-t="ASSUMPTION/CLAIM">self-reinforcing premature convergence</mark>. Novel designs are underrated because the controller cannot yet operate them. The exploration argument (&gt;2000 designs per epoch) shows "tries many," not "judges them accurately." And the output is a single argmax design, with no design diversity or Pareto front.</li>
+          <li data-lang="zh"><b>Fig.5 的代表性</b>:Fig.5 標示的單一設計 reward(Swimmer 912 vs 605)遠大於 Fig.4 平均曲線的差距(Swimmer 三條線幾乎重疊);<mark class="m-assume" data-t="ASSUMPTION/CLAIM">可能是挑選過的種子</mark>,論文沒有說明如何挑選。</li>
+          <li data-lang="en"><b>Representativeness of Fig.5</b>: the single-design rewards in Fig.5 (Swimmer 912 vs 605) are far larger than the mean-curve gap in Fig.4 (the Swimmer curves nearly overlap); they <mark class="m-assume" data-t="ASSUMPTION/CLAIM">may be selected seeds</mark>, and the paper does not say how they were chosen.</li>
+          <li data-lang="zh"><b>與真實腿式機器人的距離</b>:任務只有「平地/缺口上往前衝」,沒有轉向、不平地形、擾動、能耗或多任務;骨架限定為樹狀 hinge 鏈、每關節最多 2–3 子關節、最多 5 代生長。真實腿式機器人 co-design(如本文自己引用的 Ha 2017/2018、Desai 2018)關心的是<mark class="m-limit" data-t="LIMITATION/FUTURE">固定拓撲下的尺寸、傳動比、致動器選型</mark>,而這篇最有特色的拓撲搜尋恰好最難落地。</li>
+          <li data-lang="en"><b>Distance from real legged robots</b>: the only tasks are "dash forward on flat ground / over gaps," with no turning, rough terrain, perturbations, energy cost or multi-tasking; skeletons are tree-shaped hinge chains with at most 2–3 children per joint and at most 5 growth generations. Real legged-robot co-design (e.g., Ha 2017/2018 and Desai 2018, which this paper itself cites) focuses on <mark class="m-limit" data-t="LIMITATION/FUTURE">dimensions, gear ratios and actuator selection under a fixed topology</mark>, and this paper&#39;s most distinctive feature, topology search, is the hardest part to deploy.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>設計多樣性</b>:策略最終塌縮成一個設計。不同 seeds 是否收斂到不同拓撲?若是,這代表搜尋高度依賴初始化,而非可靠地找到好設計?</li>
+          <li data-lang="en"><b>Design diversity</b>: the policy finally collapses to one design. Do different seeds converge to different topologies? If so, does that mean the search depends heavily on initialization rather than reliably finding good designs?</li>
+          <li data-lang="zh"><b>基線公平性</b>:若 NGE 的族群改用 100、或把「最佳個體」改成最終重新訓練的評估,差距會剩多少?是否應與 Luck 2020 這類 design-conditioned value 方法比較?</li>
+          <li data-lang="en"><b>Baseline fairness</b>: with an NGE population of 100, or with "best individual" replaced by a final retrained evaluation, how much of the gap remains? Should it be compared against design-conditioned value methods like Luck 2020?</li>
+          <li data-lang="zh"><b>拓撲搜尋的價值</b>:既然「Ant + 調屬性」在 3D 勝過從零搜尋,把拓撲搜尋的預算加到 200M 步能追上嗎?還是 \(N_s=5\) 與子關節上限才是瓶頸?</li>
+          <li data-lang="en"><b>Value of topology search</b>: since "Ant + attribute tuning" beats from-scratch search in 3D, would a 200M-step budget for topology search catch up? Or are \(N_s=5\) and the child caps the bottleneck?</li>
+          <li data-lang="zh"><b>物理可行性</b>:若在 reward 加入馬達功率/重量成本、或把 gear 上限設為真實致動器規格,長頸鹿與魷魚是否還會出現?</li>
+          <li data-lang="en"><b>Physical realism</b>: if the reward included motor power/weight costs, or gear limits were set to real actuator specs, would the giraffe and squid still emerge?</li>
+          <li data-lang="zh"><b>critic 的角色</b>:transform 階段完全仰賴 \(\hat V_\phi\) 評估設計。若把 critic 換成「對每個候選設計做短暫 rollout 的蒙地卡羅估計」,學到的設計會不同嗎?critic 誤差對設計選擇的影響有多大?</li>
+          <li data-lang="en"><b>Role of the critic</b>: the transform stage relies entirely on \(\hat V_\phi\) to evaluate designs. If the critic were replaced by Monte Carlo estimates from short rollouts of each candidate, would different designs emerge? How much does critic error steer design choice?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把「長出長頸鹿、蜘蛛、魷魚」讀成「<b>AI 發現了生物演化的設計原理</b>」。這些形態只是在特定 reward(只看前進速度、幾乎無能耗)與特定設計空間(樹狀 hinge 膠囊)下的<mark class="m-assume" data-t="ASSUMPTION/CLAIM">任務專用解</mark>。生物外觀的相似性是視覺上的類比,論文也沒有聲稱更多。</span>
+        <span data-lang="en">Reading "it grew giraffes, spiders and squids" as "<b>AI discovered the design principles of biological evolution</b>." These shapes are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">task-specific solutions</mark> under a specific reward (forward speed only, almost no energy cost) and a specific design space (tree-shaped hinge capsules). The resemblance is a visual analogy, and the paper does not claim more.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">預算對齊(皆 50M 步)、NGE 用同樣 GNN、兩邊都公開了超參數搜尋範圍與選定值、6 seeds 並畫標準差;App. B 也誠實地以樣本數 \(EM/N\) vs \(EM\) 解釋優勢來源。整體方法簡潔,每環境 1 天單機即可重現。</span>
+        <span data-lang="en">Budget-matched (all 50M steps), NGE uses the same GNN, hyperparameter search ranges and chosen values are disclosed for both sides, 6 seeds with std shading; App. B honestly explains the edge in terms of \(EM/N\) vs \(EM\) samples. The method is simple and reproducible in about a day per environment on one machine.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">作者自述的未來方向</span><span data-lang="en">Authors&#39; stated future work</span></span>
+        <span data-lang="zh">結論只提到「用 <mark class="m-limit" data-t="LIMITATION/FUTURE">RL 探索方法</mark>進一步提升樣本效率」;沒有專門的 limitations 段落,也沒有討論實體可行性。</span>
+        <span data-lang="en">The conclusion only mentions "using <mark class="m-limit" data-t="LIMITATION/FUTURE">RL exploration methods</mark> to further improve sample efficiency"; there is no dedicated limitations section and no discussion of physical feasibility.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>「把外層搜尋變成 episode 前段的動作」是可遷移的模板</b>:任何「先決定一組結構/參數,再在其上跑控制」的雙層問題(感測器配置、夾爪形狀、甚至 reward shaping 參數),都可以考慮用擴增 MDP + 階段旗標攤平成單層 RL。</li>
+          <li data-lang="en"><b>"Turn the outer search into early-episode actions" is a transferable template</b>: any bi-level problem of the form "choose a structure/parameters, then run control on it" (sensor placement, gripper shape, even reward-shaping parameters) can be flattened into single-level RL with an augmented MDP + stage flag.</li>
+          <li data-lang="zh"><b>對腿式機器人的實際用法</b>:<span class="add">[導讀補充]</span> 最可落地的是 App. A 的「固定拓撲、只調屬性」模式——等同於以 RL 共同調整腿長、連桿比例、馬達強度。若要用在真機,需補上致動器模型、質量成本、地形/擾動隨機化,並把設計範圍限制在可製造區間。</li>
+          <li data-lang="en"><b>Practical use for legged robots</b>: <span class="add">[guide note]</span> the most deployable piece is App. A&#39;s "fixed topology, attributes only" mode—effectively co-tuning leg lengths, link ratios and motor strength with RL. For real hardware you would add actuator models, mass costs, terrain/perturbation randomization, and restrict designs to a manufacturable range.</li>
+          <li data-lang="zh"><b>GNN 權重共享 vs 專門化的取捨</b>:JSMLP 的「以路徑為鍵的專屬權重」是處理可變拓撲時很實用的技巧,可遷移到任何「節點會增減、但需保持身分一致」的圖策略。</li>
+          <li data-lang="en"><b>Weight sharing vs. specialization in GNNs</b>: JSMLP&#39;s "path-keyed per-joint weights" is a practical trick for variable topologies, transferable to any graph policy where nodes appear/disappear but must keep consistent identities.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">它在 co-design 版圖中的位置</span><span data-lang="en">Where it sits in the co-design landscape</span></h3>
+        <div class="tblwrap"><table>
+          <tr><th><span data-lang="zh">路線</span><span data-lang="en">Family</span></th><th><span data-lang="zh">代表</span><span data-lang="en">Examples</span></th><th><span data-lang="zh">怎麼找設計</span><span data-lang="en">How designs are found</span></th><th><span data-lang="zh">優 / 劣</span><span data-lang="en">Pros / cons</span></th></tr>
+          <tr><td><b><span data-lang="zh">演化搜尋</span><span data-lang="en">Evolutionary search</span></b></td><td>Sims 1994 · Cheney 2014/2018 · NGE 2019 · Hejna 2021</td><td><span data-lang="zh">族群 + 突變 + 淘汰;內層各自學控制</span><span data-lang="en">Population + mutation + elimination; each learns its own control</span></td><td><span data-lang="zh">可改拓撲、易平行;樣本效率低</span><span data-lang="en">Topology-capable, parallel; sample-inefficient</span></td></tr>
+          <tr><td><b><span data-lang="zh">模型式(軌跡優化)</span><span data-lang="en">Model-based (trajectory opt.)</span></b></td><td>Ha 2017/2018 · Desai 2018</td><td><span data-lang="zh">對設計參數求解析/隱函數梯度,與運動軌跡一起優化</span><span data-lang="en">Analytic / implicit-function gradients on design parameters, optimized jointly with motion trajectories</span></td><td><span data-lang="zh">精確、物理約束易加;需模型、拓撲固定</span><span data-lang="en">Precise, easy to add physical constraints; needs a model, fixed topology</span></td></tr>
+          <tr><td class="win"><b><span data-lang="zh">設計即策略(RL)</span><span data-lang="en">Design-as-policy (RL)</span></b></td><td><b>Transform2Act</b> · Ha 2019 · Schaff 2019 · Chen 2020 · Luck 2020</td><td><span data-lang="zh">設計是策略的輸出或分布,以 policy gradient 與控制一同訓練</span><span data-lang="en">Design is a policy output or distribution, trained with control via policy gradients</span></td><td><span data-lang="zh">共享經驗、樣本效率高;Transform2Act 首次在此路線中改拓撲。設計單一、物理約束薄弱</span><span data-lang="en">Shared experience, sample-efficient; Transform2Act brings topology changes to this line. Single design, weak physical constraints</span></td></tr>
+        </table></div>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><span class="add">[導讀補充]</span> 後續發展大致朝兩個方向:(1)<b>形態預訓練/通用控制器</b>——例如 MetaMorph(Gupta 等,ICLR 2022)用 Transformer 學跨大量形態的通用控制器,讓「評估一個新身體」更便宜;(2)<b>Transformer 化的 co-design</b>——以 attention 取代 GNN 的局部 message passing 來處理形態與控制(例如以 Transform2Act 為主要基線的 BodyGen 等工作)。兩者都在補本文的弱點:控制器對新奇設計的泛化,以及 GNN 權重共享的表達限制。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><span class="add">[guide note]</span> Follow-up work roughly heads two ways: (1) <b>morphology pretraining / universal controllers</b>—e.g., MetaMorph (Gupta et al., ICLR 2022) learns a Transformer controller across many morphologies, making "evaluate a new body" cheaper; (2) <b>Transformer-based co-design</b>—replacing GNN local message passing with attention over morphology and control (e.g., BodyGen and similar works that use Transform2Act as a main baseline). Both target this paper&#39;s weak spots: controller generalization to novel designs and the expressiveness limits of GNN weight sharing.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What&#39;s worth citing</span></h3>
+        <div class="tblwrap"><table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「形態設計可以被表述為策略的一部分」</span><span data-lang="en">"Morphology design can be formulated as part of the policy"</span></td><td><span data-lang="zh">擴增 MDP + 三階段條件策略(Eq.7–8)的代表性表述。</span><span data-lang="en">The canonical formulation of augmented MDP + three-stage conditional policy (Eq.7–8).</span></td></tr>
+          <tr><td><span data-lang="zh">「RL co-design 比演化搜尋更省樣本」</span><span data-lang="en">"RL co-design is more sample-efficient than evolutionary search"</span></td><td><span data-lang="zh">Fig.3 同預算比較與 App. B 的 \(EM/N\) vs \(EM\) 論證。</span><span data-lang="en">Fig.3 budget-matched comparison and App. B&#39;s \(EM/N\) vs \(EM\) argument.</span></td></tr>
+          <tr><td><span data-lang="zh">「GNN 權重共享會壓抑每節點專門化」</span><span data-lang="en">"GNN weight sharing suppresses per-node specialization"</span></td><td><span data-lang="zh">JSMLP 消融(Fig.4–5)與路徑式關節索引(App. C)。</span><span data-lang="en">JSMLP ablations (Fig.4–5) and path-based joint indexing (App. C).</span></td></tr>
+          <tr><td><span data-lang="zh">做新的 co-design 方法時的基線</span><span data-lang="en">A baseline for new co-design methods</span></td><td><span data-lang="zh">四個 MuJoCo 環境(2D/3D Locomotion、Swimmer、Gap Crosser)已成常用 benchmark。<span class="add">[導讀補充]</span></span><span data-lang="en">Its four MuJoCo environments (2D/3D Locomotion, Swimmer, Gap Crosser) have become a common benchmark. <span class="add">[guide note]</span></span></td></tr>
+        </table></div>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">Transform2Act 把形態-控制共同設計從「外層演化 + 內層各自訓練」改寫成「<b>一個策略先造身體、再用身體</b>」的單層 RL,靠共享經驗在同預算下大勝演化搜尋;但它的設計活在無成本、無製造約束的 MuJoCo 世界裡,對真實腿式機器人而言,價值在於提供方法論模板,而不是可直接上機的設計。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">Transform2Act rewrites morphology-control co-design from "outer evolution + independent inner training" into single-level RL where "<b>one policy first builds the body, then uses it</b>," beating evolutionary search under equal budget through shared experience. But its designs live in a cost-free, manufacturing-free MuJoCo world; for real legged robots, its value is a methodological template, not hardware-ready designs.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Sims 1994 · Evolving Virtual Creatures</span>
+          <span class="chip">NGE (Wang 2019)</span>
+          <span class="chip">NerveNet · SMP</span>
+          <span class="chip">Ha 2019 · RL for agent design</span>
+          <span class="chip">Luck 2020 · co-adaptation</span>
+          <span class="chip">Desai 2018 · adjoint co-design</span>
+          <span class="chip">MetaMorph</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論;結果表中的「≈」數值由導讀者從原圖目測,其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author&#39;s inferences; "≈" values in result tables were eyeballed from the original figures by the guide author; all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Yuan et al. 2022 (Transform2Act) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Transform2Act reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>

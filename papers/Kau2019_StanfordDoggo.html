@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Stanford Doggo — 論文導讀</title>
+<meta name="paper-meta" content='{"title":"Stanford Doggo: An Open-Source, Quasi-Direct-Drive Quadruped","authors":"Nathan Kau, Aaron Schultz, Natalie Ferrante, Patrick Slade","year":"2019","venue":"ICRA","tags":["Legged Robotics","Quadruped","Robot Hardware","Actuator Design","Quasi-Direct Drive","Open Source","Five-Bar Linkage"],"tldr":"一台不到 3000 美元、只用手工具就能組裝的開源四足:用 3:1 皮帶傳動做準直驅(QDD)五連桿腿,跳高 1.14 m、垂直跳躍敏捷度 2.23 m/s,追平動物冠軍 galago、勝過先前最佳機器人 22%;但開環步態只跑 0.9 m/s。","tldr_en":"A sub-$3000, hand-tool-buildable open-source quadruped whose 3:1 belt-drive quasi-direct-drive five-bar legs jump 1.14 m with 2.23 m/s vertical jumping agility, matching the galago and beating the previous best robot by 22%, while its open-loop gaits only reach 0.9 m/s."}'>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#1f3257; --gold:#c9a44c; --gold-soft:#e8d9a8;
+    --paper:#f6f1e6; --card:#fffdf8; --ink:#23262b; --muted:#6b6f76;
+    --c-problem:#d4524a; --c-method:#3b6fd4; --c-result:#3aa564;
+    --c-assume:#d9a520; --c-limit:#9a5bd1;
+    --line:#e6dfce;
+  }
+  *{box-sizing:border-box}
+  body,html{margin:0;padding:0}
+  .wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;
+    color:var(--ink); background:var(--paper); min-height:100vh; line-height:1.7}
+  .serif{font-family:Georgia,"Songti TC","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.04em}
+
+  /* bilingual show/hide */
+  .wrap.lang-zh [data-lang="en"]{display:none !important}
+  .wrap.lang-en [data-lang="zh"]{display:none !important}
+
+  header{background:var(--navy); color:#fff; padding:0; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 14px rgba(0,0,0,.25)}
+  .hbar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; padding:16px 26px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .htitle{font-size:19px; letter-spacing:.18em; color:var(--gold); font-weight:700}
+  .hleft{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .homelink{display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;
+    border:1px solid rgba(255,255,255,.28); border-radius:20px; padding:5px 13px; font-size:12px;
+    flex-shrink:0; transition:.15s; line-height:1.1}
+  .homelink:hover{background:var(--gold); color:var(--navy); border-color:var(--gold)}
+  .homelink .ha{font-size:14px; line-height:1}
+  .hright{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px}
+  .legend span{display:flex; align-items:center; gap:6px; color:#cfd6e2; white-space:nowrap}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .langtog{display:inline-flex; align-items:center; border:1px solid rgba(255,255,255,.28);
+    border-radius:20px; overflow:hidden; cursor:pointer; background:transparent; padding:0;
+    font-family:inherit; flex-shrink:0}
+  .langtog span{padding:5px 13px; font-size:12px; color:#aeb8cc; transition:.15s; line-height:1.1}
+  .wrap.lang-zh .langtog .lg-zh{background:var(--gold); color:var(--navy); font-weight:700}
+  .wrap.lang-en .langtog .lg-en{background:var(--gold); color:var(--navy); font-weight:700}
+  nav{display:flex; gap:0; padding:0 18px; background:var(--navy2); flex-wrap:wrap}
+  nav button{background:none; border:none; color:#aeb8cc; font-size:12.5px; padding:13px 18px;
+    cursor:pointer; letter-spacing:.08em; border-bottom:3px solid transparent; transition:.15s}
+  nav button:hover{color:#fff}
+  nav button.on{color:var(--gold); border-bottom-color:var(--gold)}
+
+  main{max-width:1180px; margin:0 auto; padding:30px 22px 90px}
+  .page{display:none; animation:fade .35s ease} .page.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin:6px 0 22px}
+  .secno{color:var(--gold); font-size:12px; letter-spacing:.2em}
+  .sectitle{font-size:30px; margin:0}
+  .cols{display:grid; grid-template-columns:1fr 360px; gap:24px}
+  @media(max-width:880px){.cols{grid-template-columns:1fr} nav button{padding:12px 12px}}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 24px; box-shadow:0 4px 16px rgba(40,30,10,.06); margin-bottom:20px}
+  .card h3{margin:0 0 12px; font-size:19px}
+  .card p{margin:0 0 12px}
+  .tag{display:inline-block; background:var(--navy); color:#fff; font-size:10px; letter-spacing:.12em;
+    padding:5px 11px; border-radius:20px; margin-bottom:10px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; background:#efe9da; color:#5a5238; padding:4px 11px; border-radius:14px; border:1px solid var(--line)}
+  .qchip{cursor:pointer; background:#efeafc; color:#6a3fb0; border-color:#ddd0f5}
+  .qchip:hover{background:#e2d8fa}
+
+  mark{padding:1px 2px; border-radius:3px; cursor:help; background:none;
+    border-bottom:2.5px solid; font-weight:500; color:inherit}
+  .m-problem{border-color:var(--c-problem); background:rgba(212,82,74,.08)}
+  .m-method{border-color:var(--c-method); background:rgba(59,111,212,.08)}
+  .m-result{border-color:var(--c-result); background:rgba(58,165,100,.10)}
+  .m-assume{border-color:var(--c-assume); background:rgba(217,165,32,.12)}
+  .m-limit{border-color:var(--c-limit); background:rgba(154,91,209,.09)}
+
+  .tldr{background:linear-gradient(180deg,#fffdf6,#fbf6e9); border-left:5px solid var(--gold)}
+  .info-grid{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:14px; margin-top:6px}
+  .info-grid b{color:var(--muted); font-weight:600}
+  .fast{counter-reset:f; list-style:none; padding:0; margin:0}
+  .fast li{position:relative; padding:10px 0 10px 42px; border-bottom:1px dashed var(--line)}
+  .fast li:last-child{border:none}
+  .fast li:before{counter-increment:f; content:counter(f); position:absolute; left:0; top:8px;
+    width:28px; height:28px; background:var(--navy); color:var(--gold); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}
+
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--c-method);
+    border-radius:10px; padding:16px 18px; margin-bottom:16px; font-size:14px}
+  .note .tag{font-size:9px}
+  .pitfall{border-left-color:var(--c-problem); background:#fdf3f2}
+  .pitfall .ttl{color:var(--c-problem); font-weight:700; font-size:13px; margin-bottom:6px}
+  .insight{border-left-color:var(--c-result); background:#f2faf5}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0}
+  th{text-align:left; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:.08em;
+    border-bottom:2px solid var(--line); padding:9px 10px; text-transform:uppercase}
+  td{padding:11px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  .ok{color:var(--c-result); font-weight:700}
+  .bad{color:var(--c-problem); font-weight:700}
+  .win{background:rgba(58,165,100,.12); font-weight:700}
+
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:14px 0}
+  .step{flex:1; min-width:150px; background:#fbf7ee; border:1px solid var(--line); border-radius:10px;
+    padding:14px; position:relative}
+  .step .ph{font-size:10px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+  .step b{display:block; margin:4px 0 6px; font-size:14px}
+  .step small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .arrow{display:flex; align-items:center; color:var(--gold); font-size:22px; padding:0 6px}
+  @media(max-width:880px){.arrow{transform:rotate(90deg); padding:4px 0; width:100%; justify-content:center}}
+
+  .sym{font-size:13.5px}
+  .sym td:first-child{width:88px; color:var(--c-method)}
+  .sym td:first-child .katex{font-size:1.1em}
+  .add{font-size:11px; color:#8a6d2f; background:#fbf3df; border:1px solid #ecdcb4;
+    padding:1px 7px; border-radius:5px; margin-left:4px}
+  .divzh{border-top:1px solid var(--line); margin-top:14px; padding-top:12px}
+  .divzh .lab{font-size:11px; letter-spacing:.1em; color:var(--gold); font-weight:700}
+
+  .fig{margin:16px 0}
+  .fig img{max-width:100%; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.05); display:block}
+  .fig figcaption{font-size:12px; color:var(--muted); margin-top:7px; line-height:1.55}
+  .fig figcaption b{color:var(--navy)}
+  .eq{background:#fbf7ee; border:1px solid var(--line); border-left:4px solid var(--gold);
+    border-radius:8px; padding:8px 16px; margin:12px 0; overflow-x:auto; overflow-y:hidden}
+  .eq .katex-display{margin:8px 0}
+  .katex{font-size:1.04em}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:24px}
+  .tts{position:fixed; right:22px; bottom:22px; width:50px; height:50px; border-radius:50%;
+    background:var(--navy); color:var(--gold); border:none; cursor:pointer; font-size:20px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); z-index:60}
+  .tts:hover{background:var(--navy2)}
+</style>
+
+<div class="wrap lang-zh">
+<header>
+  <div class="hbar">
+    <div class="hleft"><a class="homelink" href="index.html" title="回論文庫首頁 · Back to library"><span class="ha">←</span><span data-lang="zh">首頁</span><span data-lang="en">Home</span></a><div class="htitle serif">CS PAPER READING GUIDE</div></div>
+    <div class="hright">
+      <div class="legend mono">
+        <span><i class="dot" style="background:var(--c-problem)"></i>PROBLEM / GAP</span>
+        <span><i class="dot" style="background:var(--c-method)"></i>METHOD / IDEA</span>
+        <span><i class="dot" style="background:var(--c-result)"></i>RESULT / EVIDENCE</span>
+        <span><i class="dot" style="background:var(--c-assume)"></i>ASSUMPTION / CLAIM</span>
+        <span><i class="dot" style="background:var(--c-limit)"></i>LIMITATION / FUTURE</span>
+      </div>
+      <button class="langtog" id="langtog" title="切換中／英 · Toggle language">
+        <span class="lg-zh">中文</span><span class="lg-en">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="mono" id="nav">
+    <button class="on" data-p="0">01 BACKGROUND</button>
+    <button data-p="1">02 PROBLEM</button>
+    <button data-p="2">03 METHOD</button>
+    <button data-p="3">04 RESULTS</button>
+    <button data-p="4">05 CRITIQUE</button>
+    <button data-p="5">06 TAKEAWAY</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 BACKGROUND ================= -->
+<section class="page on">
+  <div class="sechead"><span class="secno mono">SECTION 01</span><h2 class="sectitle serif">Background &amp; Motivation</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card tldr">
+        <span class="tag">TL;DR</span>
+        <p class="serif" data-lang="zh" style="font-size:17px">Stanford Doggo 是一台 <b>4.8 kg、8 自由度、開源</b>的四足機器人:每條五連桿腿由兩顆無刷馬達經 <mark class="m-method" data-t="METHOD/IDEA">3:1 皮帶傳動(quasi-direct-drive, QDD)</mark>同軸驅動。它<mark class="m-result" data-t="RESULT/EVIDENCE">垂直跳高 1.14 m、垂直跳躍敏捷度 2.23 m/s</mark>——追平跳躍能力最強的動物 galago,比先前最佳機器人 Salto-1P 高 22%;整機材料+外包加工<b>不到 3000 美元</b>,只需手工具組裝。代價是<mark class="m-limit" data-t="LIMITATION/FUTURE">開環正弦步態只跑 0.9 m/s</mark>。</p>
+        <p class="serif" data-lang="en" style="font-size:17px">Stanford Doggo is a <b>4.8 kg, 8-DOF, open-source</b> quadruped: each five-bar leg is driven coaxially by two brushless motors through a <mark class="m-method" data-t="METHOD/IDEA">3:1 belt drive (quasi-direct-drive, QDD)</mark>. It <mark class="m-result" data-t="RESULT/EVIDENCE">jumps 1.14 m with a vertical jumping agility of 2.23 m/s</mark>—matching the galago, the best-jumping animal, and 22% above the previous best robot, Salto-1P. Materials plus outsourced machining cost <b>under $3000</b>, assembled with hand tools only. The price: <mark class="m-limit" data-t="LIMITATION/FUTURE">open-loop sinusoidal gaits top out at 0.9 m/s</mark>.</p>
+      </div>
+
+      <figure class="fig"><img src="figs/Kau2019/fig1_robot.jpg" alt="Figure 1 Stanford Doggo">
+        <figcaption data-lang="zh"><b>Fig.1</b> Stanford Doggo 實機。注意三件事:(1) 四條腿都是<b>金屬菱形五連桿</b>(兩根上連桿+兩根下連桿),沒有髖部外展關節 → 腿只在矢狀面運動;(2) 扁平的板狀機身(外觀看似碳纖維板),馬達與皮帶藏在側板內;(3) 論文強調所有零件與外包加工都可網購——這正是「可複製」的設計目標。</figcaption>
+        <figcaption data-lang="en"><b>Fig.1</b> The real robot. Notice three things: (1) all four legs are <b>metal diamond-shaped five-bar linkages</b> (two upper + two lower links) with no hip ab/adduction joint → legs move only in the sagittal plane; (2) a flat plate-built body (it looks like carbon fiber), with motors and belts hidden behind the side plates; (3) the paper stresses that every part and machining service can be bought online—exactly the "replicable" design goal.</figcaption></figure>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">如果只有 30 秒</span><span data-lang="en">In 30 seconds</span></h3>
+        <ol class="fast">
+          <li data-lang="zh"><b>問題</b> — 當時頂尖足式機器人<mark class="m-problem" data-t="PROBLEM/GAP">要花多年開發、多為昂貴的客製設計</mark>;而四足機器人的<mark class="m-problem" data-t="PROBLEM/GAP">垂直跳躍敏捷度遠不如專門化的單腳跳躍機器人</mark>(Salto-1P)。</li>
+          <li data-lang="en"><b>Problem</b> — State-of-the-art legged robots <mark class="m-problem" data-t="PROBLEM/GAP">take years to develop and are usually expensive custom designs</mark>; and quadrupeds' <mark class="m-problem" data-t="PROBLEM/GAP">vertical jumping agility lags far behind specialized monopod hoppers</mark> (Salto-1P).</li>
+          <li data-lang="zh"><b>方法</b> — 改良 Minitaur 的五連桿腿:<mark class="m-method" data-t="METHOD/IDEA">同軸巢狀雙驅動軸 + 3:1 皮帶 QDD</mark>(3D 列印塑膠皮帶輪),讓腿可 360° 旋轉;用「致動器縮放律」證明這個減速比在重量上划算;控制只用<mark class="m-method" data-t="METHOD/IDEA">開環正弦足端軌跡 + 10 kHz 虛擬彈簧阻尼(PD)</mark>。</li>
+          <li data-lang="en"><b>Method</b> — Improve Minitaur's five-bar leg with <mark class="m-method" data-t="METHOD/IDEA">nested coaxial drive shafts + a 3:1 belt QDD</mark> (3D-printed plastic pulleys) so the leg can spin a full 360°; use actuator scaling laws to show the ratio pays off in mass; control with only <mark class="m-method" data-t="METHOD/IDEA">open-loop sinusoidal foot trajectories + 10 kHz virtual spring-damper (PD)</mark>.</li>
+          <li data-lang="zh"><b>結果</b> — 致動器比 Minitaur 的直驅馬達<mark class="m-result" data-t="RESULT/EVIDENCE">峰值力 +37%、連續扭矩 +76%,重量只 +8%、價格 $120 vs $280</mark>;力估測誤差 2.8–5.3%、頻寬約 150 Hz;跳高是其他四足的兩倍以上。</li>
+          <li data-lang="en"><b>Results</b> — Versus Minitaur's direct-drive motor, the actuator gives <mark class="m-result" data-t="RESULT/EVIDENCE">+37% peak force and +76% continuous torque for only +8% mass, at $120 vs $280</mark>; force-estimation error 2.8–5.3%, bandwidth ~150 Hz; jump height more than double any other quadruped.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">領域脈絡</span><span data-lang="en">Field context</span></h3>
+        <p data-lang="zh">足式機器人的致動器設計長年在兩端拉扯:<mark class="m-method" data-t="METHOD/IDEA">高減速比 + 串聯彈性(series-elastic actuator, SEA)</mark>能出大扭矩、但需要額外彈簧與力感測;<mark class="m-method" data-t="METHOD/IDEA">直驅(direct drive, DD)</mark>沒有任何減速,馬達本身就能以 kHz 頻率「用控制模擬彈簧」,但扭矩小、馬達要很大很重。<mark class="m-method" data-t="METHOD/IDEA">準直驅(QDD)</mark>是折衷:單級、減速比小於 10:1,在保留可反驅(backdrivable)的前提下放大扭矩,並能<b>直接從馬達電流估算外力</b>。</p>
+        <p data-lang="en">Legged-robot actuator design has long been pulled between two poles: <mark class="m-method" data-t="METHOD/IDEA">high gear ratio + series elasticity (SEA)</mark> gives big torque but needs extra springs and force sensing; <mark class="m-method" data-t="METHOD/IDEA">direct drive (DD)</mark> has no reduction at all, so the motor itself can "emulate a spring through control" at kHz rates—but torque is low and motors must be big and heavy. <mark class="m-method" data-t="METHOD/IDEA">Quasi-direct drive (QDD)</mark> is the compromise: a single stage below 10:1 that amplifies torque while staying backdrivable, so <b>external forces can be estimated directly from motor current</b>.</p>
+        <p data-lang="zh">兩個直接前輩:<b>Minitaur</b>(Kenneally 等 2016)把五連桿腿做成純直驅;<b>MIT Cheetah 2</b> 用大氣隙馬達 + 5.8:1 行星齒輪做 QDD。Doggo 的位置是:<mark class="m-assume" data-t="ASSUMPTION/CLAIM">拿 Minitaur 的腿型、MIT Cheetah 的 QDD 哲學,但用便宜輕量的皮帶取代鋼製行星齒輪</mark>。</p>
+        <p data-lang="en">Two direct ancestors: <b>Minitaur</b> (Kenneally et al. 2016) built the five-bar leg as pure direct drive; <b>MIT Cheetah 2</b> used large-gap-radius motors + a 5.8:1 planetary for QDD. Doggo's position: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">take Minitaur's leg topology and MIT Cheetah's QDD philosophy, but swap steel planetary gears for a cheap, light belt</mark>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">這篇的貢獻有一半不在「技術新穎」,而在<b>「民主化」</b>:把一台跳躍數據能進頂尖行列的機器人,壓到學生團隊做得出來的成本與工法。論文本身很短(6 頁、沒有閉環控制器),價值在於硬體設計的取捨與一套<b>可以被複製的配方</b>。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">Half the contribution isn't "technical novelty" but <b>democratization</b>: putting a robot with top-tier jumping numbers within reach of a student team's budget and tooling. The paper itself is short (6 pages, no closed-loop controller); its value lies in hardware trade-offs and a <b>recipe others can copy</b>. <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid var(--gold); background:linear-gradient(180deg,#fffdf6,#fbf6e9)">
+        <h3 class="serif"><span data-lang="zh">核心洞見 · KEY INSIGHTS</span><span data-lang="en">KEY INSIGHTS</span></h3>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:-4px">值得帶走的是幾個硬體設計觀念,而不只是一個跳很高的數字:</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:-4px">What's worth taking away are a few hardware-design ideas, not just one big jump number:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.85">
+          <li data-lang="zh"><b style="color:var(--c-method)">減速比要用「縮放律」來算帳。</b> 馬達質量 \(\propto r\)、扭矩 \(\propto r^2\);要用更大馬達換到 \(N\) 倍扭矩,質量需乘 \(\sqrt N\)。所以只要傳動機構重量 \(\lt(\sqrt N-1)m\),QDD 就比「換大顆直驅」輕。Doggo 的皮帶組只有馬達重的 27%,遠低於 \(N=3\) 的門檻 73%。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Do the gear-ratio accounting with scaling laws.</b> Motor mass \(\propto r\), torque \(\propto r^2\); getting \(N\times\) torque from a bigger motor multiplies mass by \(\sqrt N\). So as long as the transmission weighs \(\lt(\sqrt N-1)m\), QDD beats "just use a bigger direct-drive motor." Doggo's belt assembly is only 27% of motor mass, far below the 73% threshold for \(N=3\).</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">皮帶是被低估的 QDD 傳動。</b> 負載分散在多顆齒上 → 可以用塑膠、3D 列印 → 更輕、轉動慣量更低(更「透明」)、更便宜。相對地,行星齒輪在高扭矩下常需要鋼製齒輪。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Belts are an underrated QDD transmission.</b> Load spreads over many teeth → plastic, 3D-printable pulleys → lighter, lower inertia (more "transparent"), cheaper. Planetaries, by contrast, often need steel gears at high torque.</li>
+          <li data-lang="zh"><b style="color:var(--c-assume)">跳躍敏捷度幾乎是「跳多高」的函數。</b> <span class="add">[導讀補充]</span> 若站立時間很短,\(A_v\approx\sqrt{g\,h/2}\);Doggo 的 2.23 m/s 已接近 1.14 m 對應的理論上限 2.36 m/s。這個指標獎勵<b>高峰值功率、短蹬地時間</b>,但不看落地、重複性、負載或能耗。</li>
+          <li data-lang="en"><b style="color:var(--c-assume)">Jumping agility is nearly a function of "how high."</b> <span class="add">[guide note]</span> With a short stance, \(A_v\approx\sqrt{g\,h/2}\); Doggo's 2.23 m/s is already close to the 2.36 m/s ceiling for a 1.14 m jump. The metric rewards <b>high peak power and short push-off</b>, ignoring landing, repeatability, payload and energy.</li>
+          <li data-lang="zh"><b style="color:var(--c-result)">硬體上限 ≠ 系統表現。</b> 跳高可以用開環測出硬體能力;但速度(0.9 m/s)與能耗(CoT 3.2)<mark class="m-limit" data-t="LIMITATION/FUTURE">被開環步態卡住</mark>,作者自己也承認是控制、不是馬達在限制。</li>
+          <li data-lang="en"><b style="color:var(--c-result)">Hardware ceiling ≠ system performance.</b> Jump height can expose hardware capability under open-loop control; but speed (0.9 m/s) and efficiency (CoT 3.2) are <mark class="m-limit" data-t="LIMITATION/FUTURE">bottlenecked by open-loop gaits</mark>—the authors admit control, not motors, is the limit.</li>
+          <li data-lang="zh"><b style="color:var(--c-method)">平行連桿讓兩顆馬達的扭矩相加。</b> 五連桿腿在同尺寸、同關節扭矩下,足端最大力比串聯腿大——再加上腿短(力臂短)與機身輕,是 Doggo 敏捷度勝過扭矩密度更高的 MIT Cheetah 2 的三個原因。</li>
+          <li data-lang="en"><b style="color:var(--c-method)">Parallel linkages sum the two motors' torques.</b> At equal size and joint torque, a five-bar leg yields more max foot force than a serial leg—together with short legs (short lever arm) and a light body, these are the three reasons Doggo out-jumps the higher-torque-density MIT Cheetah 2.</li>
+        </ol>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="padding:18px 20px">
+        <span class="tag">PAPER</span>
+        <h3 class="serif" style="font-size:18px">Stanford Doggo: An Open-Source, Quasi-Direct-Drive Quadruped</h3>
+        <div class="info-grid">
+          <b><span data-lang="zh">作者</span><span data-lang="en">Authors</span></b><span>Nathan Kau, Aaron Schultz, Natalie Ferrante, Patrick Slade</span>
+          <b><span data-lang="zh">單位</span><span data-lang="en">Affil.</span></b><span><span data-lang="zh">史丹佛大學 機械工程系</span><span data-lang="en">Dept. of Mechanical Engineering, Stanford University</span></span>
+          <b><span data-lang="zh">年份</span><span data-lang="en">Venue</span></b><span>2019 · ICRA(arXiv:1905.04254)</span>
+          <b><span data-lang="zh">領域</span><span data-lang="en">Field</span></b><span>cs.RO · Legged Robot Hardware</span>
+          <b><span data-lang="zh">程式碼</span><span data-lang="en">Code</span></b><span>github.com/Nate711/StanfordDoggoProject</span>
+        </div>
+      </div>
+      <div class="note insight">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">把「高性能動態四足」從<b>實驗室級投資</b>拉到<b>學生專題級成本</b>:CAD、BOM、組裝說明、接線圖、韌體全公開;零件與外包加工全部可網購。它示範了 QDD 不一定要客製馬達與鋼齒輪——<b>現成航模馬達 + 皮帶 + 開源驅動板</b>就夠。</span>
+        <span data-lang="en">It pulls "high-performance dynamic quadruped" from <b>lab-scale investment</b> down to <b>student-project cost</b>: CAD, BOM, assembly instructions, wiring and firmware are all public; every part and machining quote is available online. It shows QDD doesn't require custom motors and steel gears—<b>off-the-shelf drone motors + belts + open-source drivers</b> suffice.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">關鍵詞</span><span data-lang="en">Keywords</span></div>
+        <div class="chips">
+          <span class="chip">Quasi-Direct Drive</span><span class="chip">Belt transmission</span>
+          <span class="chip">Five-bar leg</span><span class="chip">Virtual compliance</span>
+          <span class="chip">Proprioceptive force sensing</span><span class="chip">Vertical jumping agility</span>
+          <span class="chip">ODrive</span><span class="chip">Open hardware</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">硬體規格速查</span><span data-lang="en">Spec sheet</span></span>
+        <table style="font-size:12.5px">
+          <tr><td><span data-lang="zh">尺寸</span><span data-lang="en">Size</span></td><td>42 × 20 × 14 cm</td></tr>
+          <tr><td><span data-lang="zh">質量</span><span data-lang="en">Mass</span></td><td>4.8 kg</td></tr>
+          <tr><td><span data-lang="zh">腿伸長範圍</span><span data-lang="en">Leg extension</span></td><td>8–25 cm</td></tr>
+          <tr><td>DOF</td><td><span data-lang="zh">8(每腿 2)</span><span data-lang="en">8 (2 per leg)</span></td></tr>
+          <tr><td><span data-lang="zh">馬達</span><span data-lang="en">Motor</span></td><td>T-Motor MN5212 ×8</td></tr>
+          <tr><td><span data-lang="zh">傳動</span><span data-lang="en">Transmission</span></td><td><span data-lang="zh">16T→48T 皮帶,3:1</span><span data-lang="en">16T→48T belt, 3:1</span></td></tr>
+          <tr><td><span data-lang="zh">驅動板</span><span data-lang="en">Drivers</span></td><td>ODrive ×4(FOC 10 kHz)</td></tr>
+          <tr><td><span data-lang="zh">主控</span><span data-lang="en">MCU</span></td><td>Teensy 3.5(100 Hz)</td></tr>
+          <tr><td><span data-lang="zh">編碼器</span><span data-lang="en">Encoder</span></td><td>2000 CPR</td></tr>
+          <tr><td><span data-lang="zh">成本</span><span data-lang="en">Cost</span></td><td>&lt; $3000</td></tr>
+        </table>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 02 PROBLEM ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 02</span><h2 class="sectitle serif">Problem Diagnosis</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">現況 vs 痛點</span><span data-lang="en">Status quo vs pain points</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">現有做法</span><span data-lang="en">Existing approach</span></th><th><span data-lang="zh">它的痛點</span><span data-lang="en">Its pain point</span></th></tr>
+          <tr><td><b><span data-lang="zh">高減速比(常配 SEA / 彈性腿)</span><span data-lang="en">High ratio (often with SEA / elastic legs)</span></b><br><small>StarlETH (100:1), Cheetah-cub (300:1)</small></td><td><span data-lang="zh">剛性齒輪鏈需要<mark class="m-problem" data-t="PROBLEM/GAP">串聯彈簧才能柔順</mark>;反射慣量大、難反驅、控制頻寬受限。</span><span data-lang="en">A rigid gear train <mark class="m-problem" data-t="PROBLEM/GAP">needs a series spring for compliance</mark>; high reflected inertia, hard to backdrive, limited bandwidth.</span></td></tr>
+          <tr><td><b><span data-lang="zh">純直驅</span><span data-lang="en">Pure direct drive</span></b><br><small>Minitaur, Jerboa (1:1)</small></td><td><span data-lang="zh">透明、高頻寬,但<mark class="m-problem" data-t="PROBLEM/GAP">扭矩低</mark>;Minitaur 兩馬達分置腿兩側,連接結構<mark class="m-problem" data-t="PROBLEM/GAP">擋住腿、無法整圈旋轉</mark>,工作空間受限。</span><span data-lang="en">Transparent and high-bandwidth, but <mark class="m-problem" data-t="PROBLEM/GAP">low torque</mark>; Minitaur mounts its two motors on either side of the leg, and the connecting structure <mark class="m-problem" data-t="PROBLEM/GAP">blocks full leg rotation</mark>, limiting workspace.</span></td></tr>
+          <tr><td><b><span data-lang="zh">QDD + 行星齒輪</span><span data-lang="en">QDD + planetary</span></b><br><small>MIT Cheetah 2 (5.8:1)</small></td><td><span data-lang="zh">性能強,但行星齒輪在高扭矩下<mark class="m-problem" data-t="PROBLEM/GAP">需要沉重的鋼製齒輪</mark>;傳動質量約等於馬達質量;客製、昂貴。</span><span data-lang="en">Strong, but planetaries at high torque <mark class="m-problem" data-t="PROBLEM/GAP">usually need heavy steel gears</mark>; transmission mass roughly equals motor mass; custom and expensive.</span></td></tr>
+          <tr><td><b><span data-lang="zh">專用單腳跳躍機</span><span data-lang="en">Specialized monopods</span></b><br><small>Salto-1P</small></td><td><span data-lang="zh">垂直敏捷度最高(1.83 m/s),但<mark class="m-problem" data-t="PROBLEM/GAP">只有一條腿</mark>,無法提供四足的穩定、負載、操作與跌倒恢復能力。</span><span data-lang="en">Highest vertical agility (1.83 m/s), but <mark class="m-problem" data-t="PROBLEM/GAP">a single leg</mark>—none of a quadruped's stability, payload, manipulation or fall recovery.</span></td></tr>
+        </table>
+        <p data-lang="zh" style="margin-top:14px">核心問題:<b>「能否用便宜、可複製的硬體,做出一台在敏捷度上追上專用跳躍機器人的四足?」</b>另一個潛在痛點是<mark class="m-problem" data-t="PROBLEM/GAP">頂尖平台多年開發、昂貴客製</mark>,把多數研究與教學團隊擋在門外。</p>
+        <p data-lang="en" style="margin-top:14px">The core question: <b>"Can cheap, replicable hardware produce a quadruped whose agility rivals specialized jumping robots?"</b> A second pain point: <mark class="m-problem" data-t="PROBLEM/GAP">top platforms take years and are expensive custom builds</mark>, locking most research and teaching groups out.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">Gap 表 — 誰缺什麼,Doggo 怎麼補</span><span data-lang="en">Gap table — who lacks what, and how Doggo fills it</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">前作</span><span data-lang="en">Prior work</span></th><th><span data-lang="zh">限制</span><span data-lang="en">Limitation</span></th><th><span data-lang="zh">Doggo 如何補上</span><span data-lang="en">How Doggo fills it</span></th></tr>
+          <tr>
+            <td><b>Minitaur</b></td>
+            <td><span data-lang="zh">直驅扭矩不足;腿無法整圈轉;馬達 $280/顆。</span><span data-lang="en">Direct-drive torque is limited; leg can't fully rotate; $280 per motor.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">同軸巢狀雙驅動軸</mark>讓腿可在機身外無限制旋轉;3:1 皮帶把峰值力 +37%;$120/顆。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Nested coaxial drive shafts</mark> let the leg rotate freely outside the body; 3:1 belt gives +37% peak force; $120 per actuator.</span></td>
+          </tr>
+          <tr>
+            <td><b>MIT Cheetah 2</b></td>
+            <td><span data-lang="zh">行星齒輪重(約等於馬達重);33 kg、客製。</span><span data-lang="en">Heavy planetary (~motor mass); 33 kg, custom.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">塑膠 3D 列印皮帶輪</mark>,傳動只佔馬達重 27%;馬達佔整機 35%(Cheetah 2 為 24%)。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Plastic 3D-printed pulleys</mark>; transmission is only 27% of motor mass; motors are 35% of robot mass (Cheetah 2: 24%).</span></td>
+          </tr>
+          <tr>
+            <td><b>Salto-1P</b></td>
+            <td><span data-lang="zh">單腳;敏捷度 1.83 m/s。</span><span data-lang="en">One leg; agility 1.83 m/s.</span></td>
+            <td><span data-lang="zh">四足但<mark class="m-result" data-t="RESULT/EVIDENCE">敏捷度 2.23 m/s(+22%)</mark>,跳高僅少 0.11 m。</span><span data-lang="en">A quadruped with <mark class="m-result" data-t="RESULT/EVIDENCE">2.23 m/s agility (+22%)</mark>, jumping only 0.11 m lower.</span></td>
+          </tr>
+          <tr>
+            <td><b><span data-lang="zh">封閉/客製平台</span><span data-lang="en">Closed / custom platforms</span></b></td>
+            <td><span data-lang="zh">複製門檻高。</span><span data-lang="en">High replication barrier.</span></td>
+            <td><span data-lang="zh"><mark class="m-method" data-t="METHOD/IDEA">全開源</mark>、&lt;$3000、只需手工具(手鑽、烙鐵),超出能力的加工全部外包報價。</span><span data-lang="en"><mark class="m-method" data-t="METHOD/IDEA">Fully open-source</mark>, &lt;$3000, hand tools only (drill, soldering iron); anything beyond is outsourced with online quotes.</span></td>
+          </tr>
+        </table>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">策略解讀</span><span data-lang="en">Strategic read</span></span>
+          <p data-lang="zh" style="margin-top:6px">注意作者把「性能」窄化成一個他們最有優勢的軸:<b>垂直跳躍</b>。速度、能耗、地形、負載這些軸上 Doggo 並不突出,論文用「performs adequately」一筆帶過。這不是錯,但讀者要意識到<mark class="m-assume" data-t="ASSUMPTION/CLAIM">「matches or exceeds state-of-the-art」主要靠跳躍指標撐起</mark>。<span class="add">[導讀補充]</span></p>
+          <p data-lang="en" style="margin-top:6px">Note that "performance" is narrowed to the axis where the authors are strongest: <b>vertical jumping</b>. On speed, efficiency, terrain and payload Doggo is unremarkable, which the paper covers with "performs adequately." Not wrong, but readers should see that <mark class="m-assume" data-t="ASSUMPTION/CLAIM">"matches or exceeds state-of-the-art" rests mainly on jumping metrics</mark>. <span class="add">[guide note]</span></p>
+        </div>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ COMMON PITFALL</div>
+        <span data-lang="zh">別把「QDD」讀成「沒有減速」。QDD 有減速(這裡 3:1),只是夠小、仍可反驅。它<mark class="m-assume" data-t="ASSUMPTION/CLAIM">用頻寬與透明度換扭矩</mark>——論文自己寫明:單級減速「以控制頻寬為代價」提高輸出扭矩。</span>
+        <span data-lang="en">Don't read "QDD" as "no reduction." QDD does reduce speed (3:1 here), just little enough to stay backdrivable. It <mark class="m-assume" data-t="ASSUMPTION/CLAIM">trades bandwidth and transparency for torque</mark>—the paper itself says a single stage raises torque "at the expense of control bandwidth."</span>
+      </div>
+      <div class="note">
+        <span class="tag">WHY IT MATTERS</span>
+        <span data-lang="zh">論文只考慮<b>自帶電源、能重複跳躍或行走</b>的機器人,刻意排除靠儲能機構一次性彈跳的設計——這讓「敏捷度」比較聚焦在可持續運動的平台。</span>
+        <span data-lang="en">The paper only considers robots that <b>carry their own power and can repeatedly jump or walk</b>, deliberately excluding one-shot energy-storage jumpers—focusing the agility comparison on platforms capable of sustained motion.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">想先看質疑?</span><span data-lang="en">Jump to critique</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">敏捷度指標</span><span data-lang="en">agility metric</span></span><span class="chip qchip" data-go="4">→ Q2 <span data-lang="zh">比較公平性</span><span data-lang="en">fair comparison</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 03 METHOD ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 03</span><h2 class="sectitle serif">Core Method</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card" style="border-left:4px solid var(--c-method)">
+        <h3 class="serif"><span data-lang="zh">[導讀補充] 入門:為什麼準直驅(QDD)重要?</span><span data-lang="en">[guide note] Primer: why quasi-direct drive matters</span></h3>
+        <p data-lang="zh">一顆馬達接上 \(N:1\) 減速後,輸出端扭矩放大 \(N\) 倍,但輸出端「感覺到」的轉子慣量放大 \(N^2\) 倍,摩擦與齒隙也被放大:</p>
+        <p data-lang="en">Put an \(N:1\) reduction on a motor and output torque grows by \(N\), but the rotor inertia "felt" at the output grows by \(N^2\), and friction and backlash are amplified too:</p>
+        <div class="eq">$$\tau_{\text{out}} = N\,\eta\,K_t\,i,\qquad J_{\text{refl}} = N^2 J_{\text{rotor}}$$</div>
+        <p data-lang="zh">這帶來三個後果,也就是低減速比的三大好處:</p>
+        <p data-lang="en">Three consequences follow—the three payoffs of a low ratio:</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li data-lang="zh"><b>透明度 / 可反驅(backdrivability)</b>:\(N\) 小時,腿被外力推動,馬達能被「推回去」;撞擊時腿像彈簧般讓開,不會把衝擊硬吃進齒輪。</li>
+          <li data-lang="en"><b>Transparency / backdrivability</b>: with small \(N\), an external push on the leg can drive the motor backward; on impact the leg yields like a spring instead of slamming the shock into the gears.</li>
+          <li data-lang="zh"><b>本體感測力控(proprioceptive force sensing)</b>:因為摩擦小,\(\tau\approx N K_t i\) 很準 → 用<b>馬達電流</b>就能估算足端力,不需要力感測器或串聯彈簧。</li>
+          <li data-lang="en"><b>Proprioceptive force sensing</b>: with little friction, \(\tau\approx N K_t i\) is accurate → foot forces can be estimated from <b>motor current</b> alone, no force sensor or series spring needed.</li>
+          <li data-lang="zh"><b>高頻寬柔順控制</b>:柔順性由 kHz 級電流迴圈「用控制模擬彈簧」,剛度與阻尼可即時調,而不是被實體彈簧固定。</li>
+          <li data-lang="en"><b>High-bandwidth compliance</b>: compliance is emulated by a kHz current loop, so stiffness and damping are tunable on the fly instead of being fixed by a physical spring.</li>
+        </ul>
+        <table style="margin-top:12px">
+          <tr><th><span data-lang="zh">類型</span><span data-lang="en">Type</span></th><th><span data-lang="zh">減速比</span><span data-lang="en">Ratio</span></th><th><span data-lang="zh">柔順從哪來</span><span data-lang="en">Compliance from</span></th><th><span data-lang="zh">取捨</span><span data-lang="en">Trade-off</span></th></tr>
+          <tr><td>SEA</td><td>~25–300:1</td><td><span data-lang="zh">實體彈簧</span><span data-lang="en">physical spring</span></td><td><span data-lang="zh">扭矩大;頻寬低、機構重</span><span data-lang="en">high torque; low bandwidth, heavier mechanism</span></td></tr>
+          <tr><td>DD</td><td>1:1</td><td><span data-lang="zh">控制</span><span data-lang="en">control</span></td><td><span data-lang="zh">最透明;扭矩低、馬達大</span><span data-lang="en">most transparent; low torque, big motors</span></td></tr>
+          <tr><td class="win">QDD</td><td class="win">&lt;10:1</td><td><span data-lang="zh">控制</span><span data-lang="en">control</span></td><td><span data-lang="zh">折衷:扭矩 ×N、仍可反驅</span><span data-lang="en">compromise: torque ×N, still backdrivable</span></td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted);margin-top:8px">這正是 MIT Cheetah 系列(Seok 2012、Wensing 2017)「proprioceptive actuator」的哲學;Doggo 把它用最便宜的零件重做一次。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted);margin-top:8px">This is exactly the MIT Cheetah line's "proprioceptive actuator" philosophy (Seok 2012, Wensing 2017); Doggo redoes it with the cheapest possible parts.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">① 機構設計:同軸巢狀驅動 + 3:1 皮帶</span><span data-lang="en">① Mechanical design: nested coaxial drive + 3:1 belt</span></h3>
+        <figure class="fig"><img src="figs/Kau2019/fig2_leg_assembly.png" alt="Figure 2 leg assembly">
+          <figcaption data-lang="zh"><b>Fig.2</b> 一條腿的機構爆炸圖。<b>紅、藍各代表一路皮帶傳動</b>:馬達上的 16T 小皮帶輪 → 48T 大皮帶輪(3:1)→ 各自驅動一根驅動軸。重點是<b>內驅動軸(紅)穿在外驅動軸(藍)裡面</b>,兩軸同心,所以連桿可在機身外整圈旋轉、不被結構擋住——這是相對 Minitaur 的主要機構改良。</figcaption>
+          <figcaption data-lang="en"><b>Fig.2</b> Exploded view of one leg. <b>Red and blue each mark one belt drive</b>: a 16T pulley on the motor → 48T pulley (3:1) → its own drive shaft. The key is that the <b>inner drive shaft (red) nests inside the outer drive shaft (blue)</b>, coaxially, so the linkage can spin fully outside the body without hitting structure—the main mechanical improvement over Minitaur.</figcaption></figure>
+        <p data-lang="zh">為何選皮帶而非齒輪:<mark class="m-method" data-t="METHOD/IDEA">皮帶把負載分散到多顆齒上</mark>,降低每齒負荷 → 可以用<b>塑膠、3D 列印</b>的皮帶輪 → 質量輕、轉動慣量低(提升透明度)、製造便宜。相比之下 MIT Cheetah 2 等使用的行星齒輪在高扭矩下<mark class="m-problem" data-t="PROBLEM/GAP">通常需要沉重的鋼製齒輪</mark>。</p>
+        <p data-lang="en">Why belts instead of gears: <mark class="m-method" data-t="METHOD/IDEA">a belt spreads load over several teeth</mark>, lowering per-tooth load → <b>plastic, 3D-printed</b> pulleys suffice → light, low inertia (better transparency), cheap to make. Planetaries such as MIT Cheetah 2's <mark class="m-problem" data-t="PROBLEM/GAP">usually need heavy steel gears</mark> at high torque.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">② 傳動原理:用縮放律判斷 QDD 是否划算</span><span data-lang="en">② Transmission principles: is QDD worth it? Ask the scaling laws</span></h3>
+        <p data-lang="zh">作者引用 Seok 等人的馬達縮放律:若把電磁馬達的氣隙半徑 \(r\) 放大(假設質量集中在氣隙附近),</p>
+        <p data-lang="en">The authors use Seok et al.'s motor scaling laws: scaling an electromagnetic motor's gap radius \(r\) (assuming mass concentrated near the air gap),</p>
+        <div class="eq">$$m_{\text{motor}}\propto r,\qquad \tau\propto r^{2},\qquad J_{\text{rotor}}\propto r^{3}$$</div>
+        <p data-lang="zh">要多 \(N\) 倍扭矩,有兩條路:(a) 加 \(N:1\) 減速;(b) 換一顆氣隙半徑 \(\sqrt N\) 倍的大馬達——它的質量也變成 \(\sqrt N\,m\)。因此 QDD 要「比換大馬達輕」,傳動機構質量必須滿足</p>
+        <p data-lang="en">To get \(N\times\) torque there are two routes: (a) add an \(N:1\) reduction; (b) use a motor with \(\sqrt N\times\) the gap radius—whose mass also becomes \(\sqrt N\,m\). So for QDD to be "lighter than a bigger motor," the transmission mass must satisfy</p>
+        <div class="eq">$$m_{\text{trans}} \lt (\sqrt{N}-1)\,m \quad\xrightarrow{\;N=3\;}\quad m_{\text{trans}} \lt 0.73\,m$$</div>
+        <p data-lang="zh">Doggo 的皮帶組<mark class="m-result" data-t="RESULT/EVIDENCE">只有馬達質量的 27%</mark>,遠低於門檻;換算整機 8 顆致動器<mark class="m-result" data-t="RESULT/EVIDENCE">約省 770 g(整機 16%)</mark>。作者也提醒:QDD 雖能滿足質量條件,<mark class="m-limit" data-t="LIMITATION/FUTURE">但可能降低控制頻寬、效率與可靠度</mark>。</p>
+        <p data-lang="en">Doggo's belt assembly is <mark class="m-result" data-t="RESULT/EVIDENCE">only 27% of motor mass</mark>, well under the threshold; across 8 actuators that <mark class="m-result" data-t="RESULT/EVIDENCE">saves ~770 g (16% of the robot)</mark>. The authors caution that although QDD can meet the mass criterion, it <mark class="m-limit" data-t="LIMITATION/FUTURE">may reduce control bandwidth, efficiency and reliability</mark>.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">慣量那一半帳 [導讀補充]</span><span data-lang="en">The inertia half of the ledger [guide note]</span></span>
+          <p data-lang="zh" style="margin-top:6px">論文引 [4] 說反射慣量「對 QDD 或 DD 的選擇不變」。但若套用論文自己列的 \(J\propto r^3\):同一馬達加 \(N:1\) 得 \(N^2J_0=9J_0\);等扭矩的大直驅馬達得 \((\sqrt N)^3J_0=N^{3/2}J_0\approx5.2J_0\)——兩者差 \(\sqrt N\approx1.7\) 倍。論文 Discussion 的數字也呼應這點:Doggo 對 Minitaur 是 2.7 倍慣量,而等扭矩的大直驅只要 2.4 倍。換言之 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">QDD 用「稍高的反射慣量」換「更輕的質量」</mark>,並非完全免費。</p>
+          <p data-lang="en" style="margin-top:6px">The paper cites [4] that reflected inertia is "invariant to the choice of QDD or DD." Yet applying the paper's own \(J\propto r^3\): the same motor with \(N:1\) gives \(N^2J_0=9J_0\); an equal-torque larger DD motor gives \((\sqrt N)^3J_0=N^{3/2}J_0\approx5.2J_0\)—a \(\sqrt N\approx1.7\times\) gap. The Discussion numbers echo this: Doggo has 2.7× Minitaur's inertia, while an equal-torque bigger DD would need only 2.4×. So <mark class="m-assume" data-t="ASSUMPTION/CLAIM">QDD trades "slightly higher reflected inertia" for "lower mass"</mark>—not entirely free.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">③ 五連桿腿與「虛擬腿」座標</span><span data-lang="en">③ Five-bar leg and "virtual leg" coordinates</span></h3>
+        <figure class="fig" style="max-width:360px;margin-left:auto;margin-right:auto"><img src="figs/Kau2019/fig5_virtual_leg.png" alt="Figure 5 virtual leg and sinusoid trajectory">
+          <figcaption data-lang="zh"><b>Fig.5</b> 虛擬腿:從髖(空心圓)連到足端(實心點)的虛線。\(\theta\) 是腿相對垂直線的角度,\(\gamma\) 是上連桿相對虛擬腿的張開角。足端軌跡由<b>兩段半正弦</b>組成:<b>黃色</b>是擺動(flight)段、<b>紫色</b>是著地(stance)段——紫色弧畫在地面以下 <span class="add">[導讀補充:可理解為命令足端「踩進」地面,實際接觸力由虛擬彈簧決定]</span>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.5</b> The virtual leg: the dashed line from hip (hollow circle) to foot (solid dot). \(\theta\) is the leg angle from vertical; \(\gamma\) is the opening of the upper links relative to the virtual leg. The foot path is <b>two half-sinusoids</b>: <b>yellow</b> = flight, <b>purple</b> = stance—the purple arc is drawn below the ground <span class="add">[guide note: read it as commanding the foot "into" the ground, with the virtual spring setting the actual contact force]</span>.</figcaption></figure>
+        <p data-lang="zh">論文只說足端軌跡被轉成「期望腿角 \(\theta\) 與期望連桿張角 \(\gamma\)」,Jacobian 細節引用 Minitaur 的文獻 [22]。以下是對稱五連桿的標準推導 <span class="add">[導讀補充]</span>:設兩馬達(同軸於髖)角度為 \(\phi_1,\phi_2\),上連桿長 \(l_1\)、下連桿長 \(l_2\),則</p>
+        <p data-lang="en">The paper only says foot trajectories are converted into a "desired leg angle \(\theta\) and desired link separation \(\gamma\)," citing Minitaur work [22] for the Jacobian. Below is the standard symmetric five-bar derivation <span class="add">[guide note]</span>: with the two hip-coaxial motor angles \(\phi_1,\phi_2\), upper link length \(l_1\), lower link length \(l_2\):</p>
+        <div class="eq">$$\theta=\tfrac12(\phi_1+\phi_2),\qquad \gamma=\tfrac12(\phi_1-\phi_2),\qquad L(\gamma)=l_1\cos\gamma+\sqrt{l_2^{2}-l_1^{2}\sin^{2}\gamma}$$</div>
+        <p data-lang="zh">足端位置是極座標 \((L,\theta)\):\(x=L\sin\theta,\ y=-L\cos\theta\)。\(\theta\) 管「腿往前/後擺」,\(\gamma\) 管「腿伸長/縮短」(\(\gamma\) 越大腿越短)。兩顆馬達同向轉 → 擺腿;反向轉 → 伸縮。這也說明了<mark class="m-method" data-t="METHOD/IDEA">平行連桿為何讓兩顆馬達的扭矩相加</mark>:伸腿(蹬地)時兩顆馬達都出力。</p>
+        <p data-lang="en">The foot sits at polar \((L,\theta)\): \(x=L\sin\theta,\ y=-L\cos\theta\). \(\theta\) swings the leg fore/aft; \(\gamma\) extends/retracts it (larger \(\gamma\) → shorter leg). Motors turning together → swing; turning opposite → extend/retract. It also shows <mark class="m-method" data-t="METHOD/IDEA">why a parallel linkage sums both motors' torques</mark>: during extension (push-off) both motors contribute.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">④ 控制:開環正弦軌跡 + 虛擬柔順</span><span data-lang="en">④ Control: open-loop sinusoids + virtual compliance</span></h3>
+        <figure class="fig"><img src="figs/Kau2019/fig4_control.png" alt="Figure 4 control framework">
+          <figcaption data-lang="zh"><b>Fig.4</b> 控制架構。注意<b>三個時間尺度</b>:外部通訊 100 Hz、Teensy 上的位置控制執行緒 100 Hz(步態參數 → 正弦軌跡 → 正運動學 → 送給 4 塊 ODrive)、ODrive 上的<b>虛擬柔順閉環 10 kHz</b>(讀編碼器、驅動 2 顆馬達)。整張圖裡<b>沒有 IMU、沒有身體姿態回授</b>——唯一的閉環在每條腿的關節層級。</figcaption>
+          <figcaption data-lang="en"><b>Fig.4</b> Control framework. Note the <b>three timescales</b>: external comms at 100 Hz; the position-control thread on the Teensy at 100 Hz (gait params → sine trajectory → forward kinematics → sent to 4 ODrives); and the <b>10 kHz virtual-compliance loop</b> on each ODrive (reads encoders, drives 2 motors). There is <b>no IMU and no body-state feedback</b> anywhere—the only closed loop is per-leg, at joint level.</figcaption></figure>
+        <p data-lang="zh">Teensy 3.5 依步態參數計算正弦足端軌跡,以 100 Hz 把 \((\theta^\ast,\gamma^\ast)\) 及對應的剛度/阻尼送到 ODrive;ODrive 以 10 kHz 做 FOC 換相與 PD:</p>
+        <p data-lang="en">The Teensy 3.5 computes sinusoidal foot trajectories from gait parameters and sends \((\theta^\ast,\gamma^\ast)\) plus stiffness/damping to the ODrives at 100 Hz; the ODrives run FOC commutation and PD at 10 kHz:</p>
+        <div class="eq">$$\tau_\theta = K_\theta(\theta^\ast-\theta)-D_\theta\dot\theta,\qquad \tau_\gamma = K_\gamma(\gamma^\ast-\gamma)-D_\gamma\dot\gamma$$</div>
+        <p data-lang="zh">P 項 = <mark class="m-method" data-t="METHOD/IDEA">虛擬剛度</mark>、D 項 = <mark class="m-method" data-t="METHOD/IDEA">虛擬阻尼</mark>,合起來是「虛擬柔順腿」。廣義扭矩再經腿 Jacobian 轉成馬達扭矩;由虛功原理與上面的線性映射可得 <span class="add">[導讀補充]</span>:</p>
+        <p data-lang="en">The P term = <mark class="m-method" data-t="METHOD/IDEA">virtual stiffness</mark>, the D term = <mark class="m-method" data-t="METHOD/IDEA">virtual damping</mark>—together a "virtually compliant leg." The generalized torques map to motor torques via the leg Jacobian; by virtual work and the linear map above <span class="add">[guide note]</span>:</p>
+        <div class="eq">$$\begin{bmatrix}\tau_1\\ \tau_2\end{bmatrix}=\frac12\begin{bmatrix}1 &amp; 1\\ 1 &amp; -1\end{bmatrix}\begin{bmatrix}\tau_\theta\\ \tau_\gamma\end{bmatrix},\qquad i_k=\frac{\tau_k}{N K_t},\ \ N=3$$</div>
+        <p data-lang="zh">步態(walk、trot、bound、pronk)只靠調整<mark class="m-assume" data-t="ASSUMPTION/CLAIM">正弦的幾何參數、虛擬柔順、以及每段花的時間</mark>來產生——沿用 Minitaur 證明過可行的開環方法。</p>
+        <p data-lang="en">Gaits (walk, trot, bound, pronk) come solely from tuning <mark class="m-assume" data-t="ASSUMPTION/CLAIM">sinusoid geometry, virtual compliance, and per-segment timing</mark>—the open-loop method Minitaur showed to work.</p>
+        <div class="divzh">
+          <span class="lab mono"><span data-lang="zh">虛擬彈簧的非線性 [導讀補充]</span><span data-lang="en">Nonlinearity of the virtual spring [guide note]</span></span>
+          <p data-lang="zh" style="margin-top:6px">彈簧加在 \(\gamma\)(角度)而非腿長 \(L\) 上。由 \(F_L\,dL=\tau_\gamma\,d\gamma\),等效徑向剛度約為 \(k_L\approx K_\gamma/L'(\gamma)^2\),會隨腿的伸展程度改變——腿伸直時 \(L'(\gamma)\to0\),徑向剛度變得很大。這是在 \((\theta,\gamma)\) 空間調 PD 時要知道的副作用。</p>
+          <p data-lang="en" style="margin-top:6px">The spring acts on \(\gamma\) (an angle), not on leg length \(L\). From \(F_L\,dL=\tau_\gamma\,d\gamma\), the effective radial stiffness is roughly \(k_L\approx K_\gamma/L'(\gamma)^2\), varying with extension—near full extension \(L'(\gamma)\to0\) and radial stiffness blows up. A side effect worth knowing when tuning PD in \((\theta,\gamma)\) space.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">⑤ 量測方法與指標定義</span><span data-lang="en">⑤ Measurement methods and metric definitions</span></h3>
+        <p data-lang="zh"><b>力估測(透明度)</b>:把足端固定在髖正下方、以拉力接 LC201 荷重元(10 Hz 取樣,只看穩態)。馬達扭矩無法直接量,由電流推:</p>
+        <p data-lang="en"><b>Force estimation (transparency)</b>: the foot is fixed under the hip and tied in tension to an LC201 load cell (10 Hz sampling, steady state only). Motor torque can't be measured directly, so it's inferred from current:</p>
+        <div class="eq">$$\tau_m = K_t I_m \quad(1)\qquad\qquad \hat{F}_{\text{est}} = J^{-T}\tau_m \quad(2)$$</div>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted)">\(J\) 為五連桿腿 Jacobian(足端速度 = \(J\dot\phi\)),由 \(\tau=J^{T}F\) 反解。<span class="add">[導讀補充]</span> 式 (1) 沒寫減速比;輸出端應為 \(N K_t I_m\),減速比顯然併入了 \(J\) 或 \(K_t\)。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted)">\(J\) is the five-bar leg Jacobian (foot velocity = \(J\dot\phi\)), inverted from \(\tau=J^{T}F\). <span class="add">[guide note]</span> Eq. (1) omits the gear ratio; at the output it should be \(N K_t I_m\), so the ratio is presumably folded into \(J\) or \(K_t\).</p>
+        <p data-lang="zh"><b>扭矩</b>:槓桿壓秤;逐步加電流直到馬達在室溫 22 °C、無散熱下穩態達 <mark class="m-assume" data-t="ASSUMPTION/CLAIM">125 °C(繞組常用上限)</mark> → 連續扭矩;峰值扭矩取 1 秒內最大力。<b>頻寬</b>:追蹤 4–12 Nm(模擬行走扭矩)、5–400 Hz 正弦,18 kHz 取樣,取 crossover 頻率。</p>
+        <p data-lang="en"><b>Torque</b>: a lever arm pressing on a scale; current is raised until the motor reaches a steady <mark class="m-assume" data-t="ASSUMPTION/CLAIM">125 °C (a common stator-winding limit)</mark> at 22 °C ambient with no cooling → continuous torque; peak torque = max force over one second. <b>Bandwidth</b>: track 4–12 Nm sinusoids (walking-like torques) from 5 to 400 Hz, sampled at 18 kHz; take the crossover frequency.</p>
+        <p data-lang="zh"><b>運動指標</b>:穩態速度 \(v_{ss}\) 為跑 0.7 m 的平均速度;能耗用 cost of transport;跳高從<b>蹲下時的重心</b>量到頂點;垂直跳躍敏捷度是跳高除以「蹬地時間 + 升到頂點時間」:</p>
+        <p data-lang="en"><b>Locomotion metrics</b>: steady velocity \(v_{ss}\) over a 0.7 m run; efficiency via cost of transport; jump height measured from the <b>crouched CoG</b> to apex; vertical jumping agility = jump height over "stance time + time to apogee":</p>
+        <div class="eq">$$\text{CoT}=\frac{V\,i}{m\,g\,v_{ss}}\quad(3)\qquad\qquad A_v=\frac{h_{\max}}{t_{\text{stance}}+t_{\text{apogee}}}$$</div>
+        <p data-lang="zh" style="font-size:13.5px;color:var(--muted)">\(t_{\text{stance}}\):從開始致動到腳離地;\(t_{\text{apogee}}\):從離地到垂直速度為零。作者特地聯絡 Salto / Jerboa 的作者確認跳高量法一致,因為先前文獻沒說清楚。</p>
+        <p data-lang="en" style="font-size:13.5px;color:var(--muted)">\(t_{\text{stance}}\): from actuation onset to liftoff; \(t_{\text{apogee}}\): from liftoff until vertical velocity hits zero. The authors contacted Salto / Jerboa's authors to confirm the jump-height convention, since prior papers didn't specify it.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">符號白話對照</span><span data-lang="en">Symbols in plain words</span></h3>
+        <table class="sym">
+          <tr><td>\(N\)</td><td><span data-lang="zh">減速比(Doggo:16T→48T 皮帶,\(N=3\))。</span><span data-lang="en">Speed-reduction ratio (Doggo: 16T→48T belt, \(N=3\)).</span></td></tr>
+          <tr><td>\(r,\ m\)</td><td><span data-lang="zh">馬達氣隙半徑、馬達質量。</span><span data-lang="en">Motor air-gap radius; motor mass.</span></td></tr>
+          <tr><td>\(K_t,\ I_m\)</td><td><span data-lang="zh">扭矩常數、馬達電流;\(\tau_m=K_tI_m\)。</span><span data-lang="en">Torque constant; motor current; \(\tau_m=K_tI_m\).</span></td></tr>
+          <tr><td>\(J_{\text{refl}}\)</td><td><span data-lang="zh">反射慣量:從輸出端看的轉子慣量 \(=N^2J_{\text{rotor}}\);越小越「透明」。</span><span data-lang="en">Reflected inertia: rotor inertia seen from the output \(=N^2J_{\text{rotor}}\); smaller = more "transparent."</span></td></tr>
+          <tr><td>\(\theta,\ \gamma\)</td><td><span data-lang="zh">虛擬腿角度、上連桿張開角(決定腿長)。</span><span data-lang="en">Virtual leg angle; upper-link separation angle (sets leg length).</span></td></tr>
+          <tr><td>\(J\)</td><td><span data-lang="zh">腿 Jacobian:馬達角速度 → 足端速度;\(F=J^{-T}\tau\)。</span><span data-lang="en">Leg Jacobian: motor angular velocity → foot velocity; \(F=J^{-T}\tau\).</span></td></tr>
+          <tr><td>\(K,\ D\)</td><td><span data-lang="zh">虛擬剛度、虛擬阻尼(PD 增益)。</span><span data-lang="en">Virtual stiffness, virtual damping (PD gains).</span></td></tr>
+          <tr><td>\(A_v\)</td><td><span data-lang="zh">垂直跳躍敏捷度(m/s):近似「連續跳躍往上爬的速度」。</span><span data-lang="en">Vertical jumping agility (m/s): approximates "climbing speed through repeated jumps."</span></td></tr>
+          <tr><td>CoT</td><td><span data-lang="zh">運輸成本:單位重量、單位距離耗的電功率(無因次)。</span><span data-lang="en">Cost of transport: electrical power per unit weight per unit speed (dimensionless).</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag">ONE-LINE INTUITION</span>
+        <span data-lang="zh">買得到的航模馬達 + 一段 3:1 塑膠皮帶 + 兩根套在一起的軸,就把 Minitaur 的腿變成扭矩更大、能整圈轉、還能「用電流感覺地面」的 QDD 腿;剩下的柔順交給 10 kHz 的 PD。</span>
+        <span data-lang="en">Off-the-shelf drone motors + a 3:1 plastic belt + two nested shafts turn Minitaur's leg into a QDD leg with more torque, full rotation, and the ability to "feel the ground through current"; compliance is left to a 10 kHz PD loop.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">電氣系統</span><span data-lang="en">Electrical system</span></span>
+        <span data-lang="zh">Teensy 3.5 主控(便宜、Arduino 相容)、4 塊 ODrive(每塊驅動一條腿的 2 顆馬達)、配電板、XBee 無線收地面站指令;電池與配電板間串一個繼電器 + 按鈕當<b>急停</b>。</span>
+        <span data-lang="en">A Teensy 3.5 MCU (cheap, Arduino-compatible), 4 ODrives (each driving one leg's 2 motors), a power distribution board, and XBee wireless from a ground station; a relay + push button between battery and PDB serves as the <b>E-stop</b>.</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">注意</span><span data-lang="en">Note</span></div>
+        <span data-lang="zh">「控制」在這篇裡非常薄:<mark class="m-limit" data-t="LIMITATION/FUTURE">沒有狀態估測、沒有平衡控制器、沒有地面反力規劃</mark>。所有步態都是手調的開環軌跡;穩定性來自虛擬彈簧與步態本身的被動性。</span>
+        <span data-lang="en">"Control" is very thin here: <mark class="m-limit" data-t="LIMITATION/FUTURE">no state estimation, no balance controller, no ground-reaction-force planning</mark>. Every gait is a hand-tuned open-loop trajectory; stability comes from the virtual springs and the gait's passivity.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">為何是 3:1?</span><span data-lang="en">Why 3:1?</span></span>
+        <span data-lang="zh">論文沒有做減速比掃描;3:1 是在「縮放律質量門檻」「透明度」「頻寬」之間的定性選擇。<span class="add">[導讀補充]</span> 這是單級皮帶在合理輪徑下容易達到的比例,也與 MIT Cheetah 系列的 ~6:1 形成對照。</span>
+        <span data-lang="en">The paper doesn't sweep the gear ratio; 3:1 is a qualitative pick between the scaling-law mass threshold, transparency and bandwidth. <span class="add">[guide note]</span> It is a ratio a single belt stage reaches easily at reasonable pulley sizes, in contrast to the MIT Cheetah line's ~6:1.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 RESULTS ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 04</span><h2 class="sectitle serif">Experimental Evidence</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">致動器對比:QDD vs DD(Tab. I)</span><span data-lang="en">Actuator comparison: QDD vs DD (Tab. I)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">指標</span><span data-lang="en">Metric</span></th><th>Stanford Doggo<br><small>MN5212, 3:1</small></th><th>Minitaur [4]<br><small>T-Motor U8, 1:1</small></th><th><span data-lang="zh">差異</span><span data-lang="en">Δ</span></th></tr>
+          <tr><td><span data-lang="zh">成本</span><span data-lang="en">Cost</span></td><td class="win">$120</td><td>$280</td><td class="ok">−57%</td></tr>
+          <tr><td><span data-lang="zh">質量 (kg)</span><span data-lang="en">Mass (kg)</span></td><td>0.27</td><td>0.25</td><td>+8%</td></tr>
+          <tr><td><span data-lang="zh">連續扭矩 (Nm)</span><span data-lang="en">Continuous torque (Nm)</span></td><td class="win">1.51</td><td>0.86</td><td class="ok">+76%</td></tr>
+          <tr><td><span data-lang="zh">峰值扭矩 (Nm)</span><span data-lang="en">Peak torque (Nm)</span></td><td class="win">4.8</td><td>3.5</td><td class="ok">+37%</td></tr>
+          <tr><td><span data-lang="zh">最大連續功率 (W)</span><span data-lang="en">Max continuous power (W)</span></td><td class="win">840</td><td>179</td><td>×4.7</td></tr>
+          <tr><td><span data-lang="zh">反射慣量</span><span data-lang="en">Reflected inertia</span> \((\mathrm{kg\,m^2})\)</td><td>0.00026</td><td class="win">0.0001</td><td class="bad">×2.6</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px">用<mark class="m-result" data-t="RESULT/EVIDENCE">+8% 質量換到 +37% 峰值、+76% 連續扭矩,價格不到一半</mark>;代價是反射慣量約 3 倍(論文文字寫「three times」、Discussion 寫 2.7 倍,表格數字算出 2.6)。扭矩密度 17.8 Nm/kg,遠低於 MIT Cheetah 2 的 58 Nm/kg;但 Cheetah 2 的傳動質量約等於馬達,Doggo 只有 27%。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><mark class="m-result" data-t="RESULT/EVIDENCE">+8% mass buys +37% peak and +76% continuous torque at under half the price</mark>; the cost is ~3× reflected inertia (text says "three times," Discussion says 2.7×, the table gives 2.6×). Torque density is 17.8 Nm/kg, far below MIT Cheetah 2's 58 Nm/kg; but Cheetah 2's transmission weighs about as much as its motor, Doggo's only 27%.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">透明度:力估測 vs 荷重元(Fig. 6)</span><span data-lang="en">Transparency: estimated vs load-cell force (Fig. 6)</span></h3>
+        <figure class="fig"><img src="figs/Kau2019/fig6_force_tracking.png" alt="Figure 6 force estimation">
+          <figcaption data-lang="zh"><b>Fig.6</b> 上:步階力命令(約 10↔37 N);下:2 rad/s 正弦。藍 = 由電流 + Jacobian 估的力,橘 = 荷重元實測。要看的是:(1) <b>穩態幾乎重疊</b>(MAPE 2.8% / 5.3%);(2) 估測值在高力時<b>系統性略高</b>約 2–3 N,可能是皮帶/軸承摩擦吃掉的部分;(3) 步階的橘線明顯延遲上升——這多半是 10 Hz 荷重元取樣造成,不是腿的動態,所以這張圖<b>不能拿來評估動態力估測</b>。</figcaption>
+          <figcaption data-lang="en"><b>Fig.6</b> Top: step force commands (~10↔37 N); bottom: 2 rad/s sine. Blue = force estimated from current + Jacobian; orange = load-cell measurement. Look for: (1) <b>near-overlap at steady state</b> (MAPE 2.8% / 5.3%); (2) the estimate is <b>systematically ~2–3 N high</b> at large forces—plausibly belt/bearing friction; (3) the orange step visibly lags—most likely the 10 Hz load-cell sampling rather than leg dynamics, so this figure <b>cannot assess dynamic force estimation</b>.</figcaption></figure>
+        <p data-lang="zh"><mark class="m-result" data-t="RESULT/EVIDENCE">步階 MAPE 2.8%、正弦 MAPE 5.3%;控制頻寬約 150 Hz</mark>(4–12 Nm 扭矩軌跡),作者指出高於 MIT Cheetah 2 報告的 104 Hz(馬達到足端力)。</p>
+        <p data-lang="en"><mark class="m-result" data-t="RESULT/EVIDENCE">Step MAPE 2.8%, sine MAPE 5.3%; control bandwidth ~150 Hz</mark> (4–12 Nm torque trajectories), which the authors note exceeds the 104 Hz (motor to foot force) reported for MIT Cheetah 2.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">主結果:運動性能比較(Tab. III)</span><span data-lang="en">Main results: locomotion performance (Tab. III)</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">機器人</span><span data-lang="en">Robot</span></th><th><span data-lang="zh">穩態速度 (m/s)</span><span data-lang="en">Steady vel. (m/s)</span></th><th>CoT ↓</th><th><span data-lang="zh">最大跳高 (m)</span><span data-lang="en">Max jump (m)</span></th><th><span data-lang="zh">垂直敏捷度 (m/s)</span><span data-lang="en">Vert. agility (m/s)</span></th></tr>
+          <tr><td><b>Stanford Doggo</b></td><td>0.9</td><td>3.2</td><td>1.14</td><td class="win">2.23</td></tr>
+          <tr><td>Minitaur</td><td>1.5</td><td>2.3</td><td>0.48</td><td>1.12</td></tr>
+          <tr><td>Salto-1P <small><span data-lang="zh">(單腳)</span><span data-lang="en">(monopod)</span></small></td><td>3.6</td><td>6.6</td><td class="win">1.25</td><td>1.83</td></tr>
+          <tr><td>Jerboa</td><td>1.52</td><td>2.5</td><td>0.18</td><td>0.81</td></tr>
+          <tr><td>MIT Cheetah 2</td><td class="win">6.0</td><td>0.51</td><td>0.50</td><td>1.11</td></tr>
+          <tr><td>MIT Cheetah 3</td><td>N/A</td><td class="win">0.45</td><td>N/A</td><td>N/A</td></tr>
+          <tr><td>StarlETH</td><td>0.7</td><td>2.57</td><td>0.01</td><td>0.72</td></tr>
+          <tr><td>ANYmal</td><td>0.8</td><td>1.23</td><td>N/A</td><td>N/A</td></tr>
+          <tr><td>Cheetah-cub</td><td>1.4</td><td>9.8</td><td>0.02</td><td>N/A</td></tr>
+          <tr><td>XRL</td><td>1.54</td><td>2.57</td><td>0.31</td><td>0.92</td></tr>
+        </table>
+        <p data-lang="zh" style="font-size:14px;color:var(--muted);margin-top:8px"><mark class="m-result" data-t="RESULT/EVIDENCE">跳高 1.14 m 是其他四足(最佳 Cheetah 2 的 0.50 m)的兩倍以上</mark>,只比專用單腳的 Salto-1P 少 0.11 m;<mark class="m-result" data-t="RESULT/EVIDENCE">垂直敏捷度 2.23 m/s 為所有機器人最高</mark>(比 Salto-1P 高 22%),並追平 galago <span class="add">[導讀補充:Haldane 2016 報告 galago 約 2.24 m/s]</span>。但<mark class="m-limit" data-t="LIMITATION/FUTURE">速度 0.9 m/s 幾乎墊底、CoT 3.2 高於 Minitaur 的 2.3</mark>。</p>
+        <p data-lang="en" style="font-size:14px;color:var(--muted);margin-top:8px"><mark class="m-result" data-t="RESULT/EVIDENCE">A 1.14 m jump is more than double any other quadruped (best: Cheetah 2 at 0.50 m)</mark>, only 0.11 m below the specialized monopod Salto-1P; <mark class="m-result" data-t="RESULT/EVIDENCE">2.23 m/s vertical agility is the highest of all robots</mark> (22% above Salto-1P) and matches the galago <span class="add">[guide note: Haldane 2016 reports ~2.24 m/s for the galago]</span>. But <mark class="m-limit" data-t="LIMITATION/FUTURE">0.9 m/s is near the bottom and CoT 3.2 is worse than Minitaur's 2.3</mark>.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">物理特性(Tab. II 節選)與「三個原因」</span><span data-lang="en">Physical properties (Tab. II excerpt) and the "three reasons"</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">機器人</span><span data-lang="en">Robot</span></th><th><span data-lang="zh">腿/DOF</span><span data-lang="en">Legs/DOF</span></th><th><span data-lang="zh">腿長 (m)</span><span data-lang="en">Leg (m)</span></th><th><span data-lang="zh">質量 (kg)</span><span data-lang="en">Mass (kg)</span></th><th><span data-lang="zh">馬達佔比</span><span data-lang="en">Motor %</span></th><th><span data-lang="zh">減速比</span><span data-lang="en">Ratio</span></th></tr>
+          <tr><td><b>Stanford Doggo</b></td><td>4 / 8</td><td>0.160</td><td>4.8</td><td class="win">35%</td><td>3</td></tr>
+          <tr><td>Minitaur</td><td>4 / 8</td><td>0.200</td><td>5.0</td><td>40%</td><td>1</td></tr>
+          <tr><td>Salto-1P</td><td>1 / 4</td><td>0.144</td><td>0.1</td><td>12%</td><td>25</td></tr>
+          <tr><td>Jerboa</td><td>2 / 4</td><td>0.105</td><td>2.5</td><td>40%</td><td>1</td></tr>
+          <tr><td>MIT Cheetah 2</td><td>4 / 12</td><td>0.275</td><td>33.0</td><td>24%</td><td>5.8</td></tr>
+          <tr><td>MIT Cheetah 3</td><td>4 / 12</td><td>0.34</td><td>45.0</td><td>N/A</td><td>7.67</td></tr>
+          <tr><td>StarlETH</td><td>4 / 12</td><td>0.200</td><td>23.0</td><td>16%</td><td>100</td></tr>
+          <tr><td>Cheetah-cub</td><td>4 / 8</td><td>0.069</td><td>1.0</td><td>16%</td><td>300</td></tr>
+        </table>
+        <p data-lang="zh">Doggo 馬達佔整機質量 35%,與直驅的 Minitaur、Jerboa 相當,<mark class="m-result" data-t="RESULT/EVIDENCE">比同為 QDD 的 Cheetah 2 高 46%</mark>——更多質量花在出力而非結構與電子。作者歸納 Doggo 敏捷度勝過扭矩密度更高的 Cheetah 2 的三個原因:</p>
+        <p data-lang="en">Motors are 35% of Doggo's mass—on par with direct-drive Minitaur and Jerboa and <mark class="m-result" data-t="RESULT/EVIDENCE">46% higher than the fellow-QDD Cheetah 2</mark>—so more mass goes to force production rather than structure and electronics. The authors give three reasons Doggo out-jumps the higher-torque-density Cheetah 2:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.8">
+          <li data-lang="zh"><b>腿短</b>:關節扭矩作用在較短的力臂上,足端力更大。</li>
+          <li data-lang="en"><b>Short legs</b>: joint torque acts over a shorter lever arm, so foot force is larger.</li>
+          <li data-lang="zh"><b>皮帶輕</b>:相較 Cheetah 2 的行星齒輪,大幅降低整機質量。</li>
+          <li data-lang="en"><b>Light belts</b>: compared with Cheetah 2's planetaries, much lower total mass.</li>
+          <li data-lang="zh"><b>平行連桿</b>:同尺寸、同關節扭矩下,兩顆馬達扭矩相加,足端最大力大於串聯腿。</li>
+          <li data-lang="en"><b>Parallel linkage</b>: at equal size and joint torque, both motors' torques add, giving more max foot force than a serial leg.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">縮放律算帳與可靠度</span><span data-lang="en">Scaling-law accounting and reliability</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">論點</span><span data-lang="en">Claim</span></th><th><span data-lang="zh">數字</span><span data-lang="en">Number</span></th><th><span data-lang="zh">這證明什麼</span><span data-lang="en">What it shows</span></th></tr>
+          <tr><td><span data-lang="zh">同輸出扭矩的直驅會比 QDD 的馬達重</span><span data-lang="en">An equal-torque DD outweighs the QDD's motor by</span></td><td class="ok">+73%</td><td><span data-lang="zh">\(\sqrt3-1\);皮帶只佔 27%,QDD 划算</span><span data-lang="en">\(\sqrt3-1\); belt is 27%, so QDD wins</span></td></tr>
+          <tr><td><span data-lang="zh">QDD 省下的總質量</span><span data-lang="en">Total mass saved by QDD</span></td><td class="ok">770 g (16%)</td><td><span data-lang="zh">輕量化直接轉為跳高</span><span data-lang="en">lightness turns directly into jump height</span></td></tr>
+          <tr><td><span data-lang="zh">對 Minitaur 1.8× 連續扭矩的直驅替代</span><span data-lang="en">DD alternative matching 1.8× Minitaur's torque</span></td><td>r ×1.3 → J ×2.4, m ×1.3</td><td><span data-lang="zh">直驅版會比 Doggo 的 QDD <b>重 20%</b>,慣量 2.4× vs 2.7×</span><span data-lang="en">The DD version would be <b>20% heavier</b> than Doggo's QDD; inertia 2.4× vs 2.7×</span></td></tr>
+          <tr><td><span data-lang="zh">可靠度</span><span data-lang="en">Reliability</span></td><td><span data-lang="zh">數小時跑步 + 約 40 次跳躍</span><span data-lang="en">hours of running + ~40 jumps</span></td><td><span data-lang="zh">僅需調整皮帶張力的少量維護(<mark class="m-limit" data-t="LIMITATION/FUTURE">樣本很小</mark>)</span><span data-lang="en">only minor maintenance (belt tension) (<mark class="m-limit" data-t="LIMITATION/FUTURE">a small sample</mark>)</span></td></tr>
+        </table>
+      </div>
+
+      <div class="card insight" style="border-left:4px solid var(--c-result);background:#f2faf5">
+        <h3 class="serif"><span data-lang="zh">實驗證明了什麼、沒證明什麼</span><span data-lang="en">What the experiments do and don't prove</span></h3>
+        <p data-lang="zh" style="margin:0">證明了:便宜的皮帶 QDD 在<b>扭矩/質量/成本</b>上優於同級直驅馬達,且能讓一台 4.8 kg 四足做出<b>頂尖的單次垂直跳躍</b>,靜態足端力可由電流準確估出。沒證明:<b>閉環動態運動</b>能力(速度、地形、抗擾)、長期耐久與熱極限、動態/撞擊時的力估測精度,以及跨平台指標比較的嚴格公平性。</p>
+        <p data-lang="en" style="margin:0">Proven: a cheap belt QDD beats a comparable direct-drive motor on <b>torque/mass/cost</b>, lets a 4.8 kg quadruped achieve a <b>top-tier single vertical jump</b>, and static foot force can be estimated accurately from current. Not proven: <b>closed-loop dynamic locomotion</b> (speed, terrain, disturbance rejection), long-term durability and thermal limits, force-estimation accuracy under dynamics/impacts, and strict fairness of cross-platform metric comparisons.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">一句話總結</span><span data-lang="en">In one line</span></span>
+        <span data-lang="zh"><b>跳躍封王、跑步平庸。</b>硬體的峰值出力能力是真的,但「讓它跑得好」的控制器這篇還沒有。</span>
+        <span data-lang="en"><b>King of jumping, mediocre at running.</b> The hardware's peak-force capability is real; the controller that makes it run well isn't in this paper yet.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">敏捷度反推 [導讀補充]</span><span data-lang="en">Back-of-envelope [guide note]</span></span>
+        <span data-lang="zh">\(1.14/2.23\approx0.51\) s 為蹬地 + 升空總時間。純拋體升到 1.14 m 需 \(\sqrt{2h/g}\approx0.48\) s——表示蹬地時間只有數十毫秒,跳高幾乎全來自彈道段。同理 Salto-1P:\(1.25/1.83\approx0.68\) s,蹬地慢得多(其串聯彈性需要「蓄力」)。</span>
+        <span data-lang="en">\(1.14/2.23\approx0.51\) s of stance + ascent. A pure ballistic rise to 1.14 m takes \(\sqrt{2h/g}\approx0.48\) s—so stance lasts only tens of milliseconds and the height is almost all ballistic. For Salto-1P: \(1.25/1.83\approx0.68\) s, a much slower push-off (its series elasticity needs a "wind-up").</span>
+      </div>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">沒被充分壓測的部分</span><span data-lang="en">Under-stressed parts</span></div>
+        <span data-lang="zh">力估測只在<mark class="m-limit" data-t="LIMITATION/FUTURE">單一姿態(足在髖正下方)、靜態、10 Hz</mark> 下驗證;頻寬只用 4–12 Nm 的小訊號;沒有任何<b>落地衝擊</b>或<b>連續跳躍</b>的量測。</span>
+        <span data-lang="en">Force estimation was validated only in <mark class="m-limit" data-t="LIMITATION/FUTURE">one pose (foot under hip), statically, at 10 Hz</mark>; bandwidth uses only 4–12 Nm signals; there's no measurement of <b>landing impact</b> or <b>continuous jumping</b>.</span>
+      </div>
+      <div class="note">
+        <div class="mono" style="font-size:11px;color:var(--gold);font-weight:700"><span data-lang="zh">深入質疑</span><span data-lang="en">Dig deeper</span></div>
+        <div class="chips"><span class="chip qchip" data-go="4">→ Q1 <span data-lang="zh">指標偏好</span><span data-lang="en">metric bias</span></span><span class="chip qchip" data-go="4">→ Q3 <span data-lang="zh">熱與耐久</span><span data-lang="en">thermal/durability</span></span></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 05 CRITIQUE ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 05</span><h2 class="sectitle serif">Critical Reading</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">可被質疑的點</span><span data-lang="en">Contestable points</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>敏捷度指標獎勵什麼、忽略什麼</b> <span class="add">[導讀補充]</span>:若蹬地很短,\(A_v\approx\sqrt{g\,h_{\max}/2}\),所以它<mark class="m-assume" data-t="ASSUMPTION/CLAIM">本質上是「跳多高」再乘一個蹬地時間懲罰</mark>。它獎勵高峰值功率與短促蹬地;懲罰需要蓄能的彈性機構(Salto)。它<b>完全不看</b>:能否連續重複跳(原始定義是「一連串跳躍的爬升速度」,但 Doggo 只報告「約 40 次跳躍」,沒有連續跳躍的數據)、落地穩定、水平移動、負載、能耗、尺寸。而且跳高從<b>蹲姿重心</b>起算,8→25 cm 的長行程腿會被額外加分。</li>
+          <li data-lang="en"><b>What the agility metric rewards and ignores</b> <span class="add">[guide note]</span>: with a short stance, \(A_v\approx\sqrt{g\,h_{\max}/2}\), so it is <mark class="m-assume" data-t="ASSUMPTION/CLAIM">essentially "how high" times a stance-time penalty</mark>. It rewards high peak power and a quick push-off, and penalizes energy-storing elastic designs (Salto). It <b>ignores</b>: repeated continuous jumping (the original definition is "climbing speed through a series of jumps," yet Doggo reports only "approximately 40 jumps," with no continuous-jumping data), landing stability, horizontal motion, payload, energy, and scale. And because height is measured from the <b>crouched CoG</b>, long-stroke legs (8→25 cm) get extra credit.</li>
+          <li data-lang="zh"><b>跨平台比較的公平性</b>:Tab. III 多數數字<mark class="m-assume" data-t="ASSUMPTION/CLAIM">取自其他論文、測法未必一致</mark>——作者只和 Salto/Jerboa 作者確認量法。MIT Cheetah 2 的 0.50 m 引自 [25],[4],而 [25] 是<b>高速奔跑中跳越障礙</b>的研究,很可能不是專門的原地垂直跳測試;若是如此,拿來比原地最大跳高就像拿蘋果比橘子。33 kg、帶完整電子與運算的 Cheetah 2,與一台幾乎只為出力而設計的 4.8 kg 機器人,任務設計目標也不同。</li>
+          <li data-lang="en"><b>Fairness of cross-platform comparison</b>: most Tab. III numbers are <mark class="m-assume" data-t="ASSUMPTION/CLAIM">taken from other papers with possibly different protocols</mark>—the authors only confirmed the convention with Salto/Jerboa's authors. MIT Cheetah 2's 0.50 m is cited from [25],[4], and [25] studies <b>running jumps over obstacles</b>—likely not a dedicated standing vertical jump test; if so, comparing it with a max standing jump is apples to oranges. A 33 kg Cheetah 2 carrying full electronics and compute and a 4.8 kg robot built almost purely for force production also have different design goals.</li>
+          <li data-lang="zh"><b>開環 vs 閉環</b>:速度 0.9 m/s、CoT 3.2 都被<mark class="m-limit" data-t="LIMITATION/FUTURE">開環正弦步態卡住</mark>;系統沒有 IMU、沒有狀態估測。作者說「用閉環控制可望大幅提升」並引 Hwangbo 2019 的 RL,但<b>這只是預期、沒有證據</b>。「matches or exceeds state-of-the-art」的標題式說法,在跑步維度上並不成立。</li>
+          <li data-lang="en"><b>Open-loop vs closed-loop</b>: 0.9 m/s and CoT 3.2 are <mark class="m-limit" data-t="LIMITATION/FUTURE">bottlenecked by open-loop sinusoidal gaits</mark>; the system has no IMU and no state estimation. The authors expect "significantly higher" speed with closed-loop control, citing Hwangbo 2019's RL, but <b>that is a projection, not evidence</b>. The headline "matches or exceeds state-of-the-art" does not hold on the running axis.</li>
+          <li data-lang="zh"><b>熱極限沒有被量</b>:連續扭矩是在<mark class="m-limit" data-t="LIMITATION/FUTURE">無散熱、繞組達 125 °C 穩態</mark>下定義;峰值是 1 秒內最大值。跳躍用的是峰值區,但長時間奔跑、連續跳躍的溫升、降額(derating)、ODrive 與電池的電流上限都沒有報告。「840 W 最大連續功率」怎麼量的也沒說明——以 1.51 Nm 連續扭矩來看,這需要很高轉速,讀者無從驗證。</li>
+          <li data-lang="en"><b>Thermal limits aren't measured</b>: continuous torque is defined at <mark class="m-limit" data-t="LIMITATION/FUTURE">a 125 °C steady state with no cooling</mark>; peak is the max over one second. Jumps live in the peak regime, but temperature rise during long runs or continuous jumping, derating, and ODrive/battery current limits go unreported. How "840 W max continuous power" was measured is never explained—at 1.51 Nm continuous torque it implies very high speed, and readers can't verify it.</li>
+          <li data-lang="zh"><b>耐久性證據薄弱</b>:「數小時跑步 + 約 40 次跳躍,只需調皮帶張力」就被稱為「quite robust」。<mark class="m-limit" data-t="LIMITATION/FUTURE">3D 列印塑膠皮帶輪的齒面磨耗、皮帶伸長造成的背隙、落地衝擊對同軸軸承的疲勞</mark>都沒有量化;皮帶張力需要調整本身就暗示傳動剛性會隨時間退化,進而影響力估測精度。</li>
+          <li data-lang="en"><b>Thin durability evidence</b>: "hours of running + ~40 jumps, only belt-tension adjustment" is called "quite robust." <mark class="m-limit" data-t="LIMITATION/FUTURE">Tooth wear on 3D-printed plastic pulleys, backlash from belt stretch, and impact fatigue on the coaxial bearings</mark> are not quantified; needing tension adjustment itself hints that transmission stiffness degrades over time, which would erode force-estimation accuracy.</li>
+          <li data-lang="zh"><b>透明度實驗太窄</b>:單一姿態、靜態、10 Hz 荷重元;估測值在高力時系統性偏高(Fig. 6)。頻寬 150 Hz 用的是「扭矩軌跡 crossover」,而 Cheetah 2 的 104 Hz 是「馬達到足端力」,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">定義不同卻直接比大小</mark>。</li>
+          <li data-lang="en"><b>Transparency tests are narrow</b>: one pose, static, 10 Hz load cell; the estimate runs systematically high at large forces (Fig. 6). The 150 Hz bandwidth is a "torque-trajectory crossover," while Cheetah 2's 104 Hz is "motor to foot force"—<mark class="m-assume" data-t="ASSUMPTION/CLAIM">different definitions compared head-to-head</mark>.</li>
+          <li data-lang="zh"><b>理論敘述的小矛盾</b>:文中稱反射慣量「對 QDD/DD 不變」,但用論文自己的 \(J\propto r^3\) 推,QDD 的慣量多 \(\sqrt N\) 倍(見 03 METHOD);Discussion 的 2.7× vs 2.4× 也顯示不是完全不變。</li>
+          <li data-lang="en"><b>A small theoretical inconsistency</b>: the text says reflected inertia is "invariant to QDD vs DD," yet the paper's own \(J\propto r^3\) gives QDD \(\sqrt N\times\) more (see 03 METHOD); the Discussion's 2.7× vs 2.4× also shows it isn't strictly invariant.</li>
+          <li data-lang="zh"><b>8 自由度的範圍</b> <span class="add">[導讀補充]</span>:沒有髖外展關節,腿只在矢狀面動,側向踏步與側向平衡能力受限;與 12-DOF 的 Cheetah / ANYmal 比「性能」時,這個能力差距沒有被計入。</li>
+          <li data-lang="en"><b>Scope of 8 DOF</b> <span class="add">[guide note]</span>: with no hip ab/adduction, legs move only in the sagittal plane, limiting lateral stepping and lateral balance; this capability gap isn't counted when "performance" is compared with 12-DOF Cheetah / ANYmal.</li>
+          <li data-lang="zh"><b>成本口徑</b>:$3000 為材料 + 外包加工估價,<mark class="m-assume" data-t="ASSUMPTION/CLAIM">不含人工組裝時間、地面站、充電與除錯設備</mark>;沒有逐項 BOM 表在論文內(放在 repo)。</li>
+          <li data-lang="en"><b>Cost accounting</b>: $3000 covers materials + outsourced machining quotes, <mark class="m-assume" data-t="ASSUMPTION/CLAIM">excluding assembly labor, the ground station, chargers and debugging gear</mark>; no itemized BOM appears in the paper (it lives in the repo).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">給讀書會 / 審稿的犀利問題</span><span data-lang="en">Sharp questions for a reading group / review</span></h3>
+        <ol style="margin:0;padding-left:20px;line-height:2">
+          <li data-lang="zh"><b>指標偏好</b>:如果改用「連續 10 次跳躍的平均爬升速度」或「單位質量的跳躍功率」,Doggo 與 Salto-1P、Cheetah 2 的排名還會一樣嗎?</li>
+          <li data-lang="en"><b>Metric bias</b>: if we used "mean climb rate over 10 consecutive jumps" or "jump power per unit mass," would Doggo still rank above Salto-1P and Cheetah 2?</li>
+          <li data-lang="zh"><b>比較公平性</b>:Cheetah 2 的 0.50 m 是奔跑跳越障礙的高度;若讓 Cheetah 2 做原地最大垂直跳,差距會剩多少?</li>
+          <li data-lang="en"><b>Fairness</b>: Cheetah 2's 0.50 m is an obstacle-clearing running jump; if Cheetah 2 did a max standing vertical jump, how much of the gap would remain?</li>
+          <li data-lang="zh"><b>熱與耐久</b>:連續 pronk 數分鐘,馬達溫度多久碰到 125 °C?塑膠皮帶輪在幾百次滿載跳躍後齒形是否變形?</li>
+          <li data-lang="en"><b>Thermal &amp; durability</b>: under minutes of continuous pronking, how soon do motors hit 125 °C? Do plastic pulley teeth deform after hundreds of full-load jumps?</li>
+          <li data-lang="zh"><b>為何 3:1</b>:若做 2:1、4:1、6:1 的掃描,質量、反射慣量、跳高、力估測誤差的曲線長什麼樣?最佳點真的是 3:1 嗎?</li>
+          <li data-lang="en"><b>Why 3:1</b>: sweeping 2:1, 4:1, 6:1—what do the curves for mass, reflected inertia, jump height and force-estimation error look like? Is 3:1 really the sweet spot?</li>
+          <li data-lang="zh"><b>閉環的承諾</b>:加上 IMU + 狀態估測 + MPC / RL 後,0.9 m/s 能提升多少?控制改善之前,「硬體不是瓶頸」這個說法能被驗證嗎?</li>
+          <li data-lang="en"><b>The closed-loop promise</b>: with an IMU + state estimation + MPC/RL, how far does 0.9 m/s improve? Before better control exists, can "the hardware isn't the bottleneck" even be verified?</li>
+        </ol>
+      </div>
+    </div>
+    <aside>
+      <div class="note pitfall">
+        <div class="ttl">⚠ <span data-lang="zh">最容易誤解的地方</span><span data-lang="en">Most common misreading</span></div>
+        <span data-lang="zh">把「敏捷度勝過所有機器人、追平 galago」讀成「<b>Doggo 是最強的四足</b>」。實際上它在單一、偏向峰值功率的指標上奪冠;<mark class="m-limit" data-t="LIMITATION/FUTURE">速度、能耗、地形、負載都不突出</mark>,也沒有閉環平衡控制。正確理解是——<mark class="m-assume" data-t="ASSUMPTION/CLAIM">它證明了一個便宜的 QDD 硬體平台具有頂級的出力上限</mark>。</span>
+        <span data-lang="en">Reading "highest agility of any robot, matching the galago" as "<b>Doggo is the best quadruped</b>." It actually wins one metric that favors peak power; <mark class="m-limit" data-t="LIMITATION/FUTURE">speed, efficiency, terrain and payload are unremarkable</mark>, and there is no closed-loop balance control. The right reading: <mark class="m-assume" data-t="ASSUMPTION/CLAIM">it shows a cheap QDD hardware platform has a top-tier force ceiling</mark>.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">值得肯定</span><span data-lang="en">Credit where due</span></span>
+        <span data-lang="zh">作者坦承速度與 CoT 被開環控制限制、主動聯絡其他作者確認跳高量法,並把所有 CAD、BOM、韌體開源——讀者可以<b>自己複製並驗證</b>,這比任何文字宣稱都更有說服力。</span>
+        <span data-lang="en">The authors admit speed and CoT are limited by open-loop control, proactively contacted other authors to confirm the jump-height convention, and open-sourced all CAD, BOM and firmware—readers can <b>replicate and verify it themselves</b>, more convincing than any written claim.</span>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">審稿人會問</span><span data-lang="en">A reviewer would ask</span></span>
+        <span data-lang="zh">「有沒有影片 / 原始資料顯示 1.14 m 是多次試驗的平均,還是單次最佳?」論文只給了最大值,沒有變異度。</span>
+        <span data-lang="en">"Is 1.14 m an average over trials or a single best?" The paper reports only the maximum, with no variance.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 06 TAKEAWAY ================= -->
+<section class="page">
+  <div class="sechead"><span class="secno mono">SECTION 06</span><h2 class="sectitle serif">Takeaways</h2></div>
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">對你研究的啟發</span><span data-lang="en">Implications for your research</span></h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.9">
+          <li data-lang="zh"><b>選致動器先算縮放律</b>:\(m_{\text{trans}}\lt(\sqrt N-1)m\) 是個可帶走的快速判準;同時記得反射慣量以 \(N^2\) 成長,要在力控需求與重量之間取捨。</li>
+          <li data-lang="en"><b>Run the scaling laws before picking actuators</b>: \(m_{\text{trans}}\lt(\sqrt N-1)m\) is a portable quick test; remember reflected inertia grows as \(N^2\), so trade force-control needs against mass.</li>
+          <li data-lang="zh"><b>硬體平台與控制要分開評估</b>:做學習式或模型式控制的研究者,可以把 Doggo 類 QDD 平台當成「硬體上限很高、控制還有大量空間」的試驗床——但要先補 IMU 與狀態估測。</li>
+          <li data-lang="en"><b>Evaluate hardware and control separately</b>: for learning- or model-based control research, a Doggo-style QDD platform is a testbed with "a high hardware ceiling and lots of control headroom"—after adding an IMU and state estimation.</li>
+          <li data-lang="zh"><b>本體感測力控很便宜</b>:只要傳動透明,\(F=J^{-T}NK_ti\) 就能給出可用的足端力估計,接觸偵測、阻抗控制不一定需要力感測器。</li>
+          <li data-lang="en"><b>Proprioceptive force sensing is cheap</b>: with a transparent transmission, \(F=J^{-T}NK_ti\) gives usable foot-force estimates; contact detection and impedance control don't necessarily need force sensors.</li>
+          <li data-lang="zh"><b>報告指標時要說清楚量法</b>:這篇本身就示範了跨論文指標比較的困難(作者得寫信問)。自己發表時,把量測起點、試驗次數、變異度寫清楚。</li>
+          <li data-lang="en"><b>State your measurement protocol</b>: this paper itself shows how hard cross-paper metric comparison is (the authors had to email other groups). When publishing, specify the reference point, trial count and variance.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">在小型開源四足譜系中的位置 [導讀補充]</span><span data-lang="en">Position among small open-source quadrupeds [guide note]</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">平台</span><span data-lang="en">Platform</span></th><th><span data-lang="zh">傳動哲學</span><span data-lang="en">Actuation philosophy</span></th><th><span data-lang="zh">與 Doggo 的關係</span><span data-lang="en">Relation to Doggo</span></th></tr>
+          <tr><td><b>Minitaur</b> (2016)</td><td><span data-lang="zh">純直驅、五連桿、8 DOF</span><span data-lang="en">pure DD, five-bar, 8 DOF</span></td><td><span data-lang="zh">直系前輩:Doggo 沿用腿型與開環步態法,改成同軸 + 3:1 皮帶;Minitaur 後來商品化(Ghost Robotics)。</span><span data-lang="en">Direct ancestor: Doggo keeps the leg topology and open-loop gait method, adding coaxial drive + 3:1 belt; Minitaur was later commercialized (Ghost Robotics).</span></td></tr>
+          <tr><td><b>MIT Cheetah 2 / 3</b></td><td><span data-lang="zh">大氣隙客製馬達 + 單級行星(5.8:1、7.67:1)</span><span data-lang="en">custom large-gap motors + single-stage planetary (5.8:1, 7.67:1)</span></td><td><span data-lang="zh">QDD / proprioceptive actuator 哲學的源頭;Doggo 用現成馬達與皮帶做「平價版」。</span><span data-lang="en">The source of the QDD / proprioceptive-actuator philosophy; Doggo is a "budget version" with off-the-shelf motors and belts.</span></td></tr>
+          <tr><td><b>Mini Cheetah</b> (ICRA 2019)</td><td><span data-lang="zh">~6:1 行星 QDD、12 DOF、約 9 kg</span><span data-lang="en">~6:1 planetary QDD, 12 DOF, ~9 kg</span></td><td><span data-lang="zh">同一屆 ICRA 的平行路線:同樣主打低成本 QDD,但保留行星齒輪與 12 DOF,並搭配 MPC/WBIC 閉環控制(見本庫 Kim2019 WBIC 導讀)——正好補上 Doggo 缺的控制那一半。</span><span data-lang="en">A parallel track at the same ICRA: also low-cost QDD, but keeps planetaries and 12 DOF, paired with closed-loop MPC/WBIC (see this library's Kim2019 WBIC guide)—exactly the control half Doggo lacks.</span></td></tr>
+          <tr><td><b>Solo-8 / Solo-12</b> (ODRI, 2020)</td><td><span data-lang="zh">兩級皮帶 ~9:1、開源、力矩控制、約 2 kg 級</span><span data-lang="en">two-stage belt ~9:1, open-source, torque-controlled, ~2 kg class</span></td><td><span data-lang="zh">同樣「皮帶 + 開源」的路線,但減速比更高、且一開始就面向閉環力矩控制研究。</span><span data-lang="en">Same "belt + open-source" route, with a higher ratio and designed from day one for closed-loop torque-control research.</span></td></tr>
+          <tr><td><b>Stanford Pupper</b></td><td><span data-lang="zh">更便宜的教育取向後繼</span><span data-lang="en">a cheaper, education-oriented successor</span></td><td><span data-lang="zh">同一學生團隊延續「降低門檻」的目標,犧牲性能換取更低成本。</span><span data-lang="en">The same student group extends the "lower the barrier" goal, trading performance for even lower cost.</span></td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3 class="serif"><span data-lang="zh">值得引用的點</span><span data-lang="en">What's worth citing</span></h3>
+        <table>
+          <tr><th><span data-lang="zh">當你要主張…</span><span data-lang="en">When you claim…</span></th><th><span data-lang="zh">就引這篇</span><span data-lang="en">Cite this for</span></th></tr>
+          <tr><td><span data-lang="zh">「低成本、開源的動態四足平台是可行的」</span><span data-lang="en">"Low-cost, open-source dynamic quadrupeds are feasible"</span></td><td><span data-lang="zh">&lt;$3000、手工具組裝、跳躍數據頂尖。</span><span data-lang="en">&lt;$3000, hand-tool assembly, top-tier jumping numbers.</span></td></tr>
+          <tr><td><span data-lang="zh">「皮帶可作為輕量 QDD 傳動」</span><span data-lang="en">"Belts work as lightweight QDD transmissions"</span></td><td><span data-lang="zh">27% 馬達質量的傳動、+37% 峰值力、力估測 2.8–5.3% 誤差。</span><span data-lang="en">Transmission at 27% of motor mass, +37% peak force, 2.8–5.3% force-estimation error.</span></td></tr>
+          <tr><td><span data-lang="zh">「QDD 減速比的質量門檻」</span><span data-lang="en">"The mass threshold for QDD gearing"</span></td><td><span data-lang="zh">\((\sqrt N-1)m\) 判準與其數值實例。</span><span data-lang="en">The \((\sqrt N-1)m\) criterion and its worked numbers.</span></td></tr>
+          <tr><td><span data-lang="zh">垂直跳躍敏捷度的四足基準</span><span data-lang="en">A quadruped baseline for vertical jumping agility</span></td><td><span data-lang="zh">2.23 m/s / 1.14 m(注意量法:由蹲姿重心起算)。</span><span data-lang="en">2.23 m/s / 1.14 m (mind the convention: from the crouched CoG).</span></td></tr>
+        </table>
+      </div>
+      <div class="card tldr">
+        <span class="tag"><span data-lang="zh">一句話結論</span><span data-lang="en">Bottom line</span></span>
+        <p class="serif" data-lang="zh" style="font-size:17px;margin:0">Stanford Doggo 證明了:<b>現成航模馬達 + 3:1 塑膠皮帶 + 五連桿腿</b>,就能在 3000 美元內做出一台垂直跳躍敏捷度頂尖的開源四足;它把 MIT Cheetah 的 QDD 哲學平價化,但「讓它跑得好」的閉環控制仍是留給後人的那一半。</p>
+        <p class="serif" data-lang="en" style="font-size:17px;margin:0">Stanford Doggo shows that <b>off-the-shelf drone motors + a 3:1 plastic belt + five-bar legs</b> can yield an open-source quadruped with top-tier vertical jumping agility for under $3000; it democratizes MIT Cheetah's QDD philosophy, while the closed-loop control that would make it run well remains the half left for others.</p>
+      </div>
+    </div>
+    <aside>
+      <div class="note insight">
+        <span class="tag"><span data-lang="zh">延伸閱讀</span><span data-lang="en">Further reading</span></span>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip">Kenneally 2016 (Minitaur DD)</span>
+          <span class="chip">Seok 2012 (actuator scaling)</span>
+          <span class="chip">Wensing 2017 (proprioceptive actuator)</span>
+          <span class="chip">Haldane 2016 (Salto, agility)</span>
+          <span class="chip">Duperret 2016 (legged agility)</span>
+          <span class="chip">Katz 2019 (Mini Cheetah)</span>
+          <span class="chip">Grimminger 2020 (Solo)</span>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag"><span data-lang="zh">本頁導讀生成方式</span><span data-lang="en">How this guide was made</span></span>
+        <span data-lang="zh">由 <b>paper-reading-guide</b> skill 套用而成。標 <span class="add">[導讀補充]</span> 者為導讀者的延伸推論(包括五連桿推導、敏捷度上限估算、平台譜系表),其餘事實與數據均出自原論文。</span>
+        <span data-lang="en">Produced by the <b>paper-reading-guide</b> skill. Items marked <span class="add">[guide note]</span> are the guide author's inferences (including the five-bar derivation, the agility ceiling estimate and the platform lineage table); all other facts and figures come from the original paper.</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<footer class="mono">CS PAPER READING GUIDE · Kau et al. 2019 (Stanford Doggo) · paper-reading-guide skill</footer>
+</main>
+</div>
+
+<button class="tts" id="tts" title="朗讀 TL;DR · Read TL;DR aloud">🔊</button>
+
+<script>
+  const wrap=document.querySelector('.wrap');
+  // language toggle (persisted)
+  try{ if(localStorage.getItem('guide-lang')==='en') wrap.classList.replace('lang-zh','lang-en'); }catch(e){}
+  document.getElementById('langtog').onclick=()=>{
+    const en=wrap.classList.toggle('lang-en');
+    wrap.classList.toggle('lang-zh',!en);
+    try{ localStorage.setItem('guide-lang', en?'en':'zh'); }catch(e){}
+  };
+  // tab switching
+  const btns=[...document.querySelectorAll('#nav button')];
+  const pages=[...document.querySelectorAll('.page')];
+  function go(i){btns.forEach((b,k)=>b.classList.toggle('on',k==+i));
+    pages.forEach((p,k)=>p.classList.toggle('on',k==+i));
+    window.scrollTo({top:0,behavior:'smooth'});}
+  btns.forEach(b=>b.onclick=()=>go(b.dataset.p));
+  document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>go(c.dataset.go));
+  document.querySelectorAll('mark[data-t]').forEach(m=>m.title=m.dataset.t);
+  // read-aloud the currently visible TL;DR
+  let speaking=false;
+  document.getElementById('tts').onclick=function(){
+    if(!('speechSynthesis'in window))return alert('此瀏覽器不支援語音朗讀 / TTS unsupported');
+    if(speaking){speechSynthesis.cancel();speaking=false;this.textContent='🔊';return;}
+    const en=wrap.classList.contains('lang-en');
+    const tl=document.querySelector('.tldr p[data-lang="'+(en?'en':'zh')+'"]');
+    const u=new SpeechSynthesisUtterance(tl?tl.innerText:'Stanford Doggo reading guide');
+    u.lang=en?'en-US':'zh-TW';u.rate=1;u.onend=()=>{speaking=false;this.textContent='🔊';};
+    speechSynthesis.speak(u);speaking=true;this.textContent='⏸';
+  };
+</script>
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/katex/auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  });
+</script>
